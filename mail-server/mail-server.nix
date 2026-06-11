@@ -86,10 +86,10 @@
       biff = "no";
       
       # Secure LDAP Mappings (resolved via secrets folder outside Nix store)
-      virtual_alias_maps = "proxy:ldap:/var/lib/secrets/mail/postfix-ldap-aliases.cf";
-      virtual_mailbox_domains = "proxy:ldap:/var/lib/secrets/mail/postfix-ldap-domains.cf";
-      virtual_mailbox_maps = "proxy:ldap:/var/lib/secrets/mail/postfix-ldap-recipients.cf";
-      smtpd_sender_login_maps = "proxy:ldap:/var/lib/secrets/mail/postfix-ldap-senders.cf";
+      virtual_alias_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-aliases.cf";
+      virtual_mailbox_domains = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-domains.cf";
+      virtual_mailbox_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-recipients.cf";
+      smtpd_sender_login_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-senders.cf";
       local_recipient_maps = "$virtual_mailbox_maps";
       
       # Rspamd Milter (integrated via TCP to prevent socket permission issues)
@@ -168,11 +168,11 @@
       
       # Secure Authentication databases (args point to out-of-store secrets file)
       "passdb ldap" = {
-        args = "/var/lib/secrets/mail/dovecot-ldap.conf.ext";
+        args = "/var/lib/secrets/mail/dovecot/ldap.conf.ext";
       };
       
       "userdb ldap" = {
-        args = "/var/lib/secrets/mail/dovecot-ldap.conf.ext";
+        args = "/var/lib/secrets/mail/dovecot/ldap.conf.ext";
       };
       
       # Namespace configuration

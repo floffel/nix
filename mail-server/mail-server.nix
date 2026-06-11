@@ -277,7 +277,7 @@
   environment.etc."rspamd/local.d/dkim_signing.conf".text = ''
     # Enable DKIM signing using your existing private key
     selector = "minnecker.com";
-    path = "/var/db/dkim/minnecker.com.private";
+    path = "/var/lib/secrets/mail/dkim/minnecker.com.private";
     allow_username_mismatch = true;
   '';
 

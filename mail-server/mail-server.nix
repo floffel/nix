@@ -102,7 +102,7 @@
       mail_gid = "dovecot";
 
       mail_home = "/var/mail/user/%{user | domain | lower }/%{user}/";
-      mail_path = "/var/mail/%{user | domain | lower }/%{user | username | lower }/maildir/";
+      mail_path = "/var/mail/maildir/%{user | domain | lower }/%{user | username | lower }/maildir/";
 
       protocols = [ "imap" "pop3" "lmtp" "sieve" ];
       recipient_delimiter = "+.";

@@ -112,13 +112,19 @@
       recipient_delimiter = "+.";
       ssl = "no";
 
-      "passdb ldap" = {
-        args = "/var/lib/secrets/mail/dovecot/ldap.conf.ext";
-      };
+      "passdb ldap" {
+        use_worker = "yes";
 
-      "userdb ldap" = {
-        args = "/var/lib/secrets/mail/dovecot/ldap.conf.ext";
-      };
+        filter = "(&(mail=%{user})(employeeType=email))";
+        fields {
+          user = "%{ldap:mail}";
+          password = "%{ldap:userPassword}";
+        }
+      }
+
+      "userdb ldap" {
+        filter = "(&(mail=%{user})(employeeType=email))"
+      }
 
       "namespace inbox" = {
         inbox = true;

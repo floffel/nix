@@ -51,7 +51,8 @@ nixos-rebuild switch
 
 ## 🔒 Required Secrets & Prerequisites
 
-Before running `nixos-rebuild switch`, you must place the credentials/keys on each server:
+Before running `nixos-rebuild switch`, you must place the credentials/keys on each server.
+Or in my case, mount it into the secrets stores.
 
 ### For the Mail Server:
 1. **LDAP Secrets**:
@@ -74,7 +75,7 @@ Before running `nixos-rebuild switch`, you must place the credentials/keys on ea
    ```
 
 2. **DKIM Keys**:
-   Place your private key file at `/var/db/dkim/minnecker.com.private` and configure permissions:
+   Place your private key file at `/var/lib/secrets/mail/dkim/minnecker.com.private` and configure permissions:
    ```bash
    mkdir -p /var/db/dkim
    chmod 700 /var/db/dkim

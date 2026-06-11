@@ -111,7 +111,8 @@
 
       # General Settings
       auth_allow_cleartext = true;
-      auth_mechanisms = "plain login";
+      # auth_mechanisms expects a list of strings (not a single space-separated string)
+      auth_mechanisms = [ "plain" "login" ];
       
       first_valid_uid = 76;
       last_valid_uid = 76;

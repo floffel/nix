@@ -1,10 +1,6 @@
 { config, pkgs, lib, ... }:
 
 {
-  # Postfix/Dovecot mail configuration: ensure spool exists and don't create /var/mail
-  # as a static directory (Postfix may want to symlink /var/mail -> /var/spool/mail).
- 
-
   # Postfix Configuration
   services.postfix = {
     enable = true;
@@ -173,20 +169,6 @@
     '';
   };
 
-  # Create global sieve script at activation time (writes into /etc as root)
-  system.activationScripts.dovecot-global-spam.text = ''
-    mkdir -p /etc/dovecot
-    cat > /etc/dovecot/global-spam.sieve <<'EOF'
- require ["fileinto", "mailbox"];
- # If Rspamd flags the message as spam, move it directly to the Junk folder
- if header :contains "X-Spam" "Yes" {
-   fileinto "Junk";
-   stop;
- }
- EOF
-    chown root:root /etc/dovecot/global-spam.sieve
-    chmod 0644 /etc/dovecot/global-spam.sieve
-  '';
 
   environment.systemPackages = [ pkgs.dovecot_pigeonhole ];
 

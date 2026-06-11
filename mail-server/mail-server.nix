@@ -1,6 +1,10 @@
 { config, pkgs, lib, ... }:
 
 {
+  systemd.tmpfiles.rules = [
+    "d /var/vmail 0770 dovecot dovecot - -"
+  ];
+
   # Postfix Configuration
   services.postfix = {
     enable = true;

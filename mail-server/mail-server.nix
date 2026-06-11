@@ -52,7 +52,7 @@
     domain = "minnecker.com";
     
     # Forward system mail (root, postmaster) to your primary inbox
-    aliases = ''
+    extraAliases = ''
       postmaster: root
       abuse: postmaster
       root: florian@minnecker.com

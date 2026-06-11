@@ -13,7 +13,7 @@ Run these commands inside the Mail Server LXC:
 
 ```bash
 # 1. Clone the repository
-git clone <your-repo-url> /root/nixos-config
+git clone https://github.com/floffel/nix.git /root/nixos-config
 
 # 2. Symlink configurations
 ln -sf /root/nixos-config/mail-server/configuration.nix /etc/nixos/configuration.nix
@@ -34,7 +34,7 @@ Run these commands inside the WireGuard LXC:
 
 ```bash
 # 1. Clone the repository
-git clone <your-repo-url> /root/nixos-config
+git clone https://github.com/floffel/nix.git /root/nixos-config
 
 # 2. Symlink configurations
 ln -sf /root/nixos-config/wireguard/configuration.nix /etc/nixos/configuration.nix

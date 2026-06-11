@@ -56,6 +56,7 @@ Or in my case, mount it into the secrets stores. Replace type with corresponding
 
 Create the directory:
 ```bash
+source /etc/set-environment
 mkdir -p /var/lib/secrets/<type> && chmod 700 /var/lib/secrets/<type>
 ```
 

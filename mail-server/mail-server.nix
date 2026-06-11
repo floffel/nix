@@ -8,7 +8,6 @@
   # Postfix Configuration
   services.postfix = {
     enable = true;
-    enableLdap = true;
 
     # Use module settings for main.cf
     settings = {

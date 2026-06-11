@@ -90,3 +90,61 @@ Before running `nixos-rebuild switch`, you must place the credentials/keys on ea
    echo "YOUR_PRIVATE_KEY" > /var/lib/secrets/wireguard/private.key
    chmod 600 /var/lib/secrets/wireguard/private.key
    ```
+
+---
+
+## 🧰 Starting configuration for a new Proxmox LXC container
+
+When you create a new Proxmox container for NixOS, use the following starting configuration as a minimal base. Edit (or create) `/etc/nixos/configuration.nix` inside the container using an editor like `nano` and paste the block below.
+
+```nix
+{ config, modulesPath, pkgs, lib, ... }:
+{
+  imports = [ (modulesPath + "/virtualisation/proxmox-lxc.nix") ];
+  nix.settings = { sandbox = false; };  
+  boot.isContainer = true;
+  # Suppress systemd units that are not permitted in unprivileged LXCs
+  systemd.suppressedSystemUnits = [
+    "dev-mqueue.mount"
+    "sys-kernel-debug.mount"
+    "sys-fs-fuse-connections.mount"
+  ];
+  proxmoxLXC = {
+    manageNetwork = false;
+    privileged = true;
+  };
+  services.fstrim.enable = false; # Let Proxmox host handle fstrim
+  services.openssh = {
+    enable = true;
+    openFirewall = true;
+    settings = {
+        PermitRootLogin = "yes";
+        PasswordAuthentication = true;
+        PermitEmptyPasswords = "yes";
+    };
+  };
+
+environment.systemPackages = with pkgs; [
+  git
+];
+
+  system.stateVersion = "26.05";
+}
+```
+
+After saving `/etc/nixos/configuration.nix` (e.g. `sudo nano /etc/nixos/configuration.nix`) run these commands inside the container to load the environment, update channels, and rebuild the system:
+
+```bash
+# Load environment variables provided by Proxmox (if present)
+source /etc/set-environment
+
+# Update NixOS channels
+sudo nix-channel --update
+
+# Rebuild and upgrade the system
+sudo nixos-rebuild switch --upgrade
+```
+
+Notes:
+- Editing via `nano /etc/nixos/configuration.nix` is fine for quick setup; for reproducible deployments prefer managing the configuration from a git checkout and symlinking as shown earlier.
+- If your container is unprivileged, some additional tweaks may be needed depending on your Proxmox setup.

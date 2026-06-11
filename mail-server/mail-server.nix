@@ -3,86 +3,12 @@
 {
   # Postfix/Dovecot mail configuration: ensure spool exists and don't create /var/mail
   # as a static directory (Postfix may want to symlink /var/mail -> /var/spool/mail).
-  # Also fix common permissions for mail-related secret directories at activation time.
-  system.activationScripts.mail-setup.text = ''
-    set -e
-
-    # Ensure mail spool exists
-    mkdir -p /var/spool/mail
-
-    # Determine safe group for /var/spool/mail
-    if getent group mail >/dev/null 2>&1; then
-      MAILGROUP=mail
-    else
-      MAILGROUP=root
-    fi
-
-    # Create /var/mail symlink if it doesn't exist or replace if empty
-    if [ ! -e /var/mail ]; then
-      ln -s /var/spool/mail /var/mail
-    else
-      if [ -d /var/mail ]; then
-        if [ -z "$(ls -A /var/mail)" ]; then
-          rm -rf /var/mail
-          ln -s /var/spool/mail /var/mail
-        else
-          echo "/var/mail exists and is not empty; leaving as-is to avoid data loss"
-        fi
-      fi
-    fi
-
-    # Ensure mailbox directory perms
-    chown root:\$MAILGROUP /var/spool/mail || true
-    chmod 1775 /var/spool/mail || true
-
-    # Fix common secret locations if they exist (idempotent and non-fatal)
-    if [ -d /var/lib/secrets/mail ]; then
-      # prefer postfix user/group if present
-      if getent passwd postfix >/dev/null 2>&1 && getent group postfix >/dev/null 2>&1; then
-        chown -R postfix:postfix /var/lib/secrets/mail || true
-      else
-        chown -R root:root /var/lib/secrets/mail || true
-      fi
-      chmod -R 700 /var/lib/secrets/mail || true
-      find /var/lib/secrets/mail -type f -exec chmod 600 {} + || true
-    fi
-
-    if [ -f /var/lib/secrets/mail/dkim/minnecker.com.private ]; then
-      if getent group rspamd >/dev/null 2>&1; then
-        chown root:rspamd /var/lib/secrets/mail/dkim/minnecker.com.private || true
-        chown -R root:rspamd /var/lib/secrets/mail/dkim || true
-      else
-        chown root:root /var/lib/secrets/mail/dkim/minnecker.com.private || true
-        chown -R root:root /var/lib/secrets/mail/dkim || true
-      fi
-      chmod 0640 /var/lib/secrets/mail/dkim/minnecker.com.private || true
-      chmod 0750 /var/lib/secrets/mail/dkim || true
-    fi
-
-    if [ -d /var/db/dkim ]; then
-      if getent passwd rspamd >/dev/null 2>&1 && getent group rspamd >/dev/null 2>&1; then
-        chown -R rspamd:rspamd /var/db/dkim || true
-      else
-        chown -R root:root /var/db/dkim || true
-      fi
-      chmod -R 700 /var/db/dkim || true
-    fi
-
-    # WireGuard secrets (if present)
-    if [ -d /var/lib/secrets/wireguard ]; then
-      if getent passwd postfix >/dev/null 2>&1 && getent group postfix >/dev/null 2>&1; then
-        chown -R root:postfix /var/lib/secrets/wireguard || true
-      else
-        chown -R root:root /var/lib/secrets/wireguard || true
-      fi
-      chmod -R 700 /var/lib/secrets/wireguard || true
-      find /var/lib/secrets/wireguard -type f -exec chmod 600 {} + || true
-    fi
-  '';
+ 
 
   # Postfix Configuration
   services.postfix = {
     enable = true;
+    enableLdap = true;
 
     # Use module settings for main.cf
     settings = {
@@ -187,11 +113,13 @@
       recipient_delimiter = "+.";
       ssl = "no";
 
-      "passdb ldap" = {
+      passdb = {
+        driver = "ldap";
         args = "/var/lib/secrets/mail/dovecot/ldap.conf.ext";
       };
 
-      "userdb ldap" = {
+      userdb = {
+        driver = "ldap";
         args = "/var/lib/secrets/mail/dovecot/ldap.conf.ext";
       };
 

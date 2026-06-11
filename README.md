@@ -52,40 +52,35 @@ nixos-rebuild switch
 ## 🔒 Required Secrets & Prerequisites
 
 Before running `nixos-rebuild switch`, you must place the credentials/keys on each server.
-Or in my case, mount it into the secrets stores.
+Or in my case, mount it into the secrets stores. Replace type with corresponding type, e.g. mail, wireguard...
+
+Create the directory:
+```bash
+mkdir -p /var/lib/secrets/<type> && chmod 700 /var/lib/secrets/<type>
+```
+
+Then add the following line to the container config, e.g. `/etc/pve/lxc/<id>.conf`. Get the id by `pct list`.
+```
+lxc.mount.entry: /mnt/pve/nas/shared/secrets/<type> var/lib/secrets/<type> none bind,rw 0 0
+```
 
 ### For the Mail Server:
-1. **LDAP Secrets**:
-   Create the directory:
-   ```bash
-   mkdir -p /var/lib/secrets/mail && chmod 700 /var/lib/secrets/mail
-   ```
-   Create these 5 files inside `/var/lib/secrets/mail/` containing your LDAP configuration:
-   - `postfix-ldap-aliases.cf`
-   - `postfix-ldap-domains.cf`
-   - `postfix-ldap-recipients.cf`
-   - `postfix-ldap-senders.cf`
-   - `dovecot-ldap.conf.ext`
-   
+1. **LDAP Secrets**:   
    Ensure correct ownership:
    ```bash
-   chown -R postfix:postfix /var/lib/secrets/mail/postfix-ldap-*.cf
-   chown dovecot:dovecot /var/lib/secrets/mail/dovecot-ldap.conf.ext
+   chown postfix:postfix /var/lib/secrets/mail/*/*.cf
+   chown dovecot:dovecot /var/lib/secrets/mail/dovecot/ldap.conf.ext
    chmod 600 /var/lib/secrets/mail/*
    ```
 
 2. **DKIM Keys**:
-   Place your private key file at `/var/lib/secrets/mail/dkim/minnecker.com.private` and configure permissions:
    ```bash
-   mkdir -p /var/db/dkim
-   chmod 700 /var/db/dkim
-   chown -R 182:182 /var/db/dkim # 182 is the rspamd user
-   chmod 600 /var/db/dkim/minnecker.com.private
+   chown -R 182:182 /var/lib/secrets/dkim/ # 182 is the rspamd user
+   chmod 600 /var/lib/secrets/dkim/*.private
    ```
 
 ### For the WireGuard Server:
 1. **WireGuard Private Key**:
-   Place your WireGuard private key at `/var/lib/secrets/wireguard/private.key`:
    ```bash
    mkdir -p /var/lib/secrets/wireguard && chmod 700 /var/lib/secrets/wireguard
    echo "YOUR_PRIVATE_KEY" > /var/lib/secrets/wireguard/private.key

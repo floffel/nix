@@ -234,23 +234,29 @@
     };
   };
 
-  # Instead of writing the rspamd DKIM config into the system /etc during the Nix build
-  # (which fails in some container environments due to /nix/store permission issues),
-  # create the file at activation time. This writes into the active /etc as root and
-  # preserves the secret key path outside the Nix store.
-  system.activationScripts.rspamd-dkim.text = ''
-    # Only create the config if the DKIM private key exists in the secrets dir
-    if [ -r /var/lib/secrets/mail/dkim/minnecker.com.private ]; then
-      mkdir -p /etc/rspamd/local.d
-      cat > /etc/rspamd/local.d/dkim_signing.conf <<'EOF'
-selector = "minnecker.com";
-path = "/var/lib/secrets/mail/dkim/minnecker.com.private";
-allow_username_mismatch = true;
+  # Configure rspamd: enable and write local config via module locals (written into the store by the rspamd package)
+  services.rspamd = {
+    enable = true;
+    locals."dkim_signing.conf".text = ''
+      selector = "minnecker";
+      domain = "minnecker.com";
+      path = "/var/lib/secrets/mail/dkim/minnecker.com.private";
+    '';
+  };
+
+  # Create global sieve script at activation time (writes into /etc as root)
+  system.activationScripts.dovecot-global-spam.text = ''
+    mkdir -p /etc/dovecot
+    cat > /etc/dovecot/global-spam.sieve <<'EOF'
+require ["fileinto", "mailbox"];
+# If Rspamd flags the message as spam, move it directly to the Junk folder
+if header :contains "X-Spam" "Yes" {
+  fileinto "Junk";
+  stop;
+}
 EOF
-      chown -R rspamd:rspamd /etc/rspamd/local.d
-      chmod 700 /etc/rspamd/local.d
-      chmod 600 /etc/rspamd/local.d/dkim_signing.conf
-    fi
+    chown root:root /etc/dovecot/global-spam.sieve
+    chmod 0644 /etc/dovecot/global-spam.sieve
   '';
 
   # System Packages required by mail-server container
@@ -259,18 +265,7 @@ EOF
   ];
 
 
-  # Rspamd Configuration (Replacing SpamAssassin + OpenDKIM)
-  services.rspamd = {
-    enable = true;
-  };
-
-  # Write global sieve spam script to /etc/dovecot/global-spam.sieve
-  environment.etc."dovecot/global-spam.sieve".text = ''
-    require ["fileinto", "mailbox"];
-    # If Rspamd flags the message as spam, move it directly to the Junk folder
-    if header :contains "X-Spam" "Yes" {
-      fileinto "Junk";
-      stop;
-    }
-  '';
+  # Write rspamd DKIM note: the private key must remain outside the Nix store at
+  # /var/lib/secrets/mail/dkim/minnecker.com.private and be readable by rspamd.
+  # Ensure it exists and has correct perms before activating the system.
 }

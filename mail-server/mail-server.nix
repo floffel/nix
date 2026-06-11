@@ -32,7 +32,7 @@
     fi
 
     # Ensure mailbox directory perms
-    chown root:${MAILGROUP} /var/spool/mail || true
+    chown root:\$MAILGROUP /var/spool/mail || true
     chmod 1775 /var/spool/mail || true
 
     # Fix common secret locations if they exist (idempotent and non-fatal)

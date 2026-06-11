@@ -10,6 +10,13 @@
     # Ensure mail spool exists
     mkdir -p /var/spool/mail
 
+    # Determine safe group for /var/spool/mail
+    if getent group mail >/dev/null 2>&1; then
+      MAILGROUP=mail
+    else
+      MAILGROUP=root
+    fi
+
     # Create /var/mail symlink if it doesn't exist or replace if empty
     if [ ! -e /var/mail ]; then
       ln -s /var/spool/mail /var/mail
@@ -25,31 +32,49 @@
     fi
 
     # Ensure mailbox directory perms
-    chown root:mail /var/spool/mail || true
+    chown root:${MAILGROUP} /var/spool/mail || true
     chmod 1775 /var/spool/mail || true
 
     # Fix common secret locations if they exist (idempotent and non-fatal)
     if [ -d /var/lib/secrets/mail ]; then
-      chown -R postfix:postfix /var/lib/secrets/mail || true
+      # prefer postfix user/group if present
+      if getent passwd postfix >/dev/null 2>&1 && getent group postfix >/dev/null 2>&1; then
+        chown -R postfix:postfix /var/lib/secrets/mail || true
+      else
+        chown -R root:root /var/lib/secrets/mail || true
+      fi
       chmod -R 700 /var/lib/secrets/mail || true
       find /var/lib/secrets/mail -type f -exec chmod 600 {} + || true
     fi
 
     if [ -f /var/lib/secrets/mail/dkim/minnecker.com.private ]; then
-      chown root:rspamd /var/lib/secrets/mail/dkim/minnecker.com.private || true
+      if getent group rspamd >/dev/null 2>&1; then
+        chown root:rspamd /var/lib/secrets/mail/dkim/minnecker.com.private || true
+        chown -R root:rspamd /var/lib/secrets/mail/dkim || true
+      else
+        chown root:root /var/lib/secrets/mail/dkim/minnecker.com.private || true
+        chown -R root:root /var/lib/secrets/mail/dkim || true
+      fi
       chmod 0640 /var/lib/secrets/mail/dkim/minnecker.com.private || true
-      chown -R root:rspamd /var/lib/secrets/mail/dkim || true
       chmod 0750 /var/lib/secrets/mail/dkim || true
     fi
 
     if [ -d /var/db/dkim ]; then
-      chown -R rspamd:rspamd /var/db/dkim || true
+      if getent passwd rspamd >/dev/null 2>&1 && getent group rspamd >/dev/null 2>&1; then
+        chown -R rspamd:rspamd /var/db/dkim || true
+      else
+        chown -R root:root /var/db/dkim || true
+      fi
       chmod -R 700 /var/db/dkim || true
     fi
 
     # WireGuard secrets (if present)
     if [ -d /var/lib/secrets/wireguard ]; then
-      chown -R root:postfix /var/lib/secrets/wireguard || true
+      if getent passwd postfix >/dev/null 2>&1 && getent group postfix >/dev/null 2>&1; then
+        chown -R root:postfix /var/lib/secrets/wireguard || true
+      else
+        chown -R root:root /var/lib/secrets/wireguard || true
+      fi
       chmod -R 700 /var/lib/secrets/wireguard || true
       find /var/lib/secrets/wireguard -type f -exec chmod 600 {} + || true
     fi
@@ -225,13 +250,13 @@
   system.activationScripts.dovecot-global-spam.text = ''
     mkdir -p /etc/dovecot
     cat > /etc/dovecot/global-spam.sieve <<'EOF'
-require ["fileinto", "mailbox"];
-# If Rspamd flags the message as spam, move it directly to the Junk folder
-if header :contains "X-Spam" "Yes" {
-  fileinto "Junk";
-  stop;
-}
-EOF
+ require ["fileinto", "mailbox"];
+ # If Rspamd flags the message as spam, move it directly to the Junk folder
+ if header :contains "X-Spam" "Yes" {
+   fileinto "Junk";
+   stop;
+ }
+ EOF
     chown root:root /etc/dovecot/global-spam.sieve
     chmod 0644 /etc/dovecot/global-spam.sieve
   '';

@@ -7,47 +7,10 @@
     "d /var/mail/user 0770 dovecot dovecot - -"
   ];
 
-  # User and Group mapping to match the original system (ensures rsync ownership is preserved)
-  users.groups = {
-    mail = {
-      gid = 12;
-    };
-    postfix = {
-      gid = 73;
-    };
-    postdrop = {
-      gid = 75;
-    };
-    dovecot = {
-      gid = 76;
-    };
-    rspamd = {
-      gid = 182; # Matching spamd GID from source system
-    };
-  };
-
-  users.users = {
-    # Force the postfix user UID to avoid conflicts with the default
-    # definition provided by the postfix module (it defines uid 13 by default).
-    # Using lib.mkForce ensures our value overrides the module default.
-    postfix = lib.mkForce {
-      uid = 73;
-      group = "postfix";
-      extraGroups = [ "postdrop" "rspamd" ];
-      isSystemUser = true;
-    };
-
-    dovecot = {
-      uid = 76;
-      group = "dovecot";
-      isSystemUser = true;
-    };
-    rspamd = {
-      uid = 182; # Matching spamd UID from source system
-      group = "rspamd";
-      isSystemUser = true;
-    };
-  };
+  # NOTE: Manual UID/GID mappings removed to avoid conflicts with NixOS modules.
+  # If you need to preserve numeric UIDs from another host, reintroduce mappings
+  # intentionally. Otherwise let the postfix/dovecot/rspamd modules create
+  # their system users and manage permissions on disk with chown/chmod.
 
   # Postfix Configuration
   services.postfix = {

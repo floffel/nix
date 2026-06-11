@@ -101,8 +101,8 @@
       mail_uid = "dovecot";
       mail_gid = "dovecot";
 
-      mail_home = "/var/mail/user/%{user | domain | lower }/%{user}/";
-      mail_path = "/var/mail/maildir/%{user | domain | lower }/%{user | username | lower }/maildir/";
+      mail_home = "var/vmail/%{user | domain | lower }/%{user}/";
+      mail_path = "var/vmail/%{user | domain | lower }/%{user | username | lower }/maildir/";
 
       protocols = [ "imap" "pop3" "lmtp" "sieve" ];
       recipient_delimiter = "+.";

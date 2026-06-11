@@ -112,13 +112,11 @@
       recipient_delimiter = "+.";
       ssl = "no";
 
-      passdb = {
-        driver = "ldap";
+      "passdb ldap" = {
         args = "/var/lib/secrets/mail/dovecot/ldap.conf.ext";
       };
 
-      userdb = {
-        driver = "ldap";
+      "userdb ldap" = {
         args = "/var/lib/secrets/mail/dovecot/ldap.conf.ext";
       };
 

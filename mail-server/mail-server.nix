@@ -234,6 +234,25 @@
     };
   };
 
+  # Instead of writing the rspamd DKIM config into the system /etc during the Nix build
+  # (which fails in some container environments due to /nix/store permission issues),
+  # create the file at activation time. This writes into the active /etc as root and
+  # preserves the secret key path outside the Nix store.
+  system.activationScripts.rspamd-dkim.text = ''
+    # Only create the config if the DKIM private key exists in the secrets dir
+    if [ -r /var/lib/secrets/mail/dkim/minnecker.com.private ]; then
+      mkdir -p /etc/rspamd/local.d
+      cat > /etc/rspamd/local.d/dkim_signing.conf <<'EOF'
+selector = "minnecker.com";
+path = "/var/lib/secrets/mail/dkim/minnecker.com.private";
+allow_username_mismatch = true;
+EOF
+      chown -R rspamd:rspamd /etc/rspamd/local.d
+      chmod 700 /etc/rspamd/local.d
+      chmod 600 /etc/rspamd/local.d/dkim_signing.conf
+    fi
+  '';
+
   # System Packages required by mail-server container
   environment.systemPackages = [
     pkgs.dovecot_pigeonhole
@@ -244,14 +263,6 @@
   services.rspamd = {
     enable = true;
   };
-
-  # Configure Rspamd DKIM module natively via environment.etc
-  environment.etc."rspamd/local.d/dkim_signing.conf".text = ''
-    # Enable DKIM signing using your existing private key
-    selector = "minnecker.com";
-    path = "/var/lib/secrets/mail/dkim/minnecker.com.private";
-    allow_username_mismatch = true;
-  '';
 
   # Write global sieve spam script to /etc/dovecot/global-spam.sieve
   environment.etc."dovecot/global-spam.sieve".text = ''

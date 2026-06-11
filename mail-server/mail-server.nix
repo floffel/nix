@@ -105,6 +105,10 @@
     enable = true;
     
     settings = {
+      # Dovecot 2.4 requires explicit config/storage version declarations
+      dovecot_config_version = "2.4.4";
+      dovecot_storage_version = "2.4.4";
+
       # General Settings
       auth_allow_cleartext = true;
       auth_mechanisms = "plain login";

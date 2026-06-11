@@ -55,7 +55,7 @@
     dnsutils # provides dig, nslookup, host
     tcpdump
     netcat
-    telnet   # helpful for testing raw network commands
+    inetutils   # provides telnet and other classic inet tools
   ];
 
   system.stateVersion = "26.05";

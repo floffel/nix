@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 
 {
   # Ensure the mail directory has correct ownership and permissions
@@ -27,12 +27,16 @@
   };
 
   users.users = {
-    postfix = {
+    # Force the postfix user UID to avoid conflicts with the default
+    # definition provided by the postfix module (it defines uid 13 by default).
+    # Using lib.mkForce ensures our value overrides the module default.
+    postfix = lib.mkForce {
       uid = 73;
       group = "postfix";
       extraGroups = [ "postdrop" "rspamd" ];
       isSystemUser = true;
     };
+
     dovecot = {
       uid = 76;
       group = "dovecot";

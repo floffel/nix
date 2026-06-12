@@ -27,8 +27,8 @@
       172.16.16.18 nixvaultwarden.hosts.local.minnecker.com nixvaultwarden vault
       172.16.16.19 nixwikijs.hosts.local.minnecker.com nixwikijs wiki
       172.16.16.20 nixjitsi.hosts.local.minnecker.com nixjitsi meet
-      172.16.16.21 nixnsd.hosts.local.minnecker.com nixnsd
-      172.16.16.22 nixunbound.hosts.local.minnecker.com nixunbound
+      172.16.16.90 nixnsd.hosts.local.minnecker.com nixnsd
+      172.16.16.91 nixunbound.hosts.local.minnecker.com nixunbound
     '';
   };
 }

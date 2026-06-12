@@ -24,19 +24,19 @@
       stub-zone = [
         {
           name = "minnecker.com.";
-          stub-addr = "172.16.16.21"; # nixnsd container IP
+          stub-addr = "172.16.16.90"; # nixnsd container IP
         }
         {
           name = "floffel.de.";
-          stub-addr = "172.16.16.21";
+          stub-addr = "172.16.16.90";
         }
         {
           name = "sbminnecker.de.";
-          stub-addr = "172.16.16.21";
+          stub-addr = "172.16.16.90";
         }
         {
           name = "substitution.art.";
-          stub-addr = "172.16.16.21";
+          stub-addr = "172.16.16.90";
         }
       ];
 

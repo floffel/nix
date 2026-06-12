@@ -165,7 +165,7 @@ Below are the key files and credentials required per container:
    chmod 600 /var/lib/secrets/wireguard/private.key
    nix-shell -p wireguard-tools --run "wg pubkey" < /var/lib/secrets/wireguard/private.key > /var/lib/secrets/wireguard/public.key
    ```
-2. **Client Setup**: Edit the `peers` block inside `nixvpn/configuration.nix` with the client's public key. On the client device (e.g. `/etc/wireguard/wg0.conf`), set `DNS = 172.16.16.22` (the local Unbound IP) and configure `AllowedIPs` as desired (e.g. `0.0.0.0/0` or `172.16.16.0/24`).
+2. **Client Setup**: Edit the `peers` block inside `nixvpn/configuration.nix` with the client's public key. On the client device (e.g. `/etc/wireguard/wg0.conf`), set `DNS = 172.16.16.91` (the local Unbound IP) and configure `AllowedIPs` as desired (e.g. `0.0.0.0/0` or `172.16.16.0/24`).
 3. **Advanced Routing (Site-to-Site)**: If routing home network traffic (e.g., `192.168.1.0/24`) via a home gateway peer (IP `10.100.0.3`):
    * On the **Server**, add the home subnet to the Home Gateway peer:
      ```nix

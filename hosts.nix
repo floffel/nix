@@ -27,6 +27,7 @@
       172.16.16.18 vaultwardenng.hosts.local.minnecker.com vaultwardenng vault
       172.16.16.19 wikijsng.hosts.local.minnecker.com wikijsng wiki
       172.16.16.20 jitsing.hosts.local.minnecker.com jitsing meet
+      172.16.16.21 nsdng.hosts.local.minnecker.com nsdng
     '';
   };
 }

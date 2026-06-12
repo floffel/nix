@@ -245,6 +245,26 @@ nixos-rebuild switch
 
 ---
 
+### 🌐 Option M: Setup NSD Authoritative Nameserver Container
+Run these commands inside the NSD LXC:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/floffel/nix.git /root/nixos-config
+
+# 2. Symlink configurations
+ln -sf /root/nixos-config/nsdng/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
+ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
+
+# 3. Setup Secrets & TSIG Keys (see "Required Secrets" section below)
+
+# 4. Rebuild the system
+nixos-rebuild switch
+```
+
+---
+
 ## 🔒 Required Secrets & Prerequisites
 
 Before running `nixos-rebuild switch`, you must place the credentials/keys on each server.
@@ -475,6 +495,20 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/<type> var/lib/secrets/<type> none 
    For group audio and video calls to function correctly, Jitsi Videobridge (JVB) requires direct UDP connectivity.
    Configure your Proxmox firewall and external router to forward:
    * **UDP Port 10000** -> Point to `172.16.16.20` (the `jitsing` container IP).
+
+### For the NSD Nameserver Server:
+1. **TSIG Key Secret**:
+   Create the secrets directory and store the base64-encoded secret key used for TSIG-authenticated DNS zone transfers (AXFR) and NOTIFY synchronization with Hetzner:
+   ```bash
+   mkdir -p /var/lib/secrets/nsd && chmod 700 /var/lib/secrets/nsd
+   
+   # Write base64 TSIG key (do not include quotes, only the plain secret key string)
+   echo "your_base64_tsig_key_secret_here" > /var/lib/secrets/nsd/hetzner-key.key
+   
+   # Set correct permissions
+   chmod 600 /var/lib/secrets/nsd/hetzner-key.key
+   chown -R nsd:nsd /var/lib/secrets/nsd
+   ```
 
 ### For the Forgejo Actions Runner:
 1. **Registration Token**:

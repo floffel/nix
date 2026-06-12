@@ -27,6 +27,7 @@
               "vaultwardenng:9100"
               "wikijsng:9100"
               "jitsing:9100"
+              "nsdng:9100"
             ];
           }
         ];

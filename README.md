@@ -381,6 +381,23 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/<type> var/lib/secrets/<type> none 
      PersistentKeepalive = 25
      ```
 
+    * **Step D: Advanced Routing & Mobile Roaming Optimization**
+      * **Dynamic IP Roaming:** WireGuard handles client IP changes (e.g., Wi-Fi to LTE) natively. To optimize dynamic routing, the server is configured with a mobile-friendly MTU of `1360` and has `persistentKeepalive = 25` set to keep NAT firewall sessions active.
+      * **Accessing Server Container Subnets:** Because WireGuard does not dynamically "push" routes, clients must statically define what ranges are sent over the tunnel.
+        * To access the internal container subnet, add `172.16.16.0/24` to the client's `AllowedIPs`.
+        * To use the local secure DNS resolver, set the client's DNS to `172.16.16.22` (the `unboundng` resolver IP) to query local DNS services.
+      * **Routing through a Home Network peer (Site-to-Site forwarding):**
+        * If you have a peer that acts as your home network gateway (e.g., `10.100.0.3`), you can enable other clients (like your mobile phone) to access your home devices (`192.168.1.0/24`).
+        * On the **Server**, add the home subnet to the Home Gateway peer definition:
+          ```nix
+          {
+            publicKey = "HOME_GATEWAY_PUBLIC_KEY";
+            allowedIPs = [ "10.100.0.3/32" "192.168.1.0/24" ];
+          }
+          ```
+        * On the **Mobile Client**, add the home subnet to the peer's `AllowedIPs` list in their app configuration:
+          `AllowedIPs = 10.100.0.0/24, 172.16.16.0/24, 192.168.1.0/24`
+
 ### For the Kanidm Server:
 1. **SSL/TLS Certificates**:
    Kanidm requires SSL/TLS certificates to boot and run. Create the secrets directory and place the certificate chain and private key:

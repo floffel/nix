@@ -8,18 +8,23 @@
     # Listen on all interfaces for public DNS queries and zone transfers
     interfaces = [ "0.0.0.0" "::" ];
 
-    # TSIG key for Hetzner secondary DNS zone transfer authentication
-    # Key value is loaded at runtime from a secure mounted folder to prevent leaks
-    keys."hetzner-key" = {
-      algorithm = "hmac-sha256";
-      keyFile = "/var/lib/secrets/nsd/hetzner-key.key";
+    # TSIG keys for secondary DNS zone transfer authentication
+    # Key values are loaded at runtime from secure mounted files to prevent leaks
+    keys = {
+      "hetzner-key" = {
+        algorithm = "hmac-sha256";
+        keyFile = "/var/lib/secrets/nsd/hetzner-key.key";
+      };
+      "sync" = {
+        algorithm = "hmac-sha256";
+        keyFile = "/var/lib/secrets/nsd/sync.key";
+      };
     };
 
     # Declarative DNS zones
     zones = {
       "minnecker.com" = {
-        # Allow Hetzner's secondary nameservers to fetch zones via AXFR/IXFR
-        # Supports both secure TSIG key transfer and IP-based validation fallbacks
+        # Allow Hetzner's and user's secondary nameservers to fetch zones via AXFR/IXFR
         provideXFR = [
           "213.239.242.238 NOKEY"              # ns1.first-ns.de
           "213.133.100.103 NOKEY"              # robotns2.second-ns.de
@@ -35,9 +40,13 @@
           "2a01:4f8:0:a101::a:1 hetzner-key"
           "2a01:4f8:0:1::5ddc:2 hetzner-key"
           "2001:67c:192c::add:a3 hetzner-key"
+
+          # User-defined sync secondary transfer blocks
+          "78.47.124.81 sync"
+          "2a01:4f8:c0c:2ea9::2 sync"
         ];
 
-        # Notify Hetzner's secondary nameservers when the zone is updated
+        # Notify secondary nameservers when the zone is updated
         notify = [
           "213.239.242.238 NOKEY"
           "213.133.100.103 NOKEY"
@@ -53,6 +62,10 @@
           "2a01:4f8:0:a101::a:1 hetzner-key"
           "2a01:4f8:0:1::5ddc:2 hetzner-key"
           "2001:67c:192c::add:a3 hetzner-key"
+
+          # User-defined sync secondary notify blocks
+          "78.47.124.81@53 sync"
+          "2a01:4f8:c0c:2ea9::2@53 sync"
         ];
 
         # Initial placeholder zone file content to allow nameserver bootup
@@ -68,7 +81,9 @@
           @ IN NS ns1.minnecker.com.
           @ IN NS robotns2.second-ns.de.
           @ IN NS robotns3.second-ns.com.
+          @ IN NS ns4.minnecker.com.
           ns1 IN A 172.16.16.21
+          ns4 IN A 78.47.124.81
         '';
       };
     };

@@ -216,7 +216,9 @@ Below are the key files and credentials required per container:
 * **Port Forwarding**: Forward external **UDP port 10000** on your router to the `nixjitsi` container IP (`172.16.16.20`) to allow group video bridge audio/video data.
 
 #### 🌐 nixnsd (NSD Authoritative Nameserver)
-* **TSIG Key**: Write the base64-encoded Hetzner TSIG transfer key to `/var/lib/secrets/nsd/hetzner-key.key` (owned by `nsd:nsd`, `chmod 600`).
+* **TSIG Keys**: 
+  * Write the base64-encoded Hetzner TSIG transfer key to `/var/lib/secrets/nsd/hetzner-key.key` (owned by `nsd:nsd`, `chmod 600`).
+  * Write the base64-encoded secondary sync TSIG transfer key to `/var/lib/secrets/nsd/sync.key` (owned by `nsd:nsd`, `chmod 600`).
 
 #### 🚀 nixforgejo-runner (Forgejo Actions Runner)
 * **Registration Token**: Write `/var/lib/secrets/forgejo/runner-token` (chmod 600):

@@ -124,6 +124,27 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/nsd var/lib/secrets/nsd none bind,r
 | `nixnsd` | `/mnt/pve/nas/shared/secrets/nsd` | `var/lib/secrets/nsd` |
 | `nixnginx` | `/mnt/pve/nas/shared/secrets/nginx` | `var/lib/secrets/nginx` |
 
+#### Shared SSL Certificates Mount Setup
+To handle automated SSL certificate acquisition dynamically:
+1. `nixnsd` runs ACME via DNS-01 challenge and writes the acquired wildcard certificates to `/var/lib/secrets/ssl/`.
+2. The renewed certificates (`fullchain.pem` and `key.pem`) are saved in the domain's subfolder (e.g., `/var/lib/secrets/ssl/minnecker.com/`).
+3. For Kanidm, `acme.nix` automatically copies these to `idm.crt` and `idm.key` in the same directory.
+
+Configure the mounts by adding these lines to the LXC container configuration files on the Proxmox host (`/etc/pve/lxc/<VMID>.conf`):
+* **nixnsd** (Primary nameserver, needs **read-write** access to save new/renewed certificates):
+  ```ini
+  lxc.mount.entry: /mnt/pve/nas/shared/secrets/ssl var/lib/secrets/ssl none bind,rw 0 0
+  ```
+* **nixnginx** (Reverse proxy, needs **read-only** access):
+  ```ini
+  lxc.mount.entry: /mnt/pve/nas/shared/secrets/ssl var/lib/secrets/ssl none bind,ro 0 0
+  ```
+* **nixidm** (Identity Manager, needs **read-only** access):
+  ```ini
+  lxc.mount.entry: /mnt/pve/nas/shared/secrets/ssl var/lib/secrets/ssl none bind,ro 0 0
+  ```
+
+
 On the guest container, create the local mount point directory by setting a variable first:
 ```bash
 # Set target secret folder name (e.g. nsd, mail, wireguard, grafana, etc.)

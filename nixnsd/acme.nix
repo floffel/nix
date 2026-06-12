@@ -11,6 +11,13 @@ let
     DOMAIN=$(echo "$FQDN" | sed -e 's/\.$//' -e 's/^_acme-challenge\.//')
     ZONE_FILE="/var/lib/nsd/zones/''${DOMAIN}"
 
+    # Extract current serial and increment it to notify secondary nameservers
+    CURRENT_SERIAL=$(grep -o -E '[0-9]+[[:space:]]*;[[:space:]]*serial' "$ZONE_FILE" | grep -o -E '[0-9]+')
+    if [ -n "$CURRENT_SERIAL" ]; then
+      NEW_SERIAL=$((CURRENT_SERIAL + 1))
+      sed -i "s/''${CURRENT_SERIAL}\([[:space:]]*;[[:space:]]*serial\)/''${NEW_SERIAL}\1/" "$ZONE_FILE"
+    fi
+
     if [ "$ACTION" = "present" ]; then
       # Append the TXT record to the zone file
       echo "_acme-challenge IN TXT \"$VALUE\"" >> "$ZONE_FILE"
@@ -39,9 +46,9 @@ in
     defaults = {
       email = "admin@minnecker.com";
       dnsProvider = "exec";
-      environmentLego = {
-        "EXEC_PATH" = "${dnsHookWrapper}";
-      };
+      environmentFile = pkgs.writeText "acme-env" ''
+        EXEC_PATH=${dnsHookWrapper}
+      '';
     };
     certs = {
       "minnecker.com" = {

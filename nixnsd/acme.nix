@@ -37,16 +37,18 @@ let
   '';
 
   # The wrapper script that Lego calls, executing the real script as root via sudo
+  # The wrapper script that Lego calls, executing the real script directly
   dnsHookWrapper = pkgs.writeScript "dns-hook.sh" ''
     #!/bin/sh
     export PATH=/run/current-system/sw/bin:/run/wrappers/bin:$PATH
-    exec sudo ${dnsHookReal} "$@"
+    exec ${dnsHookReal} "$@"
   '';
 in
 {
   # 1. Enable ACME configurations for wildcards
   security.acme = {
     acceptTerms = true;
+    useRoot = true; # Run ACME service as root to bypass NoNewPrivileges sudo limitation in container
     defaults = {
       email = "admin@minnecker.com";
       dnsProvider = "exec";
@@ -100,21 +102,5 @@ in
         '';
       };
     };
-  };
-
-  # 2. Allow acme user to run the real dns-hook script as root via sudo without password
-  security.sudo = {
-    enable = true;
-    extraRules = [
-      {
-        users = [ "acme" ];
-        commands = [
-          {
-            command = "${dnsHookReal}";
-            options = [ "NOPASSWD" ];
-          }
-        ];
-      }
-    ];
   };
 }

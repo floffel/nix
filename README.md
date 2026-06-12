@@ -265,6 +265,24 @@ nixos-rebuild switch
 
 ---
 
+### 🔍 Option N: Setup Unbound DNS Resolver Container
+Run these commands inside the Unbound LXC:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/floffel/nix.git /root/nixos-config
+
+# 2. Symlink configurations
+ln -sf /root/nixos-config/unboundng/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
+ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
+
+# 3. Rebuild the system
+nixos-rebuild switch
+```
+
+---
+
 ## 🔒 Required Secrets & Prerequisites
 
 Before running `nixos-rebuild switch`, you must place the credentials/keys on each server.

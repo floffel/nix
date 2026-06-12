@@ -28,6 +28,7 @@
               "wikijsng:9100"
               "jitsing:9100"
               "nsdng:9100"
+              "unboundng:9100"
             ];
           }
         ];

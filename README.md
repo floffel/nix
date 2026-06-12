@@ -128,7 +128,7 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/nsd var/lib/secrets/nsd none bind,r
 To handle automated SSL certificate acquisition dynamically:
 1. `nixnsd` runs ACME via DNS-01 challenge and writes the acquired wildcard certificates to `/var/lib/secrets/ssl/`.
 2. The renewed certificates (`fullchain.pem` and `key.pem`) are saved in the domain's subfolder (e.g., `/var/lib/secrets/ssl/minnecker.com/`).
-3. For Kanidm, `acme.nix` automatically copies these to `idm.crt` and `idm.key` in the same directory.
+3. Services like Nginx and Kanidm read the `fullchain.pem` and `key.pem` files directly from this directory.
 
 Configure the mounts by adding these lines to the LXC container configuration files on the Proxmox host (`/etc/pve/lxc/<VMID>.conf`):
 * **nixnsd** (Primary nameserver, needs **read-write** access to save new/renewed certificates):
@@ -201,7 +201,7 @@ Below are the key files and credentials required per container:
 
 #### 🛡️ nixidm (Kanidm Identity Management)
 * **SSL/TLS Certificates**: Kanidm requires valid SSL certificates to boot. Since these are acquired by `nixnsd` via DNS-01 and placed in the shared SSL storage, mount `/mnt/pve/nas/shared/secrets/ssl` to `/var/lib/secrets/ssl` in the container. Kanidm will read:
-  `/var/lib/secrets/ssl/minnecker.com/idm.crt` and `/var/lib/secrets/ssl/minnecker.com/idm.key`.
+  `/var/lib/secrets/ssl/minnecker.com/fullchain.pem` and `/var/lib/secrets/ssl/minnecker.com/key.pem`.
 
 #### 🦊 nixforgejo (Forgejo Git Service)
 1. **Database Password**: Write the Postgres database password to `/var/lib/secrets/forgejo/db-password` (owned by `forgejo:forgejo`, `chmod 600`).

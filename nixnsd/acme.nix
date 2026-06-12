@@ -60,10 +60,6 @@ in
           cp key.pem /var/lib/secrets/ssl/minnecker.com/key.pem
           chmod 644 /var/lib/secrets/ssl/minnecker.com/fullchain.pem
           chmod 600 /var/lib/secrets/ssl/minnecker.com/key.pem
-          
-          # Copy certificates for Kanidm SSO
-          cp fullchain.pem /var/lib/secrets/ssl/minnecker.com/idm.crt
-          cp key.pem /var/lib/secrets/ssl/minnecker.com/idm.key
         '';
       };
       "floffel.de" = {

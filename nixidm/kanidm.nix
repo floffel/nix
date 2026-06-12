@@ -20,8 +20,8 @@
         origin = "https://idm.minnecker.com";
         
         # Path to TLS certificates (needed for secure communication)
-        tls_chain = "/var/lib/secrets/ssl/minnecker.com/idm.crt";
-        tls_key = "/var/lib/secrets/ssl/minnecker.com/idm.key";
+        tls_chain = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        tls_key = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         
         role = "WriteReplica";
       };

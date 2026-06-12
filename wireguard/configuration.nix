@@ -35,19 +35,26 @@
       
       # Path to the private key (stored securely outside the Nix store)
       privateKeyFile = "/var/lib/secrets/wireguard/private.key";
+
+      # Optimize MTU for mobile networks (LTE/5G tunnels reduce available MTU)
+      # 1360 is standard to prevent cellular packet fragmentation drops
+      mtu = 1360;
       
       # Post-setup commands: Enable NAT/Masquerading for traffic from wg0 to eth0
+      # Also enable TCP MSS Clamping to prevent PMTU path issues on mobile carriers
       postUp = ''
         ${pkgs.iptables}/bin/iptables -t nat -A POSTROUTING -s 10.100.0.0/24 -o eth0 -j MASQUERADE
         ${pkgs.iptables}/bin/iptables -A FORWARD -i wg0 -j ACCEPT
         ${pkgs.iptables}/bin/iptables -A FORWARD -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+        ${pkgs.iptables}/bin/iptables -t mangle -A FORWARD -o wg0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
       '';
       
-      # Post-shutdown commands: Clean up NAT rules
+      # Post-shutdown commands: Clean up NAT and MSS clamping rules
       postDown = ''
         ${pkgs.iptables}/bin/iptables -t nat -D POSTROUTING -s 10.100.0.0/24 -o eth0 -j MASQUERADE
         ${pkgs.iptables}/bin/iptables -D FORWARD -i wg0 -j ACCEPT
         ${pkgs.iptables}/bin/iptables -D FORWARD -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+        ${pkgs.iptables}/bin/iptables -t mangle -D FORWARD -o wg0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
       '';
       
       # Peer definitions (VPN Clients)
@@ -60,6 +67,10 @@
           
           # Assign a static IP inside the tunnel to the phone
           allowedIPs = [ "10.100.0.2/32" ];
+
+          # Send a keepalive packet every 25 seconds to keep the NAT mappings alive
+          # on mobile networks and speed up endpoint dynamic updates
+          persistentKeepalive = 25;
         }
       ];
     };

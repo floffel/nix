@@ -20,4 +20,7 @@
       enable = false;
     };
   };
+
+  # Disable systemd-resolved to prevent it from binding to port 53
+  services.resolved.enable = false;
 }

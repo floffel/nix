@@ -1,0 +1,31 @@
+$TTL 7200
+@   IN SOA r.floffel.de. postmaster.sbminnecker.de. (
+    1742920707         ; serial
+    14400       ; refresh
+    3600        ; retry
+    604800      ; expire
+    86400 )     ; minimum
+
+ 
+@                        IN NS      r.floffel.de.
+@			 IN NS	    ns2.minnecker.com.
+@                        IN NS      ns1.first-ns.de.
+@                        IN NS      robotns2.second-ns.de.
+@                        IN NS      robotns3.second-ns.com.
+
+ 
+@                        IN MX 10   mail
+@                        IN TXT     "v=spf1 +a +mx ?all"
+@                        IN TXT     "v=spf1 a mx ptr -all"
+
+@                        IN A       157.180.8.210
+@                        IN AAAA    2a01:4f8:a0:335e::2
+
+sbminnecker.de.           IN CAA 0   issue "letsencrypt.org"
+
+mail                     IN A       157.180.8.210
+mail                     IN AAAA    2a01:4f9:3100:312b::2
+autoconfig               IN CNAME   mail
+_autodiscover._tcp       IN SRV     0 100 443 riese.minnecker.com.
+
+www                      IN CNAME   riese.minnecker.com.

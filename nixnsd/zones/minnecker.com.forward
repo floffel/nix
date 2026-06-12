@@ -1,0 +1,44 @@
+$TTL 7200
+@   IN SOA r.floffel.de. postmaster.minnecker.com. (
+    1780355711	; serial
+    14400       ; refresh
+    3600        ; retry
+    604800      ; expire
+    86400 )     ; minimum
+
+ 
+@			 IN NS	    r.floffel.de.
+@			 IN NS	    ns2.minnecker.com.
+@                        IN NS      ns1.first-ns.de.
+@                        IN NS      robotns2.second-ns.de.
+@                        IN NS      robotns3.second-ns.com.
+
+ 
+@                        IN MX 10   riese
+@                        IN TXT     "v=spf1 a mx -all"
+@                        IN TXT     "v=DMARC1; p=reject; sp=reject; rua=mailto:postmaster@minnecker.com"
+
+minnecker.com.		 IN CAA	0   issue "letsencrypt.org"
+
+minnecker.com._domainkey IN TXT     ( "v=DKIM1; k=rsa; "
+	"p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC/CJG+JldHRHctxRdKz5RfaCOfqSXEYyvbVDsBoEgdgU2vU7dpQu8iIi0IvLm2ImGMmp1duxQPxp1oec5fltHdNKK39GK2aoVinIr+wcBkJwjNzZUSngeqIlzXRXXe72mNKpFVAxs9qgIHMQyjz9V/VhjcKxE2CwbEkgumGV9aKQIDAQAB" )  ; ----- DKIM key minnecker.com for (your domain)
+
+
+autoconfig               IN CNAME   mail
+_autodiscover._tcp       IN SRV     0 100 443 turing.minnecker.com.
+
+@                        IN A       157.180.8.210
+@                        IN AAAA    2a01:4f9:3100:312b::2
+riese			 IN A	    157.180.8.210
+riese			 IN AAAA    2a01:4f9:3100:312b::2
+r			 IN CNAME   riese
+ns2			 IN A	    78.47.124.81
+ns2			 IN AAAA    2a01:4f8:c0c:2ea9::2
+
+www			 IN CNAME  riese
+
+local		0        IN A 127.0.0.1
+vault		0	 IN A 172.16.16.3
+
+backendmail		 IN CNAME  riese
+*			 IN CNAME  riese

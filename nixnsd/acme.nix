@@ -5,6 +5,7 @@ let
   # The real hook script that runs as root
   dnsHookReal = pkgs.writeScript "dns-hook-real.sh" ''
     #!/bin/sh
+    export PATH=/run/current-system/sw/bin:/run/wrappers/bin:$PATH
     ACTION=$1
     FQDN=$2
     VALUE=$3
@@ -36,6 +37,7 @@ let
   # The wrapper script that Lego calls, executing the real script as root via sudo
   dnsHookWrapper = pkgs.writeScript "dns-hook.sh" ''
     #!/bin/sh
+    export PATH=/run/current-system/sw/bin:/run/wrappers/bin:$PATH
     exec sudo ${dnsHookReal} "$@"
   '';
 in

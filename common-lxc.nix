@@ -46,7 +46,7 @@
     configPath = pkgs.writeText "config.alloy" ''
       loki.write "local_loki" {
         endpoint {
-          url = "http://monitoringng:3100/loki/api/v1/push"
+          url = "http://nixmonitoring:3100/loki/api/v1/push"
         }
       }
 

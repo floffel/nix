@@ -15,20 +15,20 @@
 
     # Hosts entries (static resolution fallback)
     extraHosts = ''
-      fd0c:dead:beef::16:16 idm.hosts.local.minnecker.com idm ldap
-      172.16.16.31 backendmailng.hosts.local.minnecker.com backendmailng
-      172.16.16.32 nixos-vpn.hosts.local.minnecker.com nixos-vpn
-      172.16.16.33 postgresqlng.hosts.local.minnecker.com postgresqlng
-      172.16.16.35 forgejo.hosts.local.minnecker.com forgejo
-      172.16.16.36 forgejo-runner.hosts.local.minnecker.com forgejo-runner
-      172.16.16.37 monitoringng.hosts.local.minnecker.com monitoringng monitoring
-      172.16.16.38 openwebuing.hosts.local.minnecker.com openwebuing openwebui
-      172.16.16.12 matrixng.hosts.local.minnecker.com matrixng matrix
-      172.16.16.18 vaultwardenng.hosts.local.minnecker.com vaultwardenng vault
-      172.16.16.19 wikijsng.hosts.local.minnecker.com wikijsng wiki
-      172.16.16.20 jitsing.hosts.local.minnecker.com jitsing meet
-      172.16.16.21 nsdng.hosts.local.minnecker.com nsdng
-      172.16.16.22 unboundng.hosts.local.minnecker.com unboundng
+      fd0c:dead:beef::16:16 nixidm.hosts.local.minnecker.com nixidm ldap
+      172.16.16.31 nixmail.hosts.local.minnecker.com nixmail
+      172.16.16.32 nixvpn.hosts.local.minnecker.com nixvpn
+      172.16.16.33 nixpostgres.hosts.local.minnecker.com nixpostgres
+      172.16.16.35 nixforgejo.hosts.local.minnecker.com nixforgejo
+      172.16.16.36 nixforgejo-runner.hosts.local.minnecker.com nixforgejo-runner
+      172.16.16.37 nixmonitoring.hosts.local.minnecker.com nixmonitoring monitoring
+      172.16.16.38 nixopenwebui.hosts.local.minnecker.com nixopenwebui openwebui
+      172.16.16.12 nixmatrix.hosts.local.minnecker.com nixmatrix matrix
+      172.16.16.18 nixvaultwarden.hosts.local.minnecker.com nixvaultwarden vault
+      172.16.16.19 nixwikijs.hosts.local.minnecker.com nixwikijs wiki
+      172.16.16.20 nixjitsi.hosts.local.minnecker.com nixjitsi meet
+      172.16.16.21 nixnsd.hosts.local.minnecker.com nixnsd
+      172.16.16.22 nixunbound.hosts.local.minnecker.com nixunbound
     '';
   };
 }

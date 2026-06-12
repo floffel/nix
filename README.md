@@ -16,8 +16,8 @@ Run these commands inside the Mail Server LXC:
 git clone https://github.com/floffel/nix.git /root/nixos-config
 
 # 2. Symlink configurations
-ln -sf /root/nixos-config/mail-server/configuration.nix /etc/nixos/configuration.nix
-ln -sf /root/nixos-config/mail-server/mail-server.nix /etc/nixos/mail-server.nix
+ln -sf /root/nixos-config/nixmail/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/nixmail/nixmail.nix /etc/nixos/nixmail.nix
 ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
 ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
 
@@ -37,7 +37,7 @@ Run these commands inside the WireGuard LXC:
 git clone https://github.com/floffel/nix.git /root/nixos-config
 
 # 2. Symlink configurations
-ln -sf /root/nixos-config/wireguard/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/nixvpn/configuration.nix /etc/nixos/configuration.nix
 ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
 ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
 
@@ -57,7 +57,7 @@ Run these commands inside the PostgreSQL LXC:
 git clone https://github.com/floffel/nix.git /root/nixos-config
 
 # 2. Symlink configurations
-ln -sf /root/nixos-config/postgresqlng/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/nixpostgres/configuration.nix /etc/nixos/configuration.nix
 ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
 ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
 
@@ -135,7 +135,7 @@ Run these commands inside the Monitoring LXC:
 git clone https://github.com/floffel/nix.git /root/nixos-config
 
 # 2. Symlink configurations
-ln -sf /root/nixos-config/monitoringng/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/nixmonitoring/configuration.nix /etc/nixos/configuration.nix
 ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
 ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
 
@@ -155,7 +155,7 @@ Run these commands inside the Open WebUI LXC:
 git clone https://github.com/floffel/nix.git /root/nixos-config
 
 # 2. Symlink configurations
-ln -sf /root/nixos-config/openwebuing/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/nixopenwebui/configuration.nix /etc/nixos/configuration.nix
 ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
 ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
 
@@ -175,7 +175,7 @@ Run these commands inside the Matrix Synapse LXC:
 git clone https://github.com/floffel/nix.git /root/nixos-config
 
 # 2. Symlink configurations
-ln -sf /root/nixos-config/matrixng/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/nixmatrix/configuration.nix /etc/nixos/configuration.nix
 ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
 ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
 
@@ -195,7 +195,7 @@ Run these commands inside the Vaultwarden LXC:
 git clone https://github.com/floffel/nix.git /root/nixos-config
 
 # 2. Symlink configurations
-ln -sf /root/nixos-config/vaultwardenng/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/nixvaultwarden/configuration.nix /etc/nixos/configuration.nix
 ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
 ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
 
@@ -215,7 +215,7 @@ Run these commands inside the Wiki.js LXC:
 git clone https://github.com/floffel/nix.git /root/nixos-config
 
 # 2. Symlink configurations
-ln -sf /root/nixos-config/wikijsng/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/nixwikijs/configuration.nix /etc/nixos/configuration.nix
 ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
 ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
 
@@ -235,7 +235,7 @@ Run these commands inside the Jitsi LXC:
 git clone https://github.com/floffel/nix.git /root/nixos-config
 
 # 2. Symlink configurations
-ln -sf /root/nixos-config/jitsing/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/nixjitsi/configuration.nix /etc/nixos/configuration.nix
 ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
 ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
 
@@ -253,7 +253,7 @@ Run these commands inside the NSD LXC:
 git clone https://github.com/floffel/nix.git /root/nixos-config
 
 # 2. Symlink configurations
-ln -sf /root/nixos-config/nsdng/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/nixnsd/configuration.nix /etc/nixos/configuration.nix
 ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
 ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
 
@@ -273,7 +273,7 @@ Run these commands inside the Unbound LXC:
 git clone https://github.com/floffel/nix.git /root/nixos-config
 
 # 2. Symlink configurations
-ln -sf /root/nixos-config/unboundng/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/nixunbound/configuration.nix /etc/nixos/configuration.nix
 ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
 ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
 
@@ -286,7 +286,7 @@ nixos-rebuild switch
 ## 🔒 Required Secrets & Prerequisites
 
 Before running `nixos-rebuild switch`, you must place the credentials/keys on each server.
-Or in my case, mount it into the secrets stores. Replace type with corresponding type, e.g. mail, wireguard...
+Or in my case, mount it into the secrets stores. Replace type with corresponding type, e.g. mail, nixvpn...
 
 Create the directory:
 ```bash
@@ -328,14 +328,14 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/<type> var/lib/secrets/<type> none 
    Generate a private and public key pair for the server:
    ```bash
    # Make sure the directory exists and has restricted permissions
-   mkdir -p /var/lib/secrets/wireguard && chmod 700 /var/lib/secrets/wireguard
+   mkdir -p /var/lib/secrets/nixvpn && chmod 700 /var/lib/secrets/nixvpn
    
    # Generate private key
-   nix-shell -p wireguard-tools --run "wg genkey" > /var/lib/secrets/wireguard/private.key
-   chmod 600 /var/lib/secrets/wireguard/private.key
+   nix-shell -p wireguard-tools --run "wg genkey" > /var/lib/secrets/nixvpn/private.key
+   chmod 600 /var/lib/secrets/nixvpn/private.key
 
    # Generate public key (optional, useful for client configs)
-   nix-shell -p wireguard-tools --run "wg pubkey" < /var/lib/secrets/wireguard/private.key > /var/lib/secrets/wireguard/public.key
+   nix-shell -p wireguard-tools --run "wg pubkey" < /var/lib/secrets/nixvpn/private.key > /var/lib/secrets/nixvpn/public.key
    ```
 
 2. **WireGuard Client Setup**:
@@ -349,7 +349,7 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/<type> var/lib/secrets/<type> none 
      For graphical clients (like the iOS/Android WireGuard app), the app can generate these keys for you automatically.
    
    * **Step B: Register the Client's Public Key on the Server**
-     Edit the WireGuard configuration file on the server (`/root/nixos-config/wireguard/configuration.nix`) and add the client's public key to the `peers` block:
+     Edit the WireGuard configuration file on the server (`/root/nixos-config/nixvpn/configuration.nix`) and add the client's public key to the `peers` block:
      ```nix
      wg-quick.interfaces.wg0 = {
        ...
@@ -375,7 +375,7 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/<type> var/lib/secrets/<type> none 
      DNS = 1.1.1.1 # Or your local DNS resolver IP
      
      [Peer]
-     PublicKey = <SERVER_PUBLIC_KEY> # Get this by running: cat /var/lib/secrets/wireguard/public.key
+     PublicKey = <SERVER_PUBLIC_KEY> # Get this by running: cat /var/lib/secrets/nixvpn/public.key
      Endpoint = <SERVER_IP_OR_DOMAIN>:51820
      AllowedIPs = 0.0.0.0/0 # Or 10.100.0.0/24 to route only VPN traffic
      PersistentKeepalive = 25
@@ -385,7 +385,7 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/<type> var/lib/secrets/<type> none 
       * **Dynamic IP Roaming:** WireGuard handles client IP changes (e.g., Wi-Fi to LTE) natively. To optimize dynamic routing, the server is configured with a mobile-friendly MTU of `1360` and has `persistentKeepalive = 25` set to keep NAT firewall sessions active.
       * **Accessing Server Container Subnets:** Because WireGuard does not dynamically "push" routes, clients must statically define what ranges are sent over the tunnel.
         * To access the internal container subnet, add `172.16.16.0/24` to the client's `AllowedIPs`.
-        * To use the local secure DNS resolver, set the client's DNS to `172.16.16.22` (the `unboundng` resolver IP) to query local DNS services.
+        * To use the local secure DNS resolver, set the client's DNS to `172.16.16.22` (the `nixunbound` resolver IP) to query local DNS services.
       * **Routing through a Home Network peer (Site-to-Site forwarding):**
         * If you have a peer that acts as your home network gateway (e.g., `10.100.0.3`), you can enable other clients (like your mobile phone) to access your home devices (`192.168.1.0/24`).
         * On the **Server**, add the home subnet to the Home Gateway peer definition:
@@ -501,7 +501,7 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/<type> var/lib/secrets/<type> none 
    
    # Write environment file with database and admin settings
    cat <<EOF > /var/lib/secrets/vaultwarden/env
-   DATABASE_URL="postgresql://vaultwarden:your_vaultwarden_db_password@postgresqlng/vaultwarden"
+   DATABASE_URL="postgresql://vaultwarden:your_vaultwarden_db_password@nixpostgres/vaultwarden"
    
    # Admin panel token (use a secure random string or an Argon2 hash of it)
    # To generate an Argon2 hash: vaultwarden hash
@@ -529,7 +529,7 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/<type> var/lib/secrets/<type> none 
 1. **Network Port Forwarding (UDP 10000)**:
    For group audio and video calls to function correctly, Jitsi Videobridge (JVB) requires direct UDP connectivity.
    Configure your Proxmox firewall and external router to forward:
-   * **UDP Port 10000** -> Point to `172.16.16.20` (the `jitsing` container IP).
+   * **UDP Port 10000** -> Point to `172.16.16.20` (the `nixjitsi` container IP).
 
 ### For the NSD Nameserver Server:
 1. **TSIG Key Secret**:

@@ -6,6 +6,8 @@ let
   dnsHookReal = pkgs.writeScript "dns-hook-real.sh" ''
     #!/bin/sh
     export PATH=/run/current-system/sw/bin:/run/wrappers/bin:$PATH
+    exec 2>/tmp/dns-hook.log
+    set -x
     ACTION=$1
     FQDN=$2
     VALUE=$3

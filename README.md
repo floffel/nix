@@ -81,12 +81,62 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/<type> var/lib/secrets/<type> none 
    ```
 
 ### For the WireGuard Server:
-1. **WireGuard Private Key**:
+1. **WireGuard Server Keys**:
+   Generate a private and public key pair for the server:
    ```bash
+   # Make sure the directory exists and has restricted permissions
    mkdir -p /var/lib/secrets/wireguard && chmod 700 /var/lib/secrets/wireguard
-   echo "YOUR_PRIVATE_KEY" > /var/lib/secrets/wireguard/private.key
+   
+   # Generate private key
+   nix-shell -p wireguard-tools --run "wg genkey" > /var/lib/secrets/wireguard/private.key
    chmod 600 /var/lib/secrets/wireguard/private.key
+
+   # Generate public key (optional, useful for client configs)
+   nix-shell -p wireguard-tools --run "wg pubkey" < /var/lib/secrets/wireguard/private.key > /var/lib/secrets/wireguard/public.key
    ```
+
+2. **WireGuard Client Setup**:
+   To connect a client (such as your phone or laptop) to this gateway, you need to set up a key pair on the client and register its public key on the server.
+   
+   * **Step A: Generate Client Keys**
+     Generate a key pair on the client device. If using a command-line client:
+     ```bash
+     wg genkey | tee client_private.key | wg pubkey > client_public.key
+     ```
+     For graphical clients (like the iOS/Android WireGuard app), the app can generate these keys for you automatically.
+   
+   * **Step B: Register the Client's Public Key on the Server**
+     Edit the WireGuard configuration file on the server (`/root/nixos-config/wireguard/configuration.nix`) and add the client's public key to the `peers` block:
+     ```nix
+     wg-quick.interfaces.wg0 = {
+       ...
+       peers = [
+         {
+           publicKey = "CLIENT_PUBLIC_KEY_HERE";
+           allowedIPs = [ "10.100.0.2/32" ]; # Assign a static IP inside the tunnel to the client
+         }
+       ];
+     };
+     ```
+     Then, run the rebuild command on the server to apply the configuration change:
+     ```bash
+     nixos-rebuild switch
+     ```
+   
+   * **Step C: Create the Client Configuration**
+     Configure the client device (e.g. in `/etc/wireguard/wg0.conf` or inside the WireGuard app) with:
+     ```ini
+     [Interface]
+     Address = 10.100.0.2/24
+     PrivateKey = <CLIENT_PRIVATE_KEY>
+     DNS = 1.1.1.1 # Or your local DNS resolver IP
+     
+     [Peer]
+     PublicKey = <SERVER_PUBLIC_KEY> # Get this by running: cat /var/lib/secrets/wireguard/public.key
+     Endpoint = <SERVER_IP_OR_DOMAIN>:51820
+     AllowedIPs = 0.0.0.0/0 # Or 10.100.0.0/24 to route only VPN traffic
+     PersistentKeepalive = 25
+     ```
 
 ---
 

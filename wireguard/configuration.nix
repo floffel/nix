@@ -25,10 +25,10 @@
       enable = false;
     };
 
-    # WireGuard VPN Interface
-    wireguard.interfaces.wg0 = {
+    # WireGuard VPN Interface (using wg-quick for compatibility with systemd-networkd)
+    wg-quick.interfaces.wg0 = {
       # The IP address range of the VPN tunnel itself
-      ips = [ "10.100.0.1/24" ];
+      address = [ "10.100.0.1/24" ];
       
       # The port to listen on
       listenPort = 51820;
@@ -37,14 +37,14 @@
       privateKeyFile = "/var/lib/secrets/wireguard/private.key";
       
       # Post-setup commands: Enable NAT/Masquerading for traffic from wg0 to eth0
-      postSetup = ''
+      postUp = ''
         ${pkgs.iptables}/bin/iptables -t nat -A POSTROUTING -s 10.100.0.0/24 -o eth0 -j MASQUERADE
         ${pkgs.iptables}/bin/iptables -A FORWARD -i wg0 -j ACCEPT
         ${pkgs.iptables}/bin/iptables -A FORWARD -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT
       '';
       
       # Post-shutdown commands: Clean up NAT rules
-      postShutdown = ''
+      postDown = ''
         ${pkgs.iptables}/bin/iptables -t nat -D POSTROUTING -s 10.100.0.0/24 -o eth0 -j MASQUERADE
         ${pkgs.iptables}/bin/iptables -D FORWARD -i wg0 -j ACCEPT
         ${pkgs.iptables}/bin/iptables -D FORWARD -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT
@@ -55,7 +55,8 @@
         # Example Client: Mobile Phone (uses floating IP)
         {
           # Mobile Phone's Public Key (generated on the phone)
-          publicKey = "REPLACE_WITH_MOBILE_PHONE_PUBLIC_KEY";
+          # TODO: Replace with the actual public key from the client phone/device
+          publicKey = "95PVMFZPTZ2URni05eiwxq88ImEjYpi9lfOVFTQ48TQ=";
           
           # Assign a static IP inside the tunnel to the phone
           allowedIPs = [ "10.100.0.2/32" ];

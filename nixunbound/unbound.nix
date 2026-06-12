@@ -26,6 +26,18 @@
           name = "minnecker.com.";
           stub-addr = "172.16.16.21"; # nixnsd container IP
         }
+        {
+          name = "floffel.de.";
+          stub-addr = "172.16.16.21";
+        }
+        {
+          name = "sbminnecker.de.";
+          stub-addr = "172.16.16.21";
+        }
+        {
+          name = "substitution.art.";
+          stub-addr = "172.16.16.21";
+        }
       ];
 
       # Forward all other public queries to upstream resolvers (Cloudflare / Google)

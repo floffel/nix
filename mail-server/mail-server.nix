@@ -110,21 +110,25 @@
 
       protocols = [ "imap" "pop3" "lmtp" "sieve" ];
       recipient_delimiter = "+.";
+      ldap_uris = "ldap://ldap";
+      ldap_auth_dn = "cn=Manager,dc=minnecker,dc=com";
+      ldap_auth_dn_password = "</var/lib/secrets/mail/dovecot/ldap-password.txt";
+      ldap_base = "ou=Users,dc=minnecker,dc=com";
       ssl = "no";
 
-      "passdb ldap" {
-        use_worker = "yes";
-
-        filter = "(&(mail=%{user})(employeeType=email))";
-        fields {
+      "passdb ldap" = {
+        driver = "ldap";
+        filter = "(|(mail=%{user})(uid=%{user}))";
+        fields = {
           user = "%{ldap:mail}";
           password = "%{ldap:userPassword}";
-        }
-      }
+        };
+      };
 
-      "userdb ldap" {
-        filter = "(&(mail=%{user})(employeeType=email))"
-      }
+      "userdb ldap" = {
+        driver = "ldap";
+        filter = "(&(|(mail=%{user})(uid=%{user}))(employeeType=email))";
+      };
 
       "namespace inbox" = {
         inbox = true;
@@ -148,22 +152,24 @@
       "service managesieve-login" = { "inet_listener sieve" = { port = 4190; }; };
 
       "service lmtp" = {
-        "unix_listener /var/spool/postfix/private/dovecot-lmtp" = {
+        "unix_listener /var/lib/postfix/queue/private/dovecot-lmtp" = {
           group = "postfix"; mode = "0666"; user = "postfix";
         };
       };
 
       "service auth" = {
-        "unix_listener /var/spool/postfix/private/auth" = {
+        "unix_listener /var/lib/postfix/queue/private/auth" = {
           group = "postfix"; mode = "0666"; user = "postfix";
         };
       };
 
       "protocol lda" = { mail_plugins = "$mail_plugins sieve"; };
       "protocol lmtp" = { mail_plugins = "$mail_plugins sieve"; };
+      "sieve_script spam-global" = {
+        type = "before";
+        path = "/etc/dovecot/global-spam.sieve";
+      };
       "sieve_script personal" = { active_path = "~/.dovecot.sieve"; driver = "file"; path = "~/sieve"; };
-
-      sieve_before = "/etc/dovecot/global-spam.sieve";
     };
   };
 

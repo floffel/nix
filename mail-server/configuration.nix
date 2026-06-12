@@ -7,7 +7,6 @@
     ../hosts.nix
     ./mail-server.nix
   ];
-
   # Networking
   networking = {
     hostName = "backendmail";

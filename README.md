@@ -65,30 +65,32 @@ Once the container is running and NixOS is initialized, the configuration is man
 To deploy any of the container configurations, run the following unified command sequence inside the container:
 
 ```bash
-# 1. Clone the repository (if not already done)
+# 1. Set the target container name (change this to your target, e.g. nixnginx, nixnsd, nixpostgres, nixvpn, nixmail, etc.)
+CONTAINER="nixnginx"
+
+# 2. Clone the repository (if not already done)
 git clone https://github.com/floffel/nix.git /root/nixos-config
 
-# 2. Link the configuration files
-# Replace <container-name> with the folder name of your container (e.g. nixnginx, nixvpn, nixpostgres, nixnsd)
-ln -sf /root/nixos-config/<container-name>/configuration.nix /etc/nixos/configuration.nix
+# 3. Link the configuration files
+ln -sf /root/nixos-config/$CONTAINER/configuration.nix /etc/nixos/configuration.nix
 ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
 ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
 
-# 3. Apply any container-specific files/steps (see below)
+# 4. Link the extra mail module (nixmail only)
+if [ "$CONTAINER" = "nixmail" ]; then
+  ln -sf /root/nixos-config/nixmail/nixmail.nix /etc/nixos/nixmail.nix
+fi
 
-# 4. Mount/setup required secrets (see "Required Secrets" section below)
+# 5. Apply any container-specific files/steps or mount secrets (see sections below)
 
-# 5. Rebuild the system
+# 6. Rebuild the system
 nixos-rebuild switch
 ```
 
 ### 📋 Container Names and Specific Setup Steps
 The deployment process is identical for all containers, with the following exceptions:
 
-*   **`nixmail` (Mail Server)**: Requires an additional symlink for the mail module file:
-    ```bash
-    ln -sf /root/nixos-config/nixmail/nixmail.nix /etc/nixos/nixmail.nix
-    ```
+*   **`nixmail` (Mail Server)**: Automatically handles linking the extra `nixmail.nix` module if the `CONTAINER` variable is set to `"nixmail"` in the script above.
 *   **`nixvpn` (WireGuard Gateway)**: Requires installing `wireguard-tools` to generate keys and setting up client configs (see below).
 *   **`nixforgejo-runner` (Forgejo Runner)**: Requires Nesting and Keyctl options enabled in the Proxmox Web UI (Options -> Features) to run nested Docker containers.
 

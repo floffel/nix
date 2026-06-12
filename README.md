@@ -271,3 +271,44 @@ Below are the key files and credentials required per container:
 
 #### 🕸️ nixnginx (Nginx Reverse Proxy)
 * Refer to the specific [nixnginx/README.md](file:///root/nixos-config/nixnginx/README.md) for detailed credentials and configuration specifications for SSL certificates, Nextcloud database credentials, and Roundcube secrets.
+
+---
+
+## 🌐 4. Exposing Services & Host Port Routing (NAT)
+
+To allow external access to your containers on Proxmox, you must forward the public ports of the Proxmox host to the respective container IPs.
+
+### 🛠️ Port Routing Script
+A host routing script has been created under [scratch/setup-host-routing.sh](file:///root/nixos-config/scratch/setup-host-routing.sh). Copy this script to your Proxmox host (e.g. `/root/setup-host-routing.sh`) and configure the `PUB_IF` variable matching your public network interface (e.g. `vmbr0`).
+
+#### Run Routing Temporarily (Runtime only)
+To enable rules on-the-fly:
+```bash
+# Enable forwarding and apply NAT rules
+sudo /root/setup-host-routing.sh enable
+
+# Disable all forwarded NAT rules
+sudo /root/setup-host-routing.sh disable
+
+# View active forwardings
+sudo /root/setup-host-routing.sh status
+```
+
+#### Run Routing Permanently
+To make the port routing rules persistent across host reboots:
+
+**Option A: Add to network interfaces configuration (Recommended)**
+Edit `/etc/network/interfaces` on your Proxmox host and append the enable/disable triggers under your main bridge configuration (e.g. `vmbr0`):
+```text
+iface vmbr0 inet static
+    # ... your existing configuration ...
+    post-up /root/setup-host-routing.sh enable
+    post-down /root/setup-host-routing.sh disable
+```
+
+**Option B: Use `iptables-persistent`**
+Install the persistence package and save active iptables NAT rules:
+```bash
+sudo apt-get install -y iptables-persistent
+sudo iptables-save > /etc/iptables/rules.v4
+```

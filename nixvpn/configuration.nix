@@ -34,7 +34,7 @@
       listenPort = 51820;
       
       # Path to the private key (stored securely outside the Nix store)
-      privateKeyFile = "/var/lib/secrets/nixvpn/private.key";
+      privateKeyFile = "/var/lib/secrets/wireguard/private.key";
 
       # Optimize MTU for mobile networks (LTE/5G tunnels reduce available MTU)
       # 1360 is standard to prevent cellular packet fragmentation drops

@@ -101,15 +101,36 @@ The deployment process is identical for all containers, with the following excep
 Before running `nixos-rebuild switch`, you must place the credentials/keys on each server or mount a shared secrets store.
 
 ### Mounting Secrets via Proxmox Host
-To mount secrets dynamically from a central store (e.g. NFS/NAS share), edit the container's configuration file on the Proxmox host (`/etc/pve/lxc/<id>.conf`, replace `<type>` with the container type/name, e.g. `mail`, `nixvpn`, `grafana` etc.):
+To mount secrets dynamically from a central store (e.g. NFS/NAS share), edit the container's configuration file on the Proxmox host (`/etc/pve/lxc/<id>.conf`). 
 
+For example, to mount secrets for the `nixnsd` container:
 ```text
-lxc.mount.entry: /mnt/pve/nas/shared/secrets/<type> var/lib/secrets/<type> none bind,rw 0 0
+lxc.mount.entry: /mnt/pve/nas/shared/secrets/nsd var/lib/secrets/nsd none bind,rw 0 0
 ```
-On the guest, ensure the local mount point directory exists with restricted permissions:
+
+#### Mapping Table:
+| Container Name | Host Secret Path (`<type>`) | Container Mount Destination |
+| :--- | :--- | :--- |
+| `nixmail` | `/mnt/pve/nas/shared/secrets/mail` | `var/lib/secrets/mail` |
+| `nixvpn` | `/mnt/pve/nas/shared/secrets/wireguard` | `var/lib/secrets/wireguard` |
+| `nixidm` | `/mnt/pve/nas/shared/secrets/kanidm` | `var/lib/secrets/kanidm` |
+| `nixforgejo` | `/mnt/pve/nas/shared/secrets/forgejo` | `var/lib/secrets/forgejo` |
+| `nixmonitoring` | `/mnt/pve/nas/shared/secrets/grafana` | `var/lib/secrets/grafana` |
+| `nixopenwebui` | `/mnt/pve/nas/shared/secrets/open-webui` | `var/lib/secrets/open-webui` |
+| `nixmatrix` | `/mnt/pve/nas/shared/secrets/matrix` | `var/lib/secrets/matrix` |
+| `nixvaultwarden` | `/mnt/pve/nas/shared/secrets/vaultwarden` | `var/lib/secrets/vaultwarden` |
+| `nixwikijs` | `/mnt/pve/nas/shared/secrets/wikijs` | `var/lib/secrets/wikijs` |
+| `nixnsd` | `/mnt/pve/nas/shared/secrets/nsd` | `var/lib/secrets/nsd` |
+| `nixnginx` | `/mnt/pve/nas/shared/secrets/nginx` | `var/lib/secrets/nginx` |
+
+On the guest container, create the local mount point directory by setting a variable first:
 ```bash
+# Set target secret folder name (e.g. nsd, mail, wireguard, grafana, etc.)
+SECRET_TYPE="nsd"
+
+# Create directory with restricted permissions
 source /etc/set-environment
-mkdir -p /var/lib/secrets/<type> && chmod 700 /var/lib/secrets/<type>
+mkdir -p /var/lib/secrets/$SECRET_TYPE && chmod 700 /var/lib/secrets/$SECRET_TYPE
 ```
 
 ---
@@ -139,10 +160,10 @@ Below are the key files and credentials required per container:
 #### 🔑 nixvpn (WireGuard Server)
 1. **Server Keys**: Generate the WireGuard server keys:
    ```bash
-   mkdir -p /var/lib/secrets/nixvpn && chmod 700 /var/lib/secrets/nixvpn
-   nix-shell -p wireguard-tools --run "wg genkey" > /var/lib/secrets/nixvpn/private.key
-   chmod 600 /var/lib/secrets/nixvpn/private.key
-   nix-shell -p wireguard-tools --run "wg pubkey" < /var/lib/secrets/nixvpn/private.key > /var/lib/secrets/nixvpn/public.key
+   mkdir -p /var/lib/secrets/wireguard && chmod 700 /var/lib/secrets/wireguard
+   nix-shell -p wireguard-tools --run "wg genkey" > /var/lib/secrets/wireguard/private.key
+   chmod 600 /var/lib/secrets/wireguard/private.key
+   nix-shell -p wireguard-tools --run "wg pubkey" < /var/lib/secrets/wireguard/private.key > /var/lib/secrets/wireguard/public.key
    ```
 2. **Client Setup**: Edit the `peers` block inside `nixvpn/configuration.nix` with the client's public key. On the client device (e.g. `/etc/wireguard/wg0.conf`), set `DNS = 172.16.16.22` (the local Unbound IP) and configure `AllowedIPs` as desired (e.g. `0.0.0.0/0` or `172.16.16.0/24`).
 3. **Advanced Routing (Site-to-Site)**: If routing home network traffic (e.g., `192.168.1.0/24`) via a home gateway peer (IP `10.100.0.3`):

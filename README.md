@@ -49,6 +49,202 @@ nixos-rebuild switch
 
 ---
 
+### 🗄️ Option C: Setup PostgreSQL Database Container
+Run these commands inside the PostgreSQL LXC:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/floffel/nix.git /root/nixos-config
+
+# 2. Symlink configurations
+ln -sf /root/nixos-config/postgresqlng/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
+ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
+
+# 3. Rebuild the system
+nixos-rebuild switch
+```
+
+---
+
+### 🛡️ Option D: Setup Kanidm Identity Management & SSO Container
+Run these commands inside the Kanidm LXC:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/floffel/nix.git /root/nixos-config
+
+# 2. Symlink configurations
+ln -sf /root/nixos-config/idmng/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
+ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
+
+# 3. Setup Secrets & Certificates (see "Required Secrets" section below)
+
+# 4. Rebuild the system
+nixos-rebuild switch
+```
+
+---
+
+### 🦊 Option E: Setup Forgejo Container
+Run these commands inside the Forgejo LXC:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/floffel/nix.git /root/nixos-config
+
+# 2. Symlink configurations
+ln -sf /root/nixos-config/forgejo/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
+ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
+
+# 3. Setup Secrets (see "Required Secrets" section below)
+
+# 4. Rebuild the system
+nixos-rebuild switch
+```
+
+---
+
+### 🚀 Option F: Setup Forgejo Actions Runner Container
+Run these commands inside the Forgejo Actions Runner LXC:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/floffel/nix.git /root/nixos-config
+
+# 2. Symlink configurations
+ln -sf /root/nixos-config/forgejo-runner/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
+ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
+
+# 3. Enable Proxmox features nesting=1 and keyctl=1 on the host for Docker support
+
+# 4. Setup Secrets (see "Required Secrets" section below)
+
+# 5. Rebuild the system
+nixos-rebuild switch
+```
+
+### 📊 Option G: Setup Monitoring Container (Prometheus, Loki & Grafana)
+Run these commands inside the Monitoring LXC:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/floffel/nix.git /root/nixos-config
+
+# 2. Symlink configurations
+ln -sf /root/nixos-config/monitoringng/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
+ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
+
+# 3. Setup Secrets (see "Required Secrets" section below)
+
+# 4. Rebuild the system
+nixos-rebuild switch
+```
+
+---
+
+### 🤖 Option H: Setup Open WebUI Container
+Run these commands inside the Open WebUI LXC:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/floffel/nix.git /root/nixos-config
+
+# 2. Symlink configurations
+ln -sf /root/nixos-config/openwebuing/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
+ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
+
+# 3. Setup Secrets & LLM Connection (see "Required Secrets" section below)
+
+# 4. Rebuild the system
+nixos-rebuild switch
+```
+
+---
+
+### 💬 Option I: Setup Matrix Synapse Container
+Run these commands inside the Matrix Synapse LXC:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/floffel/nix.git /root/nixos-config
+
+# 2. Symlink configurations
+ln -sf /root/nixos-config/matrixng/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
+ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
+
+# 3. Setup Secrets & Database Connection (see "Required Secrets" section below)
+
+# 4. Rebuild the system
+nixos-rebuild switch
+```
+
+---
+
+### 🔑 Option J: Setup Vaultwarden Container
+Run these commands inside the Vaultwarden LXC:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/floffel/nix.git /root/nixos-config
+
+# 2. Symlink configurations
+ln -sf /root/nixos-config/vaultwardenng/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
+ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
+
+# 3. Setup Secrets & Database Connection (see "Required Secrets" section below)
+
+# 4. Rebuild the system
+nixos-rebuild switch
+```
+
+---
+
+### 📝 Option K: Setup Wiki.js Container
+Run these commands inside the Wiki.js LXC:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/floffel/nix.git /root/nixos-config
+
+# 2. Symlink configurations
+ln -sf /root/nixos-config/wikijsng/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
+ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
+
+# 3. Setup Secrets & Database Connection (see "Required Secrets" section below)
+
+# 4. Rebuild the system
+nixos-rebuild switch
+```
+
+---
+
+### 📹 Option L: Setup Jitsi Meet Container
+Run these commands inside the Jitsi LXC:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/floffel/nix.git /root/nixos-config
+
+# 2. Symlink configurations
+ln -sf /root/nixos-config/jitsing/configuration.nix /etc/nixos/configuration.nix
+ln -sf /root/nixos-config/common-lxc.nix /etc/nixos/common-lxc.nix
+ln -sf /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
+
+# 3. Rebuild the system
+nixos-rebuild switch
+```
+
+---
+
 ## 🔒 Required Secrets & Prerequisites
 
 Before running `nixos-rebuild switch`, you must place the credentials/keys on each server.
@@ -74,7 +270,16 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/<type> var/lib/secrets/<type> none 
    chmod 600 /var/lib/secrets/mail/*
    ```
 
-2. **DKIM Keys**:
+2. **LDAP over SSL (LDAPS) Configuration for Postfix**:
+   Since the Postfix LDAP maps are loaded from runtime configuration files (e.g., `/var/lib/secrets/mail/postfix/ldap-recipients.cf`, `ldap-aliases.cf`, `ldap-domains.cf`, and `ldap-senders.cf`), you must configure them to use the secure LDAP server on port 636:
+   * Edit each `.cf` file in `/var/lib/secrets/mail/postfix/` and set:
+     ```ini
+     server_host = ldaps://ldap:636
+     tls_require_cert = no
+     ```
+   * Note: Setting `tls_require_cert = no` tells Postfix's LDAP client to trust the self-signed TLS certificates of the internal container network.
+
+3. **DKIM Keys**:
    ```bash
    chown -R 182:182 /var/lib/secrets/dkim/ # 182 is the rspamd user
    chmod 600 /var/lib/secrets/dkim/*.private
@@ -137,6 +342,160 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/<type> var/lib/secrets/<type> none 
      AllowedIPs = 0.0.0.0/0 # Or 10.100.0.0/24 to route only VPN traffic
      PersistentKeepalive = 25
      ```
+
+### For the Kanidm Server:
+1. **SSL/TLS Certificates**:
+   Kanidm requires SSL/TLS certificates to boot and run. Create the secrets directory and place the certificate chain and private key:
+   ```bash
+   mkdir -p /var/lib/secrets/kanidm/certs && chmod 700 /var/lib/secrets/kanidm && chmod 700 /var/lib/secrets/kanidm/certs
+   # Copy your certificates into:
+   # /var/lib/secrets/kanidm/certs/idm.crt
+   # /var/lib/secrets/kanidm/certs/idm.key
+   ```
+
+### For the Forgejo Server:
+1. **Database Password**:
+   Store the database password that matches the Postgres database connection:
+   ```bash
+   mkdir -p /var/lib/secrets/forgejo && chmod 700 /var/lib/secrets/forgejo
+   echo "your_postgres_db_password" > /var/lib/secrets/forgejo/db-password
+   chmod 600 /var/lib/secrets/forgejo/db-password
+   chown -R forgejo:forgejo /var/lib/secrets/forgejo
+   ```
+2. **Kanidm OAuth2/OIDC Client Secret**:
+   Store the client secret generated in Kanidm for Forgejo SSO authentication:
+   ```bash
+   echo "your_forgejo_oauth_secret" > /var/lib/secrets/forgejo/oauth-secret
+   chmod 600 /var/lib/secrets/forgejo/oauth-secret
+   chown -R forgejo:forgejo /var/lib/secrets/forgejo
+   ```
+
+### For the Monitoring Server (Grafana, Prometheus & Loki):
+1. **Grafana Credentials, Encryption Key & OAuth Secret**:
+   Create the secrets directory and store the admin password, database encryption key, and Kanidm OIDC client secret:
+   ```bash
+   mkdir -p /var/lib/secrets/grafana && chmod 700 /var/lib/secrets/grafana
+   echo "your_grafana_admin_password" > /var/lib/secrets/grafana/admin-password
+   # Generate a secure random hex string for Grafana database encryption key
+   openssl rand -hex 16 > /var/lib/secrets/grafana/secret-key
+   # Store the OIDC client secret generated in Kanidm for Grafana
+   echo "your_grafana_oauth_secret" > /var/lib/secrets/grafana/oauth-secret
+   chmod 600 /var/lib/secrets/grafana/*
+   chown -R grafana:grafana /var/lib/secrets/grafana
+   ```
+
+### For the Open WebUI Server:
+1. **SSO OAuth Secret & LLM Endpoints**:
+   Create the secrets directory and store the environment file containing the OIDC client secret and local LLM endpoints:
+   ```bash
+   mkdir -p /var/lib/secrets/open-webui && chmod 700 /var/lib/secrets/open-webui
+   
+   # Write environment file with your LLM configuration
+   cat <<EOF > /var/lib/secrets/open-webui/env
+   OAUTH_CLIENT_SECRET="your_kanidm_openwebui_oauth_secret"
+   
+   # Local LLM endpoints (e.g. Ollama or a remote OpenAI-compatible API)
+   OLLAMA_API_BASE_URL="http://your_ollama_ip:11434"
+   OPENAI_API_BASE_URL="http://your_llm_server_ip:8000/v1"
+   OPENAI_API_KEY="your_llm_api_key_if_needed"
+   EOF
+   
+   chmod 600 /var/lib/secrets/open-webui/env
+   chown -R 994:994 /var/lib/secrets/open-webui # 994 is the default open-webui system user
+   ```
+
+### For the Matrix Synapse Server:
+1. **Synapse Database Password and OIDC Secrets**:
+   Create the secrets directory and write the YAML configuration file containing the database connection details and the Kanidm OIDC client credentials:
+   ```bash
+   mkdir -p /var/lib/secrets/matrix && chmod 700 /var/lib/secrets/matrix
+   
+   # Write synapse secrets configuration
+   cat <<EOF > /var/lib/secrets/matrix/secrets.yaml
+   database:
+     args:
+       password: "your_matrix_postgresql_password"
+
+   oidc_providers:
+     - idp_id: "kanidm"
+       idp_name: "Kanidm SSO"
+       issuer: "https://idm.minnecker.com/oauth2/openid/matrix"
+       client_id: "matrix"
+       client_secret: "your_kanidm_matrix_oauth_secret"
+       scopes:
+         - "openid"
+         - "profile"
+         - "email"
+       user_mapping_provider:
+         config:
+           subject_claim: "sub"
+           localpart_claim: "preferred_username"
+           display_name_claim: "name"
+           email_claim: "email"
+   EOF
+   
+   chmod 600 /var/lib/secrets/matrix/secrets.yaml
+   chown -R matrix-synapse:matrix-synapse /var/lib/secrets/matrix
+   ```
+
+### For the Vaultwarden Server:
+1. **SSO / Database Connection and Admin Token**:
+   Create the secrets directory and write the environment file containing the PostgreSQL database connection string and your secure admin panel token:
+   ```bash
+   mkdir -p /var/lib/secrets/vaultwarden && chmod 700 /var/lib/secrets/vaultwarden
+   
+   # Write environment file with database and admin settings
+   cat <<EOF > /var/lib/secrets/vaultwarden/env
+   DATABASE_URL="postgresql://vaultwarden:your_vaultwarden_db_password@postgresqlng/vaultwarden"
+   
+   # Admin panel token (use a secure random string or an Argon2 hash of it)
+   # To generate an Argon2 hash: vaultwarden hash
+   ADMIN_TOKEN="your_secure_admin_token_or_hash"
+   EOF
+   
+   chmod 600 /var/lib/secrets/vaultwarden/env
+   chown -R vaultwarden:vaultwarden /var/lib/secrets/vaultwarden
+   ```
+
+### For the Wiki.js Server:
+1. **Wiki.js Database Password**:
+   Create the secrets directory and write the environment file containing the PostgreSQL database password:
+   ```bash
+   mkdir -p /var/lib/secrets/wikijs && chmod 700 /var/lib/secrets/wikijs
+   
+   # Write environment file with database password
+   echo 'WIKI_DB_PASS="your_wikijs_db_password"' > /var/lib/secrets/wikijs/env
+   
+   chmod 600 /var/lib/secrets/wikijs/env
+   chown -R wiki-js:wiki-js /var/lib/secrets/wikijs
+   ```
+
+### For the Jitsi Meet Server:
+1. **Network Port Forwarding (UDP 10000)**:
+   For group audio and video calls to function correctly, Jitsi Videobridge (JVB) requires direct UDP connectivity.
+   Configure your Proxmox firewall and external router to forward:
+   * **UDP Port 10000** -> Point to `172.16.16.20` (the `jitsing` container IP).
+
+### For the Forgejo Actions Runner:
+1. **Registration Token**:
+   Register a runner in your Forgejo web interface (Site Administration -> Actions -> Runners).
+   Create the directory and store the registration token in env format:
+   ```bash
+   mkdir -p /var/lib/secrets/forgejo && chmod 700 /var/lib/secrets/forgejo
+   echo 'TOKEN="your_registration_token"' > /var/lib/secrets/forgejo/runner-token
+   chmod 600 /var/lib/secrets/forgejo/runner-token
+   ```
+
+### 🐳 Proxmox Host Options for Forgejo Actions Runner
+Since the runner container runs nested Docker-in-LXC to execute containerized Action steps, you must enable these settings on your Proxmox host:
+1. Go to the Proxmox Web UI, select the **Runner Container -> Options -> Features**.
+2. Edit the Features and check:
+   * **Nesting** (allows running Docker inside the container)
+   * **Keyctl** (improves systemd security/user namespace mapping support)
+3. Alternatively, via Proxmox Host CLI, edit `/etc/pve/lxc/<id>.conf` and add:
+   ```text
+   features: nesting=1,keyctl=1
+   ```
 
 ---
 

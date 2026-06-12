@@ -1,19 +1,18 @@
-# NixOS Server Configuration for the Mail Server Container
+# NixOS Server Configuration for the Wiki.js Container (wikijsng)
 { config, pkgs, ... }:
 
 {
   imports = [
     ../common-lxc.nix
     ../hosts.nix
-    ./mail-server.nix
+    ./wikijs.nix
   ];
-
 
   # Networking
   networking = {
-    hostName = "backendmail";
+    hostName = "wikijsng";
 
-    # Static IP Configuration matching the mail server setup
+    # Static IP Configuration matching the wikijsng server setup
     useDHCP = false;
 
     # Firewall configuration disabled per environment requirements

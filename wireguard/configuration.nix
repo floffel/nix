@@ -16,7 +16,7 @@
   # Networking Setup
   networking = {
     hostName = "nixos-vpn";
-    
+
     # Configure your network interfaces
     useDHCP = false;
 

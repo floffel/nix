@@ -26,9 +26,9 @@ Before starting the NixOS configuration, make sure the following files are mount
 *   `/var/lib/secrets/nginx/ldap.conf`: The LDAP server configuration blocks, including the bindDN and bind password:
     ```nginx
     ldap_server mail_users {
-      url "ldap://ldap:389/ou=users,dc=minnecker,dc=com?mail?sub?(employeeType=email)";
+      url "ldaps://ldap:636/ou=users,dc=minnecker,dc=com?mail?sub?(employeeType=email)";
       binddn "cn=manager,dc=minnecker,dc=com";
-      binddn_passwd "Web4aeB1paifam2T";
+      binddn_passwd "your_ldap_bind_password";
       require valid_user;
     }
     ```
@@ -37,8 +37,13 @@ Before starting the NixOS configuration, make sure the following files are mount
 *   `/var/lib/secrets/nginx/dh.param`: The Diffie-Hellman parameters file (copied from `/etc/nginx/dh.param`).
 
 ### 4. Roundcube Secrets
-*   `/var/lib/secrets/nginx/roundcube-db-password.txt`: Contains the plain database password for the PostgreSQL database (`ruDei5Thzuh1ahYudaD7Ahpo`).
-*   `/var/lib/secrets/nginx/roundcube-des-key.txt`: Contains the 24-character session encryption key (`1Z1djvSiOF7jUTiRAUxEtLrj`).
+*   `/var/lib/secrets/nginx/roundcube-db-password.txt`: Contains the plain database password for the PostgreSQL database (`your_roundcube_db_password`).
+*   `/var/lib/secrets/nginx/roundcube-des-key.txt`: Contains the 24-character session encryption key (`your_roundcube_des_key`).
+
+### 5. Nextcloud & OIDC Secrets
+*   `/var/lib/secrets/nginx/nextcloud-db-password.txt`: Contains the plain database password for the Nextcloud PostgreSQL database.
+*   `/var/lib/secrets/nginx/nextcloud-admin-password.txt`: Contains the admin user password for Nextcloud.
+*   `/var/lib/secrets/nginx/nextcloud-oauth-secret`: Contains the client secret generated in Kanidm for Nextcloud OIDC (SSO) authentication.
 
 ---
 

@@ -32,7 +32,7 @@
         smtpd_sasl_path = "private/auth";
         smtpd_sasl_security_options = "noanonymous";
 
-        smtpd_recipient_restrictions = "permit_sasl_authenticated, permit_auth_destination, defer_unauth_destination, reject_unknown_recipient_domain, smtpd_reject_unlisted_recipient";
+        smtpd_recipient_restrictions = "permit_sasl_authenticated, permit_auth_destination, defer_unauth_destination, reject_rbl_client sbl-xbl.spamhaus.org, reject_rbl_client bl.spamcop.net, reject_unknown_recipient_domain, smtpd_reject_unlisted_recipient";
         smtpd_helo_restrictions = "permit_sasl_authenticated, reject_invalid_hostname, reject_unknown_hostname, reject_non_fqdn_hostname";
         smtpd_helo_required = "yes";
         biff = "no";
@@ -110,11 +110,12 @@
 
       protocols = [ "imap" "pop3" "lmtp" "sieve" ];
       recipient_delimiter = "+.";
-      ldap_uris = "ldap://ldap";
+      ldap_uris = "ldaps://ldap";
       ldap_auth_dn = "cn=Manager,dc=minnecker,dc=com";
       ldap_auth_dn_password = "</var/lib/secrets/mail/dovecot/ldap-password.txt";
       ldap_base = "ou=Users,dc=minnecker,dc=com";
-      ssl = "no";
+      ssl = "yes";
+      tls_require_cert = "never";
 
       "passdb ldap" = {
         driver = "ldap";
@@ -185,6 +186,34 @@
 
 
   environment.systemPackages = [ pkgs.dovecot_pigeonhole ];
+
+  # Global Sieve script to automatically move spam to the Junk folder
+  environment.etc."dovecot/global-spam.sieve".text = ''
+    require ["fileinto", "mailbox"];
+    if anyof (
+      header :contains "X-Spam-Flag" "YES",
+      header :contains "X-Spam" "Yes"
+    ) {
+      fileinto :create "Junk";
+      stop;
+    }
+  '';
+
+  # Compile global Sieve script at build-time so Dovecot can read the .svbin directly
+  environment.etc."dovecot/global-spam.sieve.svbin".source = pkgs.runCommand "global-spam.sieve.svbin" {
+    nativeBuildInputs = [ pkgs.dovecot_pigeonhole ];
+  } ''
+    sievec ${pkgs.writeText "global-spam.sieve" ''
+      require ["fileinto", "mailbox"];
+      if anyof (
+        header :contains "X-Spam-Flag" "YES",
+        header :contains "X-Spam" "Yes"
+      ) {
+        fileinto :create "Junk";
+        stop;
+      }
+    ''} $out
+  '';
 
   # Notes: Ensure DKIM private key remains outside the Nix store at
   # /var/lib/secrets/mail/dkim/minnecker.com.private and is readable by rspamd.

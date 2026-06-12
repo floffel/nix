@@ -1,0 +1,152 @@
+# NixOS Service Configuration for Loki, Prometheus, and Grafana
+{ config, pkgs, ... }:
+
+{
+  # 1. Prometheus Metrics Storage
+  services.prometheus = {
+    enable = true;
+    port = 9090;
+    
+    scrapeConfigs = [
+      # Scraping node_exporter on all containers for system resource metrics
+      {
+        job_name = "node";
+        static_configs = [
+          {
+            targets = [
+              "idm:9100"
+              "backendmailng:9100"
+              "nixos-vpn:9100"
+              "postgresqlng:9100"
+              "forgejo:9100"
+              "forgejo-runner:9100"
+              "nginxng:9100"
+              "monitoringng:9100"
+              "openwebuing:9100"
+              "matrixng:9100"
+              "vaultwardenng:9100"
+              "wikijsng:9100"
+              "jitsing:9100"
+            ];
+          }
+        ];
+      }
+      # Scraping Forgejo native Prometheus metrics
+      {
+        job_name = "forgejo";
+        static_configs = [
+          {
+            targets = [ "forgejo:3000" ];
+          }
+        ];
+      }
+      # Scraping PostgreSQL Prometheus metrics
+      {
+        job_name = "postgresql";
+        static_configs = [
+          {
+            targets = [ "postgresqlng:9187" ];
+          }
+        ];
+      }
+    ];
+  };
+
+  # 2. Loki Log Aggregation
+  services.loki = {
+    enable = true;
+    configFile = pkgs.writeText "loki-local-config.yaml" ''
+      auth_enabled: false
+      server:
+        http_listen_port: 3100
+        grpc_listen_port: 9096
+      common:
+        ring:
+          instance_addr: 127.0.0.1
+          kvstore:
+            store: inmemory
+        replication_factor: 1
+        path_prefix: /var/lib/loki
+      storage_config:
+        filesystem:
+          directory: /var/lib/loki/chunks
+      schema_config:
+        configs:
+          - from: 2020-10-24
+            store: tsdb
+            object_store: filesystem
+            schema: v13
+            index:
+              prefix: index_
+              period: 24h
+      limits_config:
+        reject_old_samples: true
+        reject_old_samples_max_age: 168h
+    '';
+  };
+
+  # 3. Grafana Visualizations Server
+  services.grafana = {
+    enable = true;
+    settings = {
+      server = {
+        http_addr = "0.0.0.0";
+        http_port = 3000;
+        domain = "monitoring.minnecker.com";
+        root_url = "https://monitoring.minnecker.com/";
+      };
+      # Load Grafana admin credentials and secrets dynamically from secure files at runtime
+      security = {
+        admin_user = "admin";
+        admin_password = "$__file{/var/lib/secrets/grafana/admin-password}";
+        secret_key = "$__file{/var/lib/secrets/grafana/secret-key}";
+      };
+      "auth.generic_oauth" = {
+        enabled = true;
+        name = "Kanidm SSO";
+        allow_sign_up = true;
+        client_id = "grafana";
+        client_secret = "$__file{/var/lib/secrets/grafana/oauth-secret}";
+        scopes = "openid email profile groups";
+        auth_url = "https://idm.minnecker.com/oauth2/authorise";
+        token_url = "https://idm.minnecker.com/oauth2/token";
+        api_url = "https://idm.minnecker.com/oauth2/openid/grafana/userinfo";
+        role_attribute_path = "contains(groups, 'admin') && 'Admin' || 'Viewer'";
+      };
+    };
+
+    # Declarative provisioning of Data Sources and Dashboard
+    provision = {
+      enable = true;
+      datasources.settings.datasources = [
+        {
+          name = "Prometheus";
+          type = "prometheus";
+          access = "proxy";
+          url = "http://127.0.0.1:9090";
+          isDefault = true;
+          uid = "prometheus";
+        }
+        {
+          name = "Loki";
+          type = "loki";
+          access = "proxy";
+          url = "http://127.0.0.1:3100";
+          uid = "loki";
+        }
+      ];
+      dashboards.settings.providers = [
+        {
+          name = "default";
+          options.path = "/var/lib/grafana/dashboards";
+        }
+      ];
+    };
+  };
+
+  # Link the preconfigured dashboard JSON into Grafana's dashboard directory on boot
+  systemd.tmpfiles.rules = [
+    "d /var/lib/grafana/dashboards 0755 grafana grafana -"
+    "L+ /var/lib/grafana/dashboards/system-mail.json - - - - ${./dashboards/system-mail.json}"
+  ];
+}

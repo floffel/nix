@@ -1,19 +1,18 @@
-# NixOS Server Configuration for the Mail Server Container
+# NixOS Server Configuration for the Gitea Actions Runner Container (gitea-runner)
 { config, pkgs, ... }:
 
 {
   imports = [
     ../common-lxc.nix
     ../hosts.nix
-    ./mail-server.nix
+    ./runner.nix
   ];
-
 
   # Networking
   networking = {
-    hostName = "backendmail";
+    hostName = "gitea-runner";
 
-    # Static IP Configuration matching the mail server setup
+    # Static IP Configuration matching the server setup
     useDHCP = false;
 
     # Firewall configuration disabled per environment requirements

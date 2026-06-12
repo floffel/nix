@@ -2,7 +2,6 @@
 { config, pkgs, lib, ... }:
 
 let
-  # Custom Nginx compilation to add the third-party nginx-auth-ldap module
   nginx-auth-ldap = pkgs.stdenv.mkDerivation rec {
     pname = "nginx-auth-ldap";
     version = "db75e3a73c2420f1244498aa2ee0d20d750fa0f5";
@@ -12,6 +11,9 @@ let
       rev = version;
       # When building, if the hash changes or mismatches, Nix will display the correct sha256
       sha256 = "sha256-4YtEw0Z6v95Lzsh444850fba0a0f00dfba0a0f00dfb=";
+    };
+    meta = {
+      license = [ pkgs.lib.licenses.bsd2 ];
     };
   };
 in
@@ -54,7 +56,7 @@ in
     # 2. Upstream Definitions
     # Replicates the upstreams.conf from the Arch system
     upstreams = {
-      gitea.servers = { "gitea:80" = {}; };
+      forgejo.servers = { "forgejo:3000" = {}; };
       drone.servers = { "pod:8011" = {}; };
       jitsi.servers = { "pod:10080" = {}; };
       bitwarden.servers = { "pod:8080" = {}; };
@@ -71,11 +73,10 @@ in
       odoo.servers = { "pod:8069" = {}; };
       turn.servers = { "matrix:3478" = {}; };
       tex.servers = { "pod:8171" = {}; };
-      wikijs.servers = { "pod:3081" = {}; };
+      wikijs.servers = { "172.16.16.19:3000" = {}; };
       affine.servers = { "pod:3010" = {}; };
       vaultwarden.servers = { "172.16.16.18:8080" = {}; };
       ki.servers = { "192.168.1.196:8080" = {}; };
-      cloud.servers = { "172.16.16.19:80" = {}; };
     };
 
     # 3. Virtual Hosts Configuration
@@ -154,22 +155,11 @@ in
         '';
       };
 
-      # cloud.minnecker.com (Nextcloud Proxy)
+      # cloud.minnecker.com (Nextcloud Server)
       "cloud.minnecker.com" = {
         forceSSL = true;
         sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
         sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
-        locations."/" = {
-          proxyPass = "http://cloud";
-          proxyWebsockets = true;
-          extraConfig = ''
-            proxy_http_version 1.1;
-            proxy_set_header X-Forwarded-Proto https;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header Host $host;
-          '';
-        };
         extraConfig = ''
           charset utf-8;
           client_max_body_size 20G;
@@ -185,18 +175,71 @@ in
         '';
       };
 
-      # git.minnecker.com / git.flos.dev (Gitea Proxy)
+      # git.minnecker.com / git.flos.dev (Forgejo Proxy)
       "git.minnecker.com" = {
         forceSSL = true;
         sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
         sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
         locations."/" = {
-          proxyPass = "http://gitea";
+          proxyPass = "http://forgejo";
         };
         extraConfig = ''
           charset utf-8;
           client_max_body_size 20G;
         '';
+      };
+
+      # idm.minnecker.com (Kanidm SSO & Web UI)
+      "idm.minnecker.com" = {
+        forceSSL = true;
+        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
+        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        locations."/" = {
+          proxyPass = "https://idm:8443";
+          proxyWebsockets = true;
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header Host $host;
+            proxy_ssl_verify off;
+          '';
+        };
+      };
+
+      # monitoring.minnecker.com (Grafana Dashboard)
+      "monitoring.minnecker.com" = {
+        forceSSL = true;
+        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
+        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        locations."/" = {
+          proxyPass = "http://monitoringng:3000";
+          proxyWebsockets = true;
+          extraConfig = ''
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+          '';
+        };
+      };
+
+      # ai.minnecker.com (Open WebUI LLM Interface)
+      "ai.minnecker.com" = {
+        forceSSL = true;
+        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
+        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        locations."/" = {
+          proxyPass = "http://openwebui:8080";
+          proxyWebsockets = true;
+          extraConfig = ''
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+          '';
+        };
       };
 
       # ki.minnecker.com (LDAP Protected Proxy)
@@ -419,6 +462,29 @@ in
         '';
       };
 
+      # meet.minnecker.com (Jitsi Meet Proxy)
+      "meet.minnecker.com" = {
+        forceSSL = true;
+        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
+        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        locations."/" = {
+          proxyPass = "http://172.16.16.20";
+          extraConfig = ''
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+          '';
+        };
+        extraConfig = ''
+          charset utf-8;
+          client_max_body_size 500M;
+        '';
+      };
+
       # www.minnecker.com / minnecker.com
       "www.minnecker.com" = {
         serverAliases = [ "minnecker.com" ];
@@ -527,10 +593,12 @@ in
   services.roundcube = {
     enable = true;
     hostName = "mail.minnecker.com";
+    configureNginx = false;
     
     # We do not run a local database, it resides on postgresqlng
     database = {
-      enable = false;
+      host = "postgresqlng";
+      passwordFile = "/var/lib/secrets/nginx/roundcube-db-password-pgpass.txt";
     };
 
     # Inject variables dynamically at runtime from external secrets file (not in nix store)
@@ -564,5 +632,64 @@ in
       "newmail_notifier"
       "show_additional_headers"
     ];
+  };
+
+  # 5. Nextcloud Service Configuration
+  services.nextcloud = {
+    enable = true;
+    hostName = "cloud.minnecker.com";
+    package = pkgs.nextcloud33;
+    
+    # We do not run a local database, it resides on postgresqlng
+    database.createLocally = false;
+
+    config = {
+      dbtype = "pgsql";
+      dbhost = "postgresqlng";
+      dbname = "nextcloud";
+      dbuser = "nextcloud";
+      dbpassFile = "/var/lib/secrets/nginx/nextcloud-db-password.txt";
+      adminpassFile = "/var/lib/secrets/nginx/nextcloud-admin-password.txt";
+      adminuser = "admin";
+      overwriteProtocol = "https";
+    };
+    
+    configureRedis = true;
+
+    # Install the OIDC client application
+    extraAppsEnable = true;
+    extraApps = {
+      inherit (pkgs.nextcloud33Packages.apps) user_oidc;
+    };
+  };
+
+  # Auto-configure Nextcloud OIDC client registration on service start
+  systemd.services.nextcloud-setup-oidc = {
+    description = "Configure Nextcloud OIDC Provider";
+    after = [ "nextcloud-setup.service" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      User = "nextcloud";
+      Group = "nextcloud";
+      ExecStart = pkgs.writeShellScript "nextcloud-setup-oidc" ''
+        occ="${config.services.nextcloud.occ}/bin/nextcloud-occ"
+        
+        # Ensure user_oidc app is enabled
+        if ! $occ app:list | grep -q "user_oidc"; then
+          $occ app:enable user_oidc
+        fi
+
+        # Check if the "kanidm" provider is already registered
+        if ! $occ user_oidc:provider-list | grep -q "kanidm"; then
+          client_secret=$(cat /var/lib/secrets/nginx/nextcloud-oauth-secret)
+          $occ user_oidc:provider-add \
+            --client-id="nextcloud" \
+            --client-secret="$client_secret" \
+            --discovery-url="https://idm.minnecker.com/oauth2/openid/nextcloud/.well-known/openid-configuration" \
+            kanidm
+        fi
+      '';
+    };
   };
 }

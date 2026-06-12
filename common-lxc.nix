@@ -27,7 +27,55 @@
   ];
 
   # Let Proxmox host handle fstrim
-  services.fstrim.enable = false;
+  services.fstrim.enable = false; # Let Proxmox host handle fstrim
+
+  # Limit systemd journal log sizes to prevent disk exhaustion in LXC
+  services.journald.extraConfig = ''
+    SystemMaxUse=500M
+  '';
+
+  # 1. Enable Prometheus Node Exporter globally for system metrics scraping
+  services.prometheus.exporters.node = {
+    enable = true;
+    enabledCollectors = [ "systemd" ]; # Scrapes systemd services status in addition to default collectors
+  };
+
+  # 2. Enable Grafana Alloy globally to aggregate and forward journal logs to Loki
+  services.alloy = {
+    enable = true;
+    configPath = pkgs.writeText "config.alloy" ''
+      loki.write "local_loki" {
+        endpoint {
+          url = "http://monitoringng:3100/loki/api/v1/push"
+        }
+      }
+
+      loki.relabel "journal" {
+        forward_to = [loki.write.local_loki.receiver]
+        rule {
+          source_labels = ["__journal__systemd_unit"]
+          target_label  = "systemd_unit"
+        }
+        rule {
+          source_labels = ["__journal__hostname"]
+          target_label  = "host"
+        }
+      }
+
+      loki.source.journal "read" {
+        forward_to    = [loki.relabel.journal.receiver]
+        labels        = { job = "systemd-journal" }
+      }
+    '';
+  };
+
+  # Allow Grafana Alloy to read systemd-journal logs
+  users.users.alloy = {
+    isSystemUser = true;
+    group = "alloy";
+    extraGroups = [ "systemd-journal" ];
+  };
+  users.groups.alloy = {};
 
   # Disable OpenSSH daemon (management is done via Proxmox pct enter)
   services.openssh.enable = false;

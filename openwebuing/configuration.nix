@@ -1,19 +1,18 @@
-# NixOS Server Configuration for the Mail Server Container
+# NixOS Server Configuration for the Open WebUI Container (openwebuing)
 { config, pkgs, ... }:
 
 {
   imports = [
     ../common-lxc.nix
     ../hosts.nix
-    ./mail-server.nix
+    ./open-webui.nix
   ];
-
 
   # Networking
   networking = {
-    hostName = "backendmail";
+    hostName = "openwebuing";
 
-    # Static IP Configuration matching the mail server setup
+    # Static IP Configuration matching the openwebuing server setup
     useDHCP = false;
 
     # Firewall configuration disabled per environment requirements

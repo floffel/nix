@@ -111,6 +111,7 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/nsd var/lib/secrets/nsd none bind,r
 #### Mapping Table:
 | Container Name | Host Secret Path (`<type>`) | Container Mount Destination |
 | :--- | :--- | :--- |
+| `nixnsd` (RW), `nixnginx` (RO), `nixidm` (RO) | `/mnt/pve/nas/shared/secrets/ssl` | `var/lib/secrets/ssl` |
 | `nixmail` | `/mnt/pve/nas/shared/secrets/mail` | `var/lib/secrets/mail` |
 | `nixvpn` | `/mnt/pve/nas/shared/secrets/wireguard` | `var/lib/secrets/nixvpn` |
 | `nixidm` | `/mnt/pve/nas/shared/secrets/kanidm` | `var/lib/secrets/kanidm` |
@@ -178,8 +179,8 @@ Below are the key files and credentials required per container:
      `AllowedIPs = 10.100.0.0/24, 172.16.16.0/24, 192.168.1.0/24`
 
 #### 🛡️ nixidm (Kanidm Identity Management)
-* **SSL/TLS Certificates**: Kanidm requires valid SSL certificates to boot. Place the chain and private key under:
-  `/var/lib/secrets/kanidm/certs/idm.crt` and `/var/lib/secrets/kanidm/certs/idm.key`.
+* **SSL/TLS Certificates**: Kanidm requires valid SSL certificates to boot. Since these are acquired by `nixnsd` via DNS-01 and placed in the shared SSL storage, mount `/mnt/pve/nas/shared/secrets/ssl` to `/var/lib/secrets/ssl` in the container. Kanidm will read:
+  `/var/lib/secrets/ssl/minnecker.com/idm.crt` and `/var/lib/secrets/ssl/minnecker.com/idm.key`.
 
 #### 🦊 nixforgejo (Forgejo Git Service)
 1. **Database Password**: Write the Postgres database password to `/var/lib/secrets/forgejo/db-password` (owned by `forgejo:forgejo`, `chmod 600`).

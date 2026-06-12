@@ -101,8 +101,8 @@ in
       # app.substitution.art
       "app.substitution.art" = {
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/substitution.art_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/substitution.art_ecc/substitution.art.key";
+        sslCertificate = "/var/lib/secrets/ssl/substitution.art/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/substitution.art/key.pem";
         root = "/usr/share/webapps/substitution.art/htdocs/app/web/";
         locations."/" = {
           tryFiles = "$uri $uri/ /index.html";
@@ -117,8 +117,8 @@ in
       "substitution.art" = {
         serverAliases = [ "www.substitution.art" ];
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/substitution.art_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/substitution.art_ecc/substitution.art.key";
+        sslCertificate = "/var/lib/secrets/ssl/substitution.art/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/substitution.art/key.pem";
         root = "/usr/share/webapps/substitution.art/htdocs/www/";
         extraConfig = ''
           charset utf-8;
@@ -129,8 +129,8 @@ in
       # bau.minnecker.com
       "bau.minnecker.com" = {
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         root = "/usr/share/webapps/bau.minnecker.com/Hausbau-MinneckerWebsite";
         globalRedirect = null;
         extraConfig = ''
@@ -158,8 +158,8 @@ in
       # cloud.minnecker.com (Nextcloud Server)
       "cloud.minnecker.com" = {
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         extraConfig = ''
           charset utf-8;
           client_max_body_size 20G;
@@ -178,8 +178,8 @@ in
       # git.minnecker.com / git.flos.dev (Forgejo Proxy)
       "git.minnecker.com" = {
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         locations."/" = {
           proxyPass = "http://forgejo";
         };
@@ -192,8 +192,8 @@ in
       # idm.minnecker.com (Kanidm SSO & Web UI)
       "idm.minnecker.com" = {
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         locations."/" = {
           proxyPass = "https://idm:8443";
           proxyWebsockets = true;
@@ -211,8 +211,8 @@ in
       # monitoring.minnecker.com (Grafana Dashboard)
       "monitoring.minnecker.com" = {
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         locations."/" = {
           proxyPass = "http://nixmonitoring:3000";
           proxyWebsockets = true;
@@ -228,8 +228,8 @@ in
       # ai.minnecker.com (Open WebUI LLM Interface)
       "ai.minnecker.com" = {
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         locations."/" = {
           proxyPass = "http://openwebui:8080";
           proxyWebsockets = true;
@@ -245,8 +245,8 @@ in
       # ki.minnecker.com (LDAP Protected Proxy)
       "ki.minnecker.com" = {
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         locations."/" = {
           proxyPass = "http://ki";
           proxyWebsockets = true;
@@ -316,8 +316,8 @@ in
       # mail.minnecker.com (Roundcube)
       "mail.minnecker.com" = {
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         # Points to Roundcube files within Nix store
         root = "${config.services.roundcube.package}/public_html";
         locations."/" = {
@@ -347,8 +347,8 @@ in
       # matrix.minnecker.com (Element Web client & Matrix Synapse Reverse Proxy)
       "matrix.minnecker.com" = {
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         root = "/usr/share/webapps/element/";
         extraConfig = ''
           charset utf-8;
@@ -380,8 +380,8 @@ in
       # tex.minnecker.com
       "tex.minnecker.com" = {
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         locations."/" = {
           proxyPass = "http://tex";
           extraConfig = ''
@@ -407,8 +407,8 @@ in
       # vault.minnecker.com (Vaultwarden Proxy)
       "vault.minnecker.com" = {
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         locations."/" = {
           proxyPass = "http://vaultwarden";
           extraConfig = ''
@@ -438,8 +438,8 @@ in
       # wiki.minnecker.com (Wiki.js Proxy)
       "wiki.minnecker.com" = {
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         locations."/" = {
           proxyPass = "http://wikijs";
           extraConfig = ''
@@ -465,8 +465,8 @@ in
       # meet.minnecker.com (Jitsi Meet Proxy)
       "meet.minnecker.com" = {
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         locations."/" = {
           proxyPass = "http://172.16.16.20";
           extraConfig = ''
@@ -489,8 +489,8 @@ in
       "www.minnecker.com" = {
         serverAliases = [ "minnecker.com" ];
         forceSSL = true;
-        sslCertificate = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer";
-        sslCertificateKey = "/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key";
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         root = "/usr/share/webapps/www.minnecker.com";
         locations."/api/whatsapp/webhook" = {
           proxyPass = "http://192.168.1.196:8002";
@@ -532,8 +532,8 @@ in
       mail {
         server_name riese.minnecker.com;
 
-        ssl_certificate /var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer;
-        ssl_certificate_key /var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key;
+        ssl_certificate /var/lib/secrets/ssl/minnecker.com/fullchain.pem;
+        ssl_certificate_key /var/lib/secrets/ssl/minnecker.com/key.pem;
 
         ssl_protocols TLSv1.2;
         ssl_prefer_server_ciphers on;

@@ -6,6 +6,7 @@
     ../common-lxc.nix
     ../hosts.nix
     ./nsd.nix
+    ./acme.nix
   ];
 
   # Networking

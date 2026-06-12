@@ -12,15 +12,15 @@ This directory contains the NixOS configuration files to migrate the Nginx rever
 
 ## Secrets Mounting Setup
 
-To ensure no secret keys or passwords end up in the world-readable Nix store (`/nix/store`), all secrets are loaded dynamically at runtime from `/var/lib/secrets/nginx/`. 
+To ensure no secret keys or passwords end up in the world-readable Nix store (`/nix/store`), all secrets are loaded dynamically at runtime. 
 
-Before starting the NixOS configuration, make sure the following files are mounted or placed in `/var/lib/secrets/nginx/` inside the container:
+*   **SSL Certificates and Keys**: Mounted at `/var/lib/secrets/ssl/` (shared with other containers like `nixnsd` and `nixidm`).
+    *   `/var/lib/secrets/ssl/minnecker.com/fullchain.pem`
+    *   `/var/lib/secrets/ssl/minnecker.com/key.pem`
+    *   `/var/lib/secrets/ssl/substitution.art/fullchain.pem`
+    *   `/var/lib/secrets/ssl/substitution.art/key.pem`
 
-### 1. SSL Certificates and Keys
-*   `/var/lib/secrets/nginx/certs/minnecker.com_ecc/fullchain.cer`
-*   `/var/lib/secrets/nginx/certs/minnecker.com_ecc/minnecker.com.key`
-*   `/var/lib/secrets/nginx/certs/substitution.art_ecc/fullchain.cer`
-*   `/var/lib/secrets/nginx/certs/substitution.art_ecc/substitution.art.key`
+*   **Nginx-Specific Secrets**: Placed or mounted in `/var/lib/secrets/nginx/` inside the container:
 
 ### 2. LDAP Configuration
 *   `/var/lib/secrets/nginx/ldap.conf`: The LDAP server configuration blocks, including the bindDN and bind password:
@@ -53,11 +53,14 @@ You can mount these directories from the Proxmox host by adding mount points (`m
 
 For example:
 ```ini
-# Mount point for the secrets directory (keep read-only for security if possible)
-mp0: /tank/secrets/nixnginx,mp=/var/lib/secrets/nginx,ro=1
+# Mount point for the shared SSL certificates (keep read-only for security)
+mp0: /mnt/pve/nas/shared/secrets/ssl,mp=/var/lib/secrets/ssl,ro=1
+
+# Mount point for Nginx-specific secrets (keep read-only for security)
+mp1: /tank/secrets/nixnginx,mp=/var/lib/secrets/nginx,ro=1
 
 # Mount point for the static web applications
-mp1: /tank/webapps,mp=/usr/share/webapps,ro=1
+mp2: /tank/webapps,mp=/usr/share/webapps,ro=1
 ```
 
 ---

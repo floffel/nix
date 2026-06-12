@@ -36,6 +36,12 @@ in
     # Listen on all interfaces for public DNS queries and zone transfers
     interfaces = [ "0.0.0.0" "::" ];
 
+    # Enable Response Rate Limiting (RRL) to prevent DNS amplification attacks
+    ratelimit = {
+      enable = true;
+      ratelimit = 200;  # Max responses per second from a single IP/subnet
+    };
+
     # TSIG keys for secondary DNS zone transfer authentication
     # Key values are loaded at runtime from secure mounted files to prevent leaks
     keys = {

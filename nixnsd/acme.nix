@@ -30,12 +30,14 @@ let
       # Reload NSD to serve the challenge
       /run/current-system/sw/bin/systemctl reload nsd
       # Wait for Hetzner secondary DNS nameservers to sync via AXFR
-      sleep 60
+      sleep 120
     elif [ "$ACTION" = "cleanup" ]; then
       # Remove the TXT record line
       sed -i "/_acme-challenge IN TXT/d" "$ZONE_FILE"
       # Reload NSD
       /run/current-system/sw/bin/systemctl reload nsd
+      # Wait a bit before returning to ensure Let's Encrypt secondary validation is fully complete
+      sleep 30
     fi
   '';
 

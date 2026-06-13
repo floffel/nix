@@ -15,7 +15,15 @@ mkdir -p "$DEST_DIR/postfix" "$DEST_DIR/dovecot"
 # 1. Write Dovecot LDAP password file
 echo "$TOKEN" > "$DEST_DIR/dovecot/ldap-password.txt"
 chmod 600 "$DEST_DIR/dovecot/ldap-password.txt"
-chown -R 97:97 "$DEST_DIR/dovecot" # 97 is standard dovecot uid/gid on NixOS (verify with id dovecot)
+
+# Resolve dovecot user/group dynamically
+DOVECOT_USER="dovecot"
+DOVECOT_GROUP="dovecot"
+if id dovecot >/dev/null 2>&1; then
+  DOVECOT_USER=$(id -u dovecot)
+  DOVECOT_GROUP=$(id -g dovecot)
+fi
+chown -R "$DOVECOT_USER:$DOVECOT_GROUP" "$DEST_DIR/dovecot"
 
 # 2. Write Postfix LDAP query configuration files
 
@@ -88,6 +96,14 @@ EOF
 
 # Set secure permissions for Postfix config files
 chmod 600 "$DEST_DIR/postfix"/*.cf
-chown -R 98:98 "$DEST_DIR/postfix" # 98 is standard postfix uid/gid on NixOS (verify with id postfix)
+
+# Resolve postfix user/group dynamically
+POSTFIX_USER="postfix"
+POSTFIX_GROUP="postfix"
+if id postfix >/dev/null 2>&1; then
+  POSTFIX_USER=$(id -u postfix)
+  POSTFIX_GROUP=$(id -g postfix)
+fi
+chown -R "$POSTFIX_USER:$POSTFIX_GROUP" "$DEST_DIR/postfix"
 
 echo "Success: Secure LDAP configuration files written to $DEST_DIR"

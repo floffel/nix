@@ -69,8 +69,8 @@ kanidm -D idm_admin group add-members mail_users john jane
 
 To generate the secure LDAP query files and authenticate Dovecot/Postfix:
 
-1. **Generate service account API token:**
-   In your Kanidm shell, generate a token for the mail service account:
+1. **Generate service account API token (Mail Search Token):**
+   In your Kanidm shell, generate a token for the mail service account. This API token acts as the **Mail Search Token / LDAP Bind Token** used by Postfix, Dovecot, and Nginx to perform lookups:
    ```bash
    kanidm -D idm_admin service-account api-token generate mailservice mail_token
    ```

@@ -23,12 +23,12 @@ To ensure no secret keys or passwords end up in the world-readable Nix store (`/
 *   **Nginx-Specific Secrets**: Placed or mounted in `/var/lib/secrets/nginx/` inside the container:
 
 ### 2. LDAP Configuration
-*   `/var/lib/secrets/nginx/ldap.conf`: The LDAP server configuration blocks, including the bindDN and bind password:
+*   `/var/lib/secrets/nginx/ldap.conf`: The LDAP server configuration blocks, including the bindDN and bind password (using the **Mail Service API Token / Mail Search Token** generated in Kanidm):
     ```nginx
     ldap_server mail_users {
       url "ldaps://ldap:636/ou=people,dc=example,dc=com?uid?sub?(memberof=cn=mail_users,ou=groups,dc=example,dc=com)";
       binddn "dn=token";
-      binddn_passwd "your_kanidm_mailservice_api_token";
+      binddn_passwd "your_mail_search_token_here";
       require valid_user;
     }
     ```

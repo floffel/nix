@@ -37,7 +37,7 @@
         smtpd_helo_required = "yes";
         biff = "no";
 
-        virtual_alias_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-aliases.cf";
+        virtual_alias_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-aliases.cf, hash:/var/lib/secrets/mail/postfix/virtual";
         virtual_mailbox_domains = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-domains.cf";
         virtual_mailbox_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-recipients.cf";
         smtpd_sender_login_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-senders.cf";
@@ -111,24 +111,24 @@
       protocols = [ "imap" "pop3" "lmtp" "sieve" ];
       recipient_delimiter = "+.";
       ldap_uris = "ldaps://ldap";
-      ldap_auth_dn = "cn=Manager,dc=minnecker,dc=com";
+      ldap_auth_dn = "dn=token";
       ldap_auth_dn_password = "</var/lib/secrets/mail/dovecot/ldap-password.txt";
-      ldap_base = "ou=Users,dc=minnecker,dc=com";
+      ldap_base = "ou=people,dc=minnecker,dc=com";
+      ldap_ssl = "yes";
+      ldap_tls_require_cert = "never";
+      ldap_auth_bind = "yes";
+      ldap_pass_filter = "(&(|(mail=%u)(uid=%u))(employeeType=email))";
+      ldap_user_filter = "(&(|(mail=%u)(uid=%u))(employeeType=email))";
       ssl = "yes";
-      tls_require_cert = "never";
 
       "passdb ldap" = {
         driver = "ldap";
-        filter = "(|(mail=%{user})(uid=%{user}))";
-        fields = {
-          user = "%{ldap:mail}";
-          password = "%{ldap:userPassword}";
-        };
+        args = "/etc/dovecot/dovecot-ldap.conf.ext";
       };
 
       "userdb ldap" = {
         driver = "ldap";
-        filter = "(&(|(mail=%{user})(uid=%{user}))(employeeType=email))";
+        args = "/etc/dovecot/dovecot-ldap.conf.ext";
       };
 
       "namespace inbox" = {

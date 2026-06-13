@@ -20,4 +20,7 @@
       enable = false;
     };
   };
+  environment.systemPackages = with pkgs; [
+    kanidm_1_10
+  ];
 }

@@ -12,7 +12,7 @@
   proxmoxLXC = {
     # Set to false to manage networking manually within each configuration.nix
     # If you want Proxmox host to manage network settings via systemd-networkd, set to true.
-    manageNetwork = false;
+    manageNetwork = true;
     privileged = false;
   };
 

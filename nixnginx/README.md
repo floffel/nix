@@ -45,6 +45,31 @@ To ensure no secret keys or passwords end up in the world-readable Nix store (`/
 *   `/var/lib/secrets/nginx/nextcloud-admin-password.txt`: Contains the admin user password for Nextcloud.
 *   `/var/lib/secrets/nginx/nextcloud-oauth-secret`: Contains the client secret generated in Kanidm for Nextcloud OIDC (SSO) authentication.
 
+### 6. Nextcloud OIDC Client Registration in Kanidm
+Before Nextcloud can authenticate users, the OIDC client must be registered and configured in your Kanidm directory server. Run the following commands inside your `nixidm` container CLI using the `idm_admin` account (using `example.com` as a generic template):
+
+1. **Create the authorization group:**
+   ```bash
+   kanidm -D idm_admin group create nextcloud_users idm_admins
+   kanidm -D idm_admin group set-description nextcloud_users "Nextcloud Users"
+   ```
+
+2. **Create the OAuth2/OIDC client:**
+   ```bash
+   kanidm -D idm_admin system oauth2 create nextcloud "Nextcloud Cloud" https://cloud.example.com/index.php/apps/user_oidc/code
+   ```
+
+3. **Map client scopes to the authorization group:**
+   ```bash
+   kanidm -D idm_admin system oauth2 update-scope-map nextcloud nextcloud_users openid profile email
+   ```
+
+4. **Retrieve the client secret:**
+   Save the output of this command to the `/var/lib/secrets/nginx/nextcloud-oauth-secret` file in your `nixnginx` container:
+   ```bash
+   kanidm -D idm_admin system oauth2 show-basic-secret nextcloud
+   ```
+
 ---
 
 ## Proxmox LXC Bind Mount Configuration

@@ -15,10 +15,12 @@
 
     # Hosts entries (static resolution fallback)
     extraHosts = ''
-      fd0c:dead:beef::16:16 nixidm.hosts.local.minnecker.com nixidm ldap
+      172.16.16.94 nixidm.hosts.local.minnecker.com nixidm ldap
+      fd0c:dead:beef::16:94 nixidm.hosts.local.minnecker.com nixidm ldap
       172.16.16.31 nixmail.hosts.local.minnecker.com nixmail
       172.16.16.32 nixvpn.hosts.local.minnecker.com nixvpn
-      172.16.16.33 nixpostgres.hosts.local.minnecker.com nixpostgres
+      172.16.16.93 nixpostgres.hosts.local.minnecker.com nixpostgres
+      fd0c:dead:beef::16:93 nixpostgres.hosts.local.minnecker.com nixpostgres
       172.16.16.35 nixforgejo.hosts.local.minnecker.com nixforgejo
       172.16.16.36 nixforgejo-runner.hosts.local.minnecker.com nixforgejo-runner
       172.16.16.37 nixmonitoring.hosts.local.minnecker.com nixmonitoring monitoring

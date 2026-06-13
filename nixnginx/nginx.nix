@@ -671,8 +671,8 @@ in
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "oneshot";
-      User = "nextcloud";
-      Group = "nextcloud";
+      User = "root";
+      Group = "root";
       ExecStart = pkgs.writeShellScript "nextcloud-setup-oidc" ''
         occ="${config.services.nextcloud.occ}/bin/nextcloud-occ"
         

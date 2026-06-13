@@ -6,7 +6,7 @@ let
   dnsHookReal = pkgs.writeScript "dns-hook-real.sh" ''
     #!/bin/sh
     export PATH=/run/current-system/sw/bin:/run/wrappers/bin:$PATH
-    exec 2>/var/log/acme-dns-hook.log
+    exec 2>/var/lib/acme/acme-dns-hook.log
     set -x
     ACTION=$1
     FQDN=$2
@@ -107,4 +107,13 @@ in
       };
     };
   };
+
+  # 2. Add ReadWritePaths overrides for all ACME services to allow copying certs and modifying NSD zones
+  systemd.services = let
+    domains = [ "minnecker.com" "floffel.de" "sbminnecker.de" "substitution.art" ];
+    servicesForDomain = domain: [
+      { name = "acme-${domain}"; value.serviceConfig.ReadWritePaths = [ "/var/lib/secrets/ssl" "/var/lib/nsd/zones" ]; }
+      { name = "acme-order-renew-${domain}"; value.serviceConfig.ReadWritePaths = [ "/var/lib/secrets/ssl" "/var/lib/nsd/zones" ]; }
+    ];
+  in builtins.listToAttrs (builtins.concatMap servicesForDomain domains);
 }

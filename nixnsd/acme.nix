@@ -6,13 +6,16 @@ let
   dnsHookReal = pkgs.writeScript "dns-hook-real.sh" ''
     #!/bin/sh
     export PATH=/run/current-system/sw/bin:/run/wrappers/bin:$PATH
-    exec 2>/tmp/dns-hook.log
+    exec 2>/var/log/acme-dns-hook.log
     set -x
     ACTION=$1
     FQDN=$2
     VALUE=$3
     DOMAIN=$(echo "$FQDN" | sed -e 's/\.$//' -e 's/^_acme-challenge\.//')
     ZONE_FILE="/var/lib/nsd/zones/''${DOMAIN}"
+
+    # Ensure zone files and directory are writable by root
+    chmod -R u+w /var/lib/nsd/zones
 
     # Extract current serial and increment it to notify secondary nameservers
     CURRENT_SERIAL=$(grep -o -E '[0-9]+[[:space:]]*;[[:space:]]*serial' "$ZONE_FILE" | grep -o -E '[0-9]+')

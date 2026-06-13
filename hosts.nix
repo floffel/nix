@@ -18,7 +18,8 @@
       fd0c:dead:beef::16:95 nixnginx.hosts.local.minnecker.com nixnginx proxy
       172.16.16.94 nixidm.hosts.local.minnecker.com nixidm ldap
       fd0c:dead:beef::16:94 nixidm.hosts.local.minnecker.com nixidm ldap
-      172.16.16.31 nixmail.hosts.local.minnecker.com nixmail
+      172.16.16.96 nixmail.hosts.local.minnecker.com nixmail
+      fd0c:dead:beef::16:96 nixmail.hosts.local.minnecker.com nixmail
       172.16.16.32 nixvpn.hosts.local.minnecker.com nixvpn
       172.16.16.93 nixpostgres.hosts.local.minnecker.com nixpostgres
       fd0c:dead:beef::16:93 nixpostgres.hosts.local.minnecker.com nixpostgres

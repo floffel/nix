@@ -7,18 +7,18 @@ var options =  {
   },
   server: {
     imap: [{
-      host: '172.16.16.31',
+      host: '172.16.16.96',
       //port: '587',
       port: '143',
       auth: ['plain', 'login'],
     }],
     pop3: [{
-      host: '172.16.16.31',
+      host: '172.16.16.96',
       port: '110',
       auth: ['plain'],
     }],
     smtp: [{
-      host: '172.16.16.31',
+      host: '172.16.16.96',
       port: '25',
       auth: ['none'],
     }

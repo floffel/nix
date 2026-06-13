@@ -108,12 +108,24 @@ in
     };
   };
 
-  # 2. Add ReadWritePaths overrides for all ACME services to allow copying certs and modifying NSD zones
+  # 2. Add ReadWritePaths and CapabilityBoundingSet overrides for all ACME services
   systemd.services = let
     domains = [ "minnecker.com" "floffel.de" "sbminnecker.de" "substitution.art" ];
     servicesForDomain = domain: [
-      { name = "acme-${domain}"; value.serviceConfig.ReadWritePaths = [ "/var/lib/secrets/ssl" "/var/lib/nsd/zones" ]; }
-      { name = "acme-order-renew-${domain}"; value.serviceConfig.ReadWritePaths = [ "/var/lib/secrets/ssl" "/var/lib/nsd/zones" ]; }
+      {
+        name = "acme-${domain}";
+        value.serviceConfig = {
+          ReadWritePaths = [ "/var/lib/secrets/ssl" "/var/lib/nsd/zones" ];
+          CapabilityBoundingSet = [ "CAP_DAC_OVERRIDE" "CAP_KILL" ];
+        };
+      }
+      {
+        name = "acme-order-renew-${domain}";
+        value.serviceConfig = {
+          ReadWritePaths = [ "/var/lib/secrets/ssl" "/var/lib/nsd/zones" ];
+          CapabilityBoundingSet = [ "CAP_DAC_OVERRIDE" "CAP_KILL" ];
+        };
+      }
     ];
   in builtins.listToAttrs (builtins.concatMap servicesForDomain domains);
 }

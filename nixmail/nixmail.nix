@@ -207,6 +207,7 @@
     cat <<EOF > dovecot.conf
     dovecot_config_version = 2.4.4
     dovecot_storage_version = 2.4.4
+    mail_plugin_dir = ${pkgs.dovecot_pigeonhole}/lib/dovecot/modules
     EOF
 
     sievec -c dovecot.conf ${pkgs.writeText "global-spam.sieve" ''

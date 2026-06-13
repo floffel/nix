@@ -23,4 +23,9 @@
   environment.systemPackages = with pkgs; [
     kanidm_1_10
   ];
+
+  environment.etc."kanidm/config".text = ''
+    uri = "https://localhost:8443"
+    verify_ca = false
+  '';
 }

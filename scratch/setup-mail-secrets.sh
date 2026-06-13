@@ -59,27 +59,21 @@ version = 3
 tls_require_cert = no
 EOF
 
+# ldap-domains.cf: Dynamically validates virtual mailbox domains
+cat <<EOF > "$DEST_DIR/postfix/ldap-domains.cf"
+server_host = ldaps://ldap:636
+search_base = ou=people,dc=minnecker,dc=com
+query_filter = (mail=*@%s)
+result_attribute = mail
+bind = yes
+bind_dn = dn=token
+bind_pw = $TOKEN
+version = 3
+tls_require_cert = no
+EOF
+
 # Set secure permissions for Postfix config files
 chmod 600 "$DEST_DIR/postfix"/*.cf
 chown -R 98:98 "$DEST_DIR/postfix" # 98 is standard postfix uid/gid on NixOS (verify with id postfix)
 
-# 3. Write Postfix local virtual alias map (for catch-alls)
-cat <<EOF > "$DEST_DIR/postfix/virtual"
-# Postfix local virtual alias map (Domain Catch-alls)
-@minnecker.com      florian@minnecker.com
-@floffel.de         florian@minnecker.com
-@sbminnecker.de     florian@minnecker.com
-@substitution.art   florian@minnecker.com
-EOF
-
-chown 98:98 "$DEST_DIR/postfix/virtual"
-chmod 600 "$DEST_DIR/postfix/virtual"
-
-# Compile virtual database if postmap command is available
-if command -v postmap >/dev/null; then
-  postmap "$DEST_DIR/postfix/virtual"
-  chown 98:98 "$DEST_DIR/postfix/virtual.db"
-  chmod 600 "$DEST_DIR/postfix/virtual.db"
-fi
-
-echo "Success: Secure LDAP and virtual configuration files written to $DEST_DIR"
+echo "Success: Secure LDAP configuration files written to $DEST_DIR"

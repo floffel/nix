@@ -37,8 +37,8 @@
         smtpd_helo_required = "yes";
         biff = "no";
 
-        virtual_alias_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-aliases.cf, hash:/var/lib/secrets/mail/postfix/virtual";
-        virtual_mailbox_domains = "minnecker.com floffel.de sbminnecker.de substitution.art";
+        virtual_alias_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-aliases.cf";
+        virtual_mailbox_domains = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-domains.cf";
         virtual_mailbox_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-recipients.cf";
         smtpd_sender_login_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-senders.cf";
         local_recipient_maps = "$virtual_mailbox_maps";
@@ -117,8 +117,8 @@
       ldap_ssl = "yes";
       ldap_tls_require_cert = "never";
       ldap_auth_bind = "yes";
-      ldap_pass_filter = "(&(|(mail=%u)(uid=%u))(employeeType=email))";
-      ldap_user_filter = "(&(|(mail=%u)(uid=%u))(employeeType=email))";
+      ldap_pass_filter = "(&(|(mail=%u)(uid=%u))(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))";
+      ldap_user_filter = "(&(|(mail=%u)(uid=%u))(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))";
       ssl = "yes";
 
       "passdb ldap" = {

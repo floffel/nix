@@ -21,8 +21,8 @@ echo " Generating Random Passwords & Updating Roles  "
 echo "==============================================="
 
 for role in "${ROLES[@]}"; do
-  # Generate a secure 48-character hex password
-  password=$(openssl rand -hex 24)
+  # Generate a secure 24-character alphanumeric password
+  password=$(tr -dc 'a-zA-Z0-9' </dev/urandom | head -c 24)
   PASSWORDS[$role]=$password
 
   # Apply password to PostgreSQL

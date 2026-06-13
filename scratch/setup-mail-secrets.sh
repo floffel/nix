@@ -57,6 +57,18 @@ bind_dn = dn=token
 bind_pw = $TOKEN
 version = 3
 tls_require_cert = no
+# ldap-catchalls.cf: Resolves catch-all domain aliases
+cat <<EOF > "$DEST_DIR/postfix/ldap-catchalls.cf"
+server_host = ldaps://ldap:636
+search_base = ou=people,dc=minnecker,dc=com
+query_filter = (&(mail=*@%d)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))
+result_attribute = uid
+result_format = %s@minnecker.com
+bind = yes
+bind_dn = dn=token
+bind_pw = $TOKEN
+version = 3
+tls_require_cert = no
 EOF
 
 # ldap-domains.cf: Dynamically validates virtual mailbox domains

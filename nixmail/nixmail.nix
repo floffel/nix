@@ -21,6 +21,7 @@
         compatibility_level = "3.10";
         recipient_delimiter = "+.";
         smtpd_banner = "$myhostname ESMTP";
+        smtpd_authorized_xclient_hosts = "172.16.16.95";
 
         local_destination_concurrency_limit = "10";
         default_destination_concurrency_limit = "20";

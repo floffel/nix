@@ -573,10 +573,11 @@ in
         }
 
         server {
-          listen [::]:587 ssl ipv6only=off;
+          listen [::]:587 ipv6only=off;
           protocol smtp;
           smtp_auth plain login;
-          smtp_capabilities "250-STARTTLS" "AUTH" "PIPELINING" "VRFY" "ETRN" "ENHANCEDSTATUSCODES" "8BITMIME" "DSN" "SMTPUTF8" "CHUNKING" "SIZE 53687063712";
+          smtp_capabilities "AUTH" "PIPELINING" "VRFY" "ETRN" "ENHANCEDSTATUSCODES" "8BITMIME" "DSN" "SMTPUTF8" "CHUNKING" "SIZE 53687063712";
+          starttls only;
           xclient on;
         }
 

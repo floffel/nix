@@ -57,7 +57,7 @@ in
     # 2. Upstream Definitions
     # Replicates the upstreams.conf from the Arch system
     upstreams = {
-      forgejo.servers = { "forgejo:3000" = {}; };
+      forgejo.servers = { "nixforgejo:3000" = {}; };
       drone.servers = { "pod:8011" = {}; };
       jitsi.servers = { "pod:10080" = {}; };
       bitwarden.servers = { "pod:8080" = {}; };

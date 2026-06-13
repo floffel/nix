@@ -23,7 +23,8 @@
       172.16.16.32 nixvpn.hosts.local.minnecker.com nixvpn
       172.16.16.93 nixpostgres.hosts.local.minnecker.com nixpostgres
       fd0c:dead:beef::16:93 nixpostgres.hosts.local.minnecker.com nixpostgres
-      172.16.16.35 nixforgejo.hosts.local.minnecker.com nixforgejo
+      172.16.16.97 nixforgejo.hosts.local.minnecker.com nixforgejo
+      fd0c:dead:beef::16:97 nixforgejo.hosts.local.minnecker.com nixforgejo
       172.16.16.36 nixforgejo-runner.hosts.local.minnecker.com nixforgejo-runner
       172.16.16.37 nixmonitoring.hosts.local.minnecker.com nixmonitoring monitoring
       172.16.16.38 nixopenwebui.hosts.local.minnecker.com nixopenwebui openwebui

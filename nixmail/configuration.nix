@@ -8,7 +8,7 @@
     ./nixmail.nix
   ];
 
-
+  programs.nix-ld.enable = true;
   # Networking
   networking = {
     hostName = "nixmail";

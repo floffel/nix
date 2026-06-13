@@ -12,7 +12,7 @@
     instances.default = {
       enable = true;
       name = "forgejo-runner";
-      url = "http://forgejo:3000";
+      url = "http://nixforgejo:3000";
       
       # Path to the registration token file (containing the TOKEN environment variable)
       # Stored securely outside the Nix store

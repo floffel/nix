@@ -26,9 +26,9 @@ To ensure no secret keys or passwords end up in the world-readable Nix store (`/
 *   `/var/lib/secrets/nginx/ldap.conf`: The LDAP server configuration blocks, including the bindDN and bind password:
     ```nginx
     ldap_server mail_users {
-      url "ldaps://ldap:636/ou=users,dc=minnecker,dc=com?mail?sub?(employeeType=email)";
-      binddn "cn=manager,dc=minnecker,dc=com";
-      binddn_passwd "your_ldap_bind_password";
+      url "ldaps://ldap:636/ou=people,dc=example,dc=com?uid?sub?(memberof=cn=mail_users,ou=groups,dc=example,dc=com)";
+      binddn "dn=token";
+      binddn_passwd "your_kanidm_mailservice_api_token";
       require valid_user;
     }
     ```

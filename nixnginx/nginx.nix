@@ -4,13 +4,12 @@
 let
   nginx-auth-ldap = pkgs.stdenv.mkDerivation rec {
     pname = "nginx-auth-ldap";
-    version = "db75e3a73c2420f1244498aa2ee0d20d750fa0f5";
+    version = "241200eac8e4acae74d353291bd27f79e5ca3dc4";
     src = pkgs.fetchFromGitHub {
       owner = "kvspb";
       repo = "nginx-auth-ldap";
       rev = version;
-      # When building, if the hash changes or mismatches, Nix will display the correct sha256
-      sha256 = "sha256-4YtEw0Z6v95Lzsh444850fba0a0f00dfba0a0f00dfb=";
+      sha256 = "sha256-NE539zZ/OqSEZidgdPlv8rDJ6yvPyi+k4Hm5NNLpAPs=";
     };
     meta = {
       license = [ pkgs.lib.licenses.bsd2 ];

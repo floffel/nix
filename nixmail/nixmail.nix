@@ -169,6 +169,7 @@
       "sieve_script spam-global" = {
         type = "before";
         path = "/etc/dovecot/global-spam.sieve";
+        sieve_script_bin_path = "/var/lib/dovecot/global-spam.svbin";
       };
       "sieve_script personal" = { active_path = "~/.dovecot.sieve"; driver = "file"; path = "~/sieve"; };
     };
@@ -197,29 +198,6 @@
       fileinto :create "Junk";
       stop;
     }
-  '';
-
-  # Compile global Sieve script at build-time so Dovecot can read the .svbin directly
-  environment.etc."dovecot/global-spam.sieve.svbin".source = pkgs.runCommand "global-spam.sieve.svbin" {
-    nativeBuildInputs = [ pkgs.dovecot_pigeonhole ];
-  } ''
-    # Create a minimal Dovecot config to satisfy doveconf/sievec requirements in the sandbox
-    cat <<EOF > dovecot.conf
-    dovecot_config_version = 2.4.4
-    dovecot_storage_version = 2.4.4
-    mail_plugin_dir = ${pkgs.dovecot_pigeonhole}/lib/dovecot/modules
-    EOF
-
-    sievec -c dovecot.conf ${pkgs.writeText "global-spam.sieve" ''
-      require ["fileinto", "mailbox"];
-      if anyof (
-        header :contains "X-Spam-Flag" "YES",
-        header :contains "X-Spam" "Yes"
-      ) {
-        fileinto :create "Junk";
-        stop;
-      }
-    ''} $out
   '';
 
   # Notes: Ensure DKIM private key remains outside the Nix store at

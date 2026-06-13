@@ -38,6 +38,10 @@ To ensure no secret keys or passwords end up in the world-readable Nix store (`/
 
 ### 4. Roundcube Secrets
 *   `/var/lib/secrets/nginx/roundcube-db-password.txt`: Contains the plain database password for the PostgreSQL database (`your_roundcube_db_password`).
+*   `/var/lib/secrets/nginx/roundcube-db-password-pgpass.txt`: Contains the database password formatted as a PostgreSQL `.pgpass` file. This is required by the NixOS Roundcube activation script.
+    ```
+    *:*:*:roundcube:your_roundcube_db_password
+    ```
 *   `/var/lib/secrets/nginx/roundcube-des-key.txt`: Contains the 24-character session encryption key (`your_roundcube_des_key`).
 
 ### 5. Nextcloud & OIDC Secrets
@@ -105,3 +109,28 @@ The Nginx virtual hosts point to static assets in the following paths which must
 Nginx is compiled with standard NJS and Brotli modules, as well as the third-party `kvspb/nginx-auth-ldap` module.
 
 A placeholder `sha256` hash is configured for `nginx-auth-ldap` in `nginx.nix`. When you run your first `nixos-rebuild switch`, the build will halt with a hash mismatch error showing the actual SHA-256 hash. Copy the actual hash and paste it in `nginx.nix` to complete the rebuild.
+
+---
+
+## Troubleshooting Setup Failures
+
+### 1. Nextcloud "Command 'upgrade' is not defined"
+If the initial Nextcloud setup fails due to database errors, it leaves behind a partial `config.php` file. This tells the NixOS activator that Nextcloud is already installed and to run `upgrade`, which then fails.
+
+To force Nextcloud to perform a clean reinstallation:
+1. Delete the partial `config.php` file inside the `nixnginx` container:
+   ```bash
+   rm -f /var/lib/nextcloud/config/config.php
+   ```
+2. Reset the Nextcloud database on `nixpostgres` to clear half-written tables (see below).
+3. Run `nixos-rebuild switch` again.
+
+### 2. Resetting/Recreating databases (Clean Slate)
+To start with a clean database for both Roundcube and Nextcloud, run the following commands on the `nixpostgres` container as root:
+```bash
+sudo -u postgres psql -c "DROP DATABASE IF EXISTS nextcloud;"
+sudo -u postgres psql -c "CREATE DATABASE nextcloud OWNER nextcloud;"
+
+sudo -u postgres psql -c "DROP DATABASE IF EXISTS roundcube;"
+sudo -u postgres psql -c "CREATE DATABASE roundcube OWNER roundcube;"
+```

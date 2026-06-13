@@ -22,7 +22,7 @@ in
     enable = true;
     
     # Compile Nginx with mail proxy capabilities and custom modules
-    package = pkgs.nginx.override {
+    package = (pkgs.nginx.override {
       withMail = true;
       withMailSsl = true;
       modules = [
@@ -30,7 +30,9 @@ in
         pkgs.nginxModules.njs
         nginx-auth-ldap
       ];
-    };
+    }).overrideAttrs (oldAttrs: {
+      buildInputs = oldAttrs.buildInputs ++ [ pkgs.openldap ];
+    });
 
     # Set system-wide client max body size to allow large files in cloud/webmail
     clientMaxBodySize = "20G";

@@ -599,7 +599,7 @@ in
     # We do not run a local database, it resides on nixpostgres
     database = {
       host = "nixpostgres";
-      passwordFile = "/var/lib/secrets/nginx/roundcube-db-password-pgpass.txt";
+      passwordFile = "/var/lib/roundcube/pgpass";
     };
 
     # Inject variables dynamically at runtime from external secrets file (not in nix store)
@@ -681,19 +681,39 @@ in
         
         # Ensure user_oidc app is enabled
         if ! $occ app:list | grep -q "user_oidc"; then
-          $occ app:enable user_oidc
+          $occ app:enable user_oidc || true
         fi
 
         # Check if the "kanidm" provider is already registered
         if ! $occ user_oidc:provider-list | grep -q "kanidm"; then
-          client_secret=$(cat /var/lib/secrets/nginx/nextcloud-oauth-secret)
-          $occ user_oidc:provider-add \
-            --client-id="nextcloud" \
-            --client-secret="$client_secret" \
-            --discovery-url="https://idm.minnecker.com/oauth2/openid/nextcloud/.well-known/openid-configuration" \
-            kanidm
+          if [ -f /var/lib/secrets/nginx/nextcloud-oauth-secret ]; then
+            client_secret=$(cat /var/lib/secrets/nginx/nextcloud-oauth-secret)
+            # Add provider but do not crash the service if Kanidm is temporarily unreachable
+            $occ user_oidc:provider-add \
+              --client-id="nextcloud" \
+              --client-secret="$client_secret" \
+              --discovery-url="https://idm.minnecker.com/oauth2/openid/nextcloud/.well-known/openid-configuration" \
+              kanidm || echo "Warning: Failed to register Kanidm OIDC provider (is nixidm reachable?)"
+          else
+            echo "Warning: /var/lib/secrets/nginx/nextcloud-oauth-secret not found. Skipping OIDC registration."
+          fi
         fi
       '';
     };
+  };
+
+  # Auto-generate the .pgpass file for Roundcube in its writeable StateDirectory
+  # to bypass permission issues with the read-only mounted secrets directory.
+  systemd.services.roundcube-setup = {
+    preStart = ''
+      if [ -f /var/lib/secrets/nginx/roundcube-db-password.txt ]; then
+        password=$(cat /var/lib/secrets/nginx/roundcube-db-password.txt)
+        echo "*:*:*:roundcube:$password" > /var/lib/roundcube/pgpass
+        chmod 600 /var/lib/roundcube/pgpass
+      else
+        echo "Error: /var/lib/secrets/nginx/roundcube-db-password.txt not found!"
+        exit 1
+      fi
+    '';
   };
 }

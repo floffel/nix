@@ -14,6 +14,8 @@
 
     # Hosts entries (static resolution fallback)
     extraHosts = ''
+      172.16.16.95 nixnginx.hosts.local.minnecker.com nixnginx proxy
+      fd0c:dead:beef::16:95 nixnginx.hosts.local.minnecker.com nixnginx proxy
       172.16.16.94 nixidm.hosts.local.minnecker.com nixidm ldap
       fd0c:dead:beef::16:94 nixidm.hosts.local.minnecker.com nixidm ldap
       172.16.16.31 nixmail.hosts.local.minnecker.com nixmail

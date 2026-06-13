@@ -75,4 +75,6 @@ in
       };
     };
   };
+
+  systemd.services.nsd.serviceConfig.ExecReload = "${pkgs.coreutils}/bin/kill -HUP $MAINPID";
 }

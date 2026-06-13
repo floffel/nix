@@ -52,6 +52,7 @@ in
     defaults = {
       email = "admin@minnecker.com";
       dnsProvider = "exec";
+      dnsPropagationCheck = false;
       environmentFile = pkgs.writeText "acme-env" ''
         EXEC_PATH=${dnsHookWrapper}
       '';

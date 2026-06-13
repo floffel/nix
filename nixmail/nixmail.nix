@@ -38,7 +38,7 @@
         biff = "no";
 
         virtual_alias_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-aliases.cf, hash:/var/lib/secrets/mail/postfix/virtual";
-        virtual_mailbox_domains = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-domains.cf";
+        virtual_mailbox_domains = "minnecker.com floffel.de sbminnecker.de substitution.art";
         virtual_mailbox_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-recipients.cf";
         smtpd_sender_login_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-senders.cf";
         local_recipient_maps = "$virtual_mailbox_maps";

@@ -19,20 +19,6 @@ chown -R 97:97 "$DEST_DIR/dovecot" # 97 is standard dovecot uid/gid on NixOS (ve
 
 # 2. Write Postfix LDAP query configuration files
 
-# ldap-domains.cf: Resolves virtual mailbox domains
-cat <<EOF > "$DEST_DIR/postfix/ldap-domains.cf"
-server_host = ldaps://ldap:636
-search_base = ou=people,dc=minnecker,dc=com
-query_filter = (&(mail=*@%s)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))
-result_attribute = mail
-result_format = %d
-bind = yes
-bind_dn = dn=token
-bind_pw = $TOKEN
-version = 3
-tls_require_cert = no
-EOF
-
 # ldap-recipients.cf: Validates active mailboxes
 cat <<EOF > "$DEST_DIR/postfix/ldap-recipients.cf"
 server_host = ldaps://ldap:636
@@ -80,7 +66,10 @@ chown -R 98:98 "$DEST_DIR/postfix" # 98 is standard postfix uid/gid on NixOS (ve
 # 3. Write Postfix local virtual alias map (for catch-alls)
 cat <<EOF > "$DEST_DIR/postfix/virtual"
 # Postfix local virtual alias map (Domain Catch-alls)
-@minnecker.com    florian@minnecker.com
+@minnecker.com      florian@minnecker.com
+@floffel.de         florian@minnecker.com
+@sbminnecker.de     florian@minnecker.com
+@substitution.art   florian@minnecker.com
 EOF
 
 chown 98:98 "$DEST_DIR/postfix/virtual"

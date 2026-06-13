@@ -652,7 +652,10 @@ in
       dbpassFile = "/var/lib/secrets/nginx/nextcloud-db-password.txt";
       adminpassFile = "/var/lib/secrets/nginx/nextcloud-admin-password.txt";
       adminuser = "admin";
-      overwriteProtocol = "https";
+    };
+    
+    settings = {
+      overwriteprotocol = "https";
     };
     
     configureRedis = true;

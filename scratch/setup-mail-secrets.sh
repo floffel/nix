@@ -57,6 +57,8 @@ bind_dn = dn=token
 bind_pw = $TOKEN
 version = 3
 tls_require_cert = no
+EOF
+
 # ldap-catchalls.cf: Resolves catch-all domain aliases
 cat <<EOF > "$DEST_DIR/postfix/ldap-catchalls.cf"
 server_host = ldaps://ldap:636

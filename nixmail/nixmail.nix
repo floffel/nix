@@ -5,6 +5,10 @@
     "d /var/vmail 0770 dovecot dovecot - -"
   ];
 
+  systemd.services.dovecot.environment = {
+    LDAPTLS_REQCERT = "never";
+  };
+
   # Postfix Configuration
   services.postfix = {
     enable = true;
@@ -110,25 +114,24 @@
 
       protocols = [ "imap" "pop3" "lmtp" "sieve" ];
       recipient_delimiter = "+.";
-      ldap_uris = "ldaps://ldap";
-      ldap_auth_dn = "dn=token";
-      ldap_auth_dn_password = "</var/lib/secrets/mail/dovecot/ldap-password.txt";
-      ldap_base = "ou=people,dc=minnecker,dc=com";
-      ldap_ssl = "yes";
-      ldap_tls_require_cert = "never";
-      ldap_auth_bind = "yes";
-      ldap_pass_filter = "(&(|(mail=%u)(uid=%u))(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))";
-      ldap_user_filter = "(&(|(mail=%u)(uid=%u))(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))";
       ssl = "yes";
 
       "passdb ldap" = {
         driver = "ldap";
-        args = "/etc/dovecot/dovecot-ldap.conf.ext";
+        ldap_uris = "ldaps://ldap";
+        ldap_auth_dn = "dn=token";
+        ldap_auth_dn_password = "</var/lib/secrets/mail/dovecot/ldap-password.txt";
+        ldap_base = "ou=people,dc=minnecker,dc=com";
+        ldap_filter = "(&(|(mail=%{user})(uid=%{user}))(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))";
       };
 
       "userdb ldap" = {
         driver = "ldap";
-        args = "/etc/dovecot/dovecot-ldap.conf.ext";
+        ldap_uris = "ldaps://ldap";
+        ldap_auth_dn = "dn=token";
+        ldap_auth_dn_password = "</var/lib/secrets/mail/dovecot/ldap-password.txt";
+        ldap_base = "ou=people,dc=minnecker,dc=com";
+        ldap_filter = "(&(|(mail=%{user})(uid=%{user}))(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))";
       };
 
       "namespace inbox" = {
@@ -199,6 +202,8 @@
       stop;
     }
   '';
+
+
 
   # Notes: Ensure DKIM private key remains outside the Nix store at
   # /var/lib/secrets/mail/dkim/minnecker.com.private and is readable by rspamd.

@@ -32,11 +32,20 @@ Use these commands to manage users, groups, and passwords.
 kanidm -D idm_admin person create username "Display Name"
 ```
 
-### Setting/Updating a User's Password
+### Setting/Updating a User's Password (As Administrator)
 ```bash
 kanidm -D idm_admin person credential update username
 ```
 *(This command will prompt you interactively to input the new password.)*
+
+### Self-Service Password Changes (For Standard Users)
+Standard users can update their own passwords:
+* **Via WebUI (Recommended):** Log in to the Kanidm Web UI dashboard (e.g. `https://idm.minnecker.com`) and navigate to **Profile** settings to change passwords or configure passkeys/MFA.
+* **Via CLI:**
+  ```bash
+  kanidm login -D username
+  kanidm person credential update username
+  ```
 
 ### Deleting a User
 ```bash

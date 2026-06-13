@@ -10,9 +10,9 @@
   boot.isContainer = true;
   
   proxmoxLXC = {
-    # Set to false to manage networking manually within each configuration.nix
-    # If you want Proxmox host to manage network settings via systemd-networkd, set to true.
-    manageNetwork = true;
+    # Set to true to manage networking manually within each configuration.nix
+    # When false, systemd-networkd is enabled to accept network configuration from Proxmox.
+    manageNetwork = false;
     privileged = false;
   };
 

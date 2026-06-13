@@ -3,15 +3,14 @@
 
 {
   networking = {
-    # search and nameservers are normally managed by proxmox
-    #search = [ "hosts.local.minnecker.com" ];
+    search = [ "hosts.local.minnecker.com" ];
     
     # Configure DNS resolvers
-    #nameservers = [
-    #  "172.16.16.17"
-    #  "2a01:4ff:ff00::add:2"
-    #  "185.12.64.2"
-    #];
+    nameservers = [
+      "172.16.16.91"          # Unbound local DNS server (Primary)
+      "fd0c:dead:beef::16:91" # Unbound local DNS server IPv6 (Primary)
+      "172.16.16.17"          # Gateway/Host DNS (Fallback)
+    ];
 
     # Hosts entries (static resolution fallback)
     extraHosts = ''

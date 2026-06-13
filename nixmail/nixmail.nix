@@ -203,7 +203,13 @@
   environment.etc."dovecot/global-spam.sieve.svbin".source = pkgs.runCommand "global-spam.sieve.svbin" {
     nativeBuildInputs = [ pkgs.dovecot_pigeonhole ];
   } ''
-    sievec ${pkgs.writeText "global-spam.sieve" ''
+    # Create a minimal Dovecot config to satisfy doveconf/sievec requirements in the sandbox
+    cat <<EOF > dovecot.conf
+    dovecot_config_version = 2.4.4
+    dovecot_storage_version = 2.4.4
+    EOF
+
+    sievec -c dovecot.conf ${pkgs.writeText "global-spam.sieve" ''
       require ["fileinto", "mailbox"];
       if anyof (
         header :contains "X-Spam-Flag" "YES",

@@ -58,24 +58,10 @@ in
     # Replicates the upstreams.conf from the Arch system
     upstreams = {
       forgejo.servers = { "nixforgejo:3000" = {}; };
-      drone.servers = { "pod:8011" = {}; };
-      jitsi.servers = { "pod:10080" = {}; };
-      bitwarden.servers = { "pod:8080" = {}; };
-      bitwarden_ws.servers = { "pod:3012" = {}; };
       matrix.servers = { "172.16.16.12:8008" = {}; };
       ntfy.servers = { "172.16.16.12:2580" = {}; };
-      code.servers = { "10.0.40.1:9980" = {}; };
-      ju.servers = { "pod:8004" = {}; };
       jitsy.servers = { "10.0.40.1:8000" = {}; };
-      authentik.servers = { "pod:9000" = {}; };
-      career.servers = { "10.0.100.1:8080" = {}; };
-      graf.servers = { "pod:3000" = {}; };
-      tooljet.servers = { "pod:7070" = {}; };
-      odoo.servers = { "pod:8069" = {}; };
-      turn.servers = { "matrix:3478" = {}; };
-      tex.servers = { "pod:8171" = {}; };
       wikijs.servers = { "172.16.16.19:3000" = {}; };
-      affine.servers = { "pod:3010" = {}; };
       vaultwarden.servers = { "172.16.16.18:8080" = {}; };
       ki.servers = { "192.168.1.196:8080" = {}; };
     };
@@ -376,33 +362,6 @@ in
             proxy_send_timeout 600;
           '';
         };
-      };
-
-      # tex.minnecker.com
-      "tex.minnecker.com" = {
-        forceSSL = true;
-        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
-        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
-        locations."/" = {
-          proxyPass = "http://tex";
-          extraConfig = ''
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection $connection_upgrade;
-            proxy_set_header X-Scheme $scheme;
-            proxy_set_header X-Forwarded-Host $host;
-            proxy_buffering off;
-            error_log /var/log/nginx/tex.error.log;
-          '';
-        };
-        extraConfig = ''
-          charset utf-8;
-          client_max_body_size 500M;
-        '';
       };
 
       # vault.minnecker.com (Vaultwarden Proxy)

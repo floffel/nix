@@ -40,7 +40,6 @@ in
     # Common HTTP configurations loaded into Nginx http context.
     # We include ldap.conf from the secrets directory to prevent storing the LDAP bind password in the Nix store.
     commonHttpConfig = ''
-      types_hash_max_size 4096;
       server_names_hash_bucket_size 128;
       proxy_headers_hash_max_size 1024;
       proxy_headers_hash_bucket_size 128;

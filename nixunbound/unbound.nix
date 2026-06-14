@@ -15,8 +15,8 @@
         access-control = [
           "127.0.0.0/8 allow"
           "::1 allow"
-          "172.16.16.0/24 allow"
-          "fd0c:dead:beef::/64 allow"
+          "10.20.20.0/24 allow"
+          "fd01::/64 allow"
         ];
       };
 
@@ -24,30 +24,30 @@
       stub-zone = [
         {
           name = "minnecker.com.";
-          stub-addr = "172.16.16.90"; # nixnsd container IP
+          stub-addr = "10.20.20.11"; # nixnsd container IP
         }
         {
           name = "floffel.de.";
-          stub-addr = "172.16.16.90";
+          stub-addr = "10.20.20.11";
         }
         {
           name = "sbminnecker.de.";
-          stub-addr = "172.16.16.90";
+          stub-addr = "10.20.20.11";
         }
         {
           name = "substitution.art.";
-          stub-addr = "172.16.16.90";
+          stub-addr = "10.20.20.11";
         }
       ];
 
-      # Forward all other public queries to upstream resolvers (Cloudflare / Google)
+      # Forward all other public queries to upstream resolvers (configured fallbacks)
       forward-zone = [
         {
           name = ".";
           forward-addr = [
-            "1.1.1.1" # Cloudflare Primary
-            "1.0.0.1" # Cloudflare Secondary
-            "8.8.8.8" # Google Primary
+            "185.12.64.1" # Fallback 1 (IPv4)
+            "2a01:4ff:ff00::add:2" # Fallback (IPv6)
+            "185.12.64.2" # Fallback 2 (IPv4)
           ];
         }
       ];

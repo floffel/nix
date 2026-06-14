@@ -7,18 +7,18 @@ var options =  {
   },
   server: {
     imap: [{
-      host: '172.16.16.96',
+      host: '10.20.20.13',
       //port: '587',
       port: '143',
       auth: ['plain', 'login'],
     }],
     pop3: [{
-      host: '172.16.16.96',
+      host: '10.20.20.13',
       port: '110',
       auth: ['plain'],
     }],
     smtp: [{
-      host: '172.16.16.96',
+      host: '10.20.20.13',
       port: '25',
       auth: ['none'],
     }
@@ -196,7 +196,7 @@ function validate(r) {
 
   r.error("getting server for: " + auth.method);
 
-	// TODO: this is a temporary fix. We do not auth anything!! remove the next lines for real auth...
+ 	// TODO: this is a temporary fix. We do not auth anything!! remove the next lines for real auth...
         var server = getServer(options.server[auth.protocol], auth.method);
 	//var server = options.server[auth.protocol][0];
 	
@@ -207,8 +207,8 @@ function validate(r) {
         } else {
           success(r, server);
         }
-	return;
-	// TODO end...
+ 	return;
+ 	// TODO end...
 
   if(auth.attempt >= options.retrys) {
     failure(r, auth, options.errors.tooManyRetrys);

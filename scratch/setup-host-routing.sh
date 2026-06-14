@@ -7,9 +7,9 @@
 PUB_IF="enp6s0"
 
 # Container IPs matching hosts.nix
-NGINX_IP="172.16.16.3"
-VPN_IP="172.16.16.32"
-NSD_IP="172.16.16.90"
+NGINX_IP="10.20.20.14"
+VPN_IP="10.10.10.5"
+NSD_IP="10.20.20.11"
 JITSI_IP="172.16.16.20"
 
 # Rules definition: "PROTOCOL:HOST_PORT:CONTAINER_IP:CONTAINER_PORT:LIMIT_TYPE:LIMIT_VALUE"
@@ -58,72 +58,3 @@ enable_forwarding() {
     # 2. Apply Rate Limiting rule in FORWARD chain
     if [ "$lim_type" = "syn" ]; then
       # TCP SYN rate limit (limits connection attempts per minute from a single source IP)
-      if ! iptables -C FORWARD -i "$PUB_IF" -p tcp -d "$dst_ip" --dport "$dst_port" --syn -m hashlimit --hashlimit-name "lim-${dst_port}" --hashlimit-above "${lim_val}/min" --hashlimit-mode srcip --hashlimit-htable-expire 60000 -j DROP 2>/dev/null; then
-        iptables -I FORWARD -i "$PUB_IF" -p tcp -d "$dst_ip" --dport "$dst_port" --syn -m hashlimit --hashlimit-name "lim-${dst_port}" --hashlimit-above "${lim_val}/min" --hashlimit-mode srcip --hashlimit-htable-expire 60000 -j DROP
-        echo "  [+] Limit: TCP SYN ${port} -> ${lim_val}/min per IP"
-      else
-        echo "  [=] Limit: TCP SYN limit already exists for port ${port}"
-      fi
-    elif [ "$lim_type" = "udp" ]; then
-      # UDP packet rate limit (limits UDP packets per second from a single source IP)
-      if ! iptables -C FORWARD -i "$PUB_IF" -p udp -d "$dst_ip" --dport "$dst_port" -m hashlimit --hashlimit-name "lim-${dst_port}" --hashlimit-above "${lim_val}/sec" --hashlimit-mode srcip --hashlimit-htable-expire 10000 -j DROP 2>/dev/null; then
-        iptables -I FORWARD -i "$PUB_IF" -p udp -d "$dst_ip" --dport "$dst_port" -m hashlimit --hashlimit-name "lim-${dst_port}" --hashlimit-above "${lim_val}/sec" --hashlimit-mode srcip --hashlimit-htable-expire 10000 -j DROP
-        echo "  [+] Limit: UDP packets ${port} -> ${lim_val}/sec per IP"
-      else
-        echo "  [=] Limit: UDP limit already exists for port ${port}"
-      fi
-    fi
-  done
-}
-
-disable_forwarding() {
-  echo "Removing NAT port-forwarding and rate-limiting rules..."
-  for rule in "${RULES[@]}"; do
-    IFS=":" read -r proto port dst_ip dst_port lim_type lim_val <<< "$rule"
-    
-    # 1. Remove NAT DNAT rule
-    if iptables -t nat -C PREROUTING -i "$PUB_IF" -p "$proto" --dport "$port" -j DNAT --to-destination "${dst_ip}:${dst_port}" 2>/dev/null; then
-      iptables -t nat -D PREROUTING -i "$PUB_IF" -p "$proto" --dport "$port" -j DNAT --to-destination "${dst_ip}:${dst_port}"
-      echo "  [-] NAT: Removed forward for ${proto^^} port ${port}"
-    fi
-
-    # 2. Remove Rate Limiting rule
-    if [ "$lim_type" = "syn" ]; then
-      if iptables -C FORWARD -i "$PUB_IF" -p tcp -d "$dst_ip" --dport "$dst_port" --syn -m hashlimit --hashlimit-name "lim-${dst_port}" --hashlimit-above "${lim_val}/min" --hashlimit-mode srcip --hashlimit-htable-expire 60000 -j DROP 2>/dev/null; then
-        iptables -D FORWARD -i "$PUB_IF" -p tcp -d "$dst_ip" --dport "$dst_port" --syn -m hashlimit --hashlimit-name "lim-${dst_port}" --hashlimit-above "${lim_val}/min" --hashlimit-mode srcip --hashlimit-htable-expire 60000 -j DROP
-        echo "  [-] Limit: Removed TCP SYN limit for port ${port}"
-      fi
-    elif [ "$lim_type" = "udp" ]; then
-      if iptables -C FORWARD -i "$PUB_IF" -p udp -d "$dst_ip" --dport "$dst_port" -m hashlimit --hashlimit-name "lim-${dst_port}" --hashlimit-above "${lim_val}/sec" --hashlimit-mode srcip --hashlimit-htable-expire 10000 -j DROP 2>/dev/null; then
-        iptables -D FORWARD -i "$PUB_IF" -p udp -d "$dst_ip" --dport "$dst_port" -m hashlimit --hashlimit-name "lim-${dst_port}" --hashlimit-above "${lim_val}/sec" --hashlimit-mode srcip --hashlimit-htable-expire 10000 -j DROP
-        echo "  [-] Limit: Removed UDP packet limit for port ${port}"
-      fi
-    fi
-  done
-}
-
-show_status() {
-  echo "=== Active NAT Port Forwarding Rules ==="
-  iptables -t nat -L PREROUTING -v -n --line-numbers | grep -E "dpt:|DNAT"
-  
-  echo ""
-  echo "=== Active Rate Limiting Rules (FORWARD) ==="
-  iptables -L FORWARD -v -n --line-numbers | grep -E "limit|hashlimit|DROP"
-}
-
-# --- Main ---
-case "$1" in
-  enable)
-    enable_forwarding
-    ;;
-  disable)
-    disable_forwarding
-    ;;
-  status)
-    show_status
-    ;;
-  *)
-    echo "Usage: $0 {enable|disable|status}"
-    exit 1
-    ;;
-esac

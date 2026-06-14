@@ -74,12 +74,12 @@
       host    matrix          matrix          10.20.20.14/32          scram-sha-256
       host    vaultwarden     vaultwarden     10.20.20.15/32          scram-sha-256
       host    wikijs          wikijs          10.20.20.16/32          scram-sha-256
-      host    roundcube       roundcube       fd00::14/128            scram-sha-256
-      host    nextcloud       nextcloud       fd00::14/128            scram-sha-256
-      host    forgejo         forgejo         fd00::12/128            scram-sha-256
-      host    matrix          matrix          fd00::14/128            scram-sha-256
-      host    vaultwarden     vaultwarden     fd00::15/128            scram-sha-256
-      host    wikijs          wikijs          fd00::16/128            scram-sha-256
+      host    roundcube       roundcube       fd01::14/128            scram-sha-256
+      host    nextcloud       nextcloud       fd01::14/128            scram-sha-256
+      host    forgejo         forgejo         fd01::12/128            scram-sha-256
+      host    matrix          matrix          fd01::14/128            scram-sha-256
+      host    vaultwarden     vaultwarden     fd01::15/128            scram-sha-256
+      host    wikijs          wikijs          fd01::16/128            scram-sha-256
     '';
   };
 

@@ -183,7 +183,6 @@ in
           proxyPass = "https://idm:8443";
           proxyWebsockets = true;
           extraConfig = ''
-            proxy_http_version 1.1;
             proxy_set_header X-Forwarded-Proto https;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Real-IP $remote_addr;

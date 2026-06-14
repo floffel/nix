@@ -216,7 +216,7 @@ in
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
         sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         locations."/" = {
-          proxyPass = "http://openwebui:8080";
+          proxyPass = "http://openwebui";
           proxyWebsockets = true;
           extraConfig = ''
             proxy_set_header Host $host;

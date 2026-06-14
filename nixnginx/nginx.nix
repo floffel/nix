@@ -64,6 +64,7 @@ in
       vaultwarden.servers = { "172.16.16.18:8080" = {}; };
       ki.servers = { "192.168.1.196:8080" = {}; };
       openwebui.servers = { "127.0.0.1:8080" = {}; };
+      idm.servers = { "nixidm:8443" = {}; };
     };
 
     # 3. Virtual Hosts Configuration
@@ -181,7 +182,7 @@ in
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
         sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         locations."/" = {
-          proxyPass = "https://idm:8443";
+          proxyPass = "https://idm";
           proxyWebsockets = true;
           extraConfig = ''
             proxy_set_header X-Forwarded-Proto https;

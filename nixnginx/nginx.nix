@@ -63,6 +63,7 @@ in
       wikijs.servers = { "172.16.16.19:3000" = {}; };
       vaultwarden.servers = { "172.16.16.18:8080" = {}; };
       ki.servers = { "192.168.1.196:8080" = {}; };
+      openwebui.servers = { "127.0.0.1:9999" = {}; };
     };
 
     # 3. Virtual Hosts Configuration

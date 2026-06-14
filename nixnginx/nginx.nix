@@ -148,7 +148,6 @@ in
         sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         extraConfig = ''
           charset utf-8;
-          client_max_body_size 20G;
           expires 1m;
 
           add_header Referrer-Policy "no-referrer" always;
@@ -171,7 +170,7 @@ in
         };
         extraConfig = ''
           charset utf-8;
-          client_max_body_size 20G;
+          client_max_body_size 4G;
         '';
       };
 
@@ -323,7 +322,7 @@ in
         };
         extraConfig = ''
           charset utf-8;
-          client_max_body_size 9G;
+          client_max_body_size 4G;
           fastcgi_hide_header X-Powered-By;
           fastcgi_hide_header X-Frame-Options;
           add_header Content-Security-Policy "default-src *  data: blob: 'unsafe-inline' 'unsafe-eval';script-src * data: blob: 'unsafe-inline' 'unsafe-eval';connect-src * data: blob: 'unsafe-inline';img-src * data: blob: 'unsafe-inline';frame-src * data: blob: ;style-src * data: blob: 'unsafe-inline';font-src * data: blob: 'unsafe-inline';worker-src *;";
@@ -338,7 +337,7 @@ in
         root = "/usr/share/webapps/element/";
         extraConfig = ''
           charset utf-8;
-          client_max_body_size 20G;
+          client_max_body_size 2G;
         '';
         locations."/.well-known/matrix/server" = {
           extraConfig = "return 200 '{ \"m.server\": \"matrix.minnecker.com:443\" }';";
@@ -599,6 +598,8 @@ in
     enable = true;
     hostName = "cloud.minnecker.com";
     package = pkgs.nextcloud33;
+
+    maxUploadSize = "6G";
     
     # We do not run a local database, it resides on nixpostgres
     database.createLocally = false;

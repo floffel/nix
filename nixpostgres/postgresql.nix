@@ -68,15 +68,15 @@
  
       # Allow connections from containers in the private network subnets:
       
-      host    roundcube       roundcube       10.20.20.11/32          scram-sha-256
-      host    nextcloud       nextcloud       10.20.20.12/32          scram-sha-256
-      host    forgejo         forgejo         10.20.20.13/32          scram-sha-256
+      host    roundcube       roundcube       10.20.20.14/32          scram-sha-256
+      host    nextcloud       nextcloud       10.20.20.14/32          scram-sha-256
+      host    forgejo         forgejo         10.20.20.12/32          scram-sha-256
       host    matrix          matrix          10.20.20.14/32          scram-sha-256
       host    vaultwarden     vaultwarden     10.20.20.15/32          scram-sha-256
       host    wikijs          wikijs          10.20.20.16/32          scram-sha-256
-      host    roundcube       roundcube       fd00::11/128            scram-sha-256
-      host    nextcloud       nextcloud       fd00::12/128            scram-sha-256
-      host    forgejo         forgejo         fd00::13/128            scram-sha-256
+      host    roundcube       roundcube       fd00::14/128            scram-sha-256
+      host    nextcloud       nextcloud       fd00::14/128            scram-sha-256
+      host    forgejo         forgejo         fd00::12/128            scram-sha-256
       host    matrix          matrix          fd00::14/128            scram-sha-256
       host    vaultwarden     vaultwarden     fd00::15/128            scram-sha-256
       host    wikijs          wikijs          fd00::16/128            scram-sha-256

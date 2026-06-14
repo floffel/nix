@@ -244,7 +244,6 @@ in
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
             proxy_redirect off;
-            proxy_http_version 1.1;
             proxy_buffering off;
             chunked_transfer_encoding off;
             proxy_set_header authorization "";

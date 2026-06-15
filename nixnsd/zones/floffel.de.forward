@@ -24,7 +24,7 @@ floffel.de.		 IN CAA 0   issue "letsencrypt.org"
 autoconfig               IN CNAME   mail
 _autodiscover._tcp       IN SRV     0 100 443 m.floffel.de.
 
-r                        IN A	    157.180.8.210 
-r			 IN AAAA    2a01:4f9:3100:312b::2
+r                        IN A	    65.21.216.246 
+r			 IN AAAA    2a01:4f9:fff1:63::1
 www                      IN CNAME   r
 mail			 IN CNAME   r

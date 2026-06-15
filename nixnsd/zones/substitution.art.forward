@@ -25,7 +25,7 @@ _autodiscover._tcp       IN SRV     0 100 443 mail.minnecker.com.
 @                        IN A       157.180.8.210
 @                        IN AAAA    2a01:4f9:3100:312b::2
 
-www			 IN CNAME  riese.minnecker.com.
+www			 IN CNAME  px.minnecker.com.
 app			 IN CNAME  www
 
 local		0        IN A 127.0.0.1

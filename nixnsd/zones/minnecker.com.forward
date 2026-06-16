@@ -1,6 +1,6 @@
 $TTL 7200
 @   IN SOA r.floffel.de. postmaster.minnecker.com. (
-    1781361001	; serial
+    1781361002	; serial
     14400       ; refresh
     3600        ; retry
     604800      ; expire
@@ -27,10 +27,10 @@ minnecker.com._domainkey IN TXT     ( "v=DKIM1; k=rsa; "
 autoconfig               IN CNAME   mail
 _autodiscover._tcp       IN SRV     0 100 443 turing.minnecker.com.
 
-@                        IN A       65.21.216.246
-@                        IN AAAA    2a01:4f9:fff1:63::1
-px						 IN A		65.21.216.246
-px						 IN AAAA	2a01:4f9:fff1:63::1
+@                        IN A       178.63.124.242
+@                        IN AAAA    2a01:4f8:fff2:7d::1
+px						 IN A		178.63.124.242
+px						 IN AAAA	2a01:4f8:fff2:7d::1
 riese			 IN A	    157.180.8.210
 riese			 IN AAAA    2a01:4f9:3100:312b::2
 r			 IN CNAME   px

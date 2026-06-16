@@ -1,6 +1,6 @@
 $TTL 7200
 @   IN SOA r.floffel.de. postmaster.floffel.de. (
-    1781361001	; serial
+    1781361002	; serial
     14400	; refresh
     3600	; retry
     604800	; expire
@@ -16,15 +16,15 @@ $TTL 7200
 @                        IN TXT     "v=spf1 +a +mx ?all"
 @                        IN TXT     "v=spf1 a mx ptr -all"
 
-@                        IN A       157.180.8.210
-@                        IN AAAA    2a01:4f9:3100:312b::2
+@                        IN A       178.63.124.242
+@                        IN AAAA    2a01:4f8:fff2:7d::1
 
 floffel.de.		 IN CAA 0   issue "letsencrypt.org"
 
 autoconfig               IN CNAME   mail
 _autodiscover._tcp       IN SRV     0 100 443 m.floffel.de.
 
-r                        IN A	    65.21.216.246 
-r			 IN AAAA    2a01:4f9:fff1:63::1
+r                        IN A	    178.63.124.242 
+r			 IN AAAA    2a01:4f8:fff2:7d::1
 www                      IN CNAME   r
 mail			 IN CNAME   r

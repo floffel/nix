@@ -44,4 +44,6 @@ vault		0	 IN A 172.16.16.3
 
 backendmail		 IN CNAME  riese
 _acme-challenge          IN A       127.0.0.1
-*			 IN CNAME  riese
+*			 IN CNAME  px
+mail		 IN CNAME  riese
+matrix		 IN CNAME  riese

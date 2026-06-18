@@ -15,8 +15,10 @@
         access-control = [
           "127.0.0.0/8 allow"
           "::1 allow"
-          "172.16.16.0/24 allow"
-          "fd0c:dead:beef::/64 allow"
+          "10.10.10.0/24 allow"
+          "10.20.20.0/24 allow"
+          "fd00::/64 allow"
+          "fd01::/64 allow"
         ];
       };
 
@@ -24,19 +26,19 @@
       stub-zone = [
         {
           name = "minnecker.com.";
-          stub-addr = "172.16.16.90"; # nixnsd container IP
+          stub-addr = "10.20.20.11"; # nixnsd container IP
         }
         {
           name = "floffel.de.";
-          stub-addr = "172.16.16.90";
+          stub-addr = "10.20.20.11";
         }
         {
           name = "sbminnecker.de.";
-          stub-addr = "172.16.16.90";
+          stub-addr = "10.20.20.11";
         }
         {
           name = "substitution.art.";
-          stub-addr = "172.16.16.90";
+          stub-addr = "10.20.20.11";
         }
       ];
 

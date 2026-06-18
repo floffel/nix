@@ -26,6 +26,11 @@
         HTTP_PORT = 3000;
       };
 
+      service = {
+        DISABLE_REGISTRATION = true; 
+        ALLOW_ONLY_EXTERNAL_REGISTRATION = true;
+      };
+
       # Enable Forgejo Actions (CI/CD)
       actions = {
         ENABLED = true;

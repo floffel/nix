@@ -4,8 +4,9 @@
 {
   services.kanidm = {
     # Use the build of kanidm that ships the kanidm-provision tooling used by the
-    # declarative provisioning hook below.
-    package = pkgs.kanidm.withSecretProvisioning;
+    # declarative provisioning hook below. The versioned package is required
+    # (the unversioned `kanidm` alias has been removed from nixpkgs).
+    package = pkgs.kanidm_1_10.withSecretProvisioning;
 
     server = {
       enable = true;

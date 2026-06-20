@@ -43,6 +43,15 @@
     };
   };
 
+  # Ensure the secrets directory and its files are owned by the forgejo user
+  # so the postStart hook (which runs as forgejo) can read them. Secrets are
+  # often pushed via `ssh ... 'cat > file'` (which writes as root); this rule
+  # reconciles ownership on every boot without touching the file contents.
+  systemd.tmpfiles.rules = [
+    "d /var/lib/secrets/forgejo 0700 forgejo forgejo -"
+    "Z /var/lib/secrets/forgejo 0700 forgejo forgejo -"
+  ];
+
   # Post-start script to register and reconcile the OAuth2/OIDC (kanidm)
   # authentication source, keeping its client secret in sync on every boot.
   systemd.services.forgejo = {
@@ -65,7 +74,7 @@
       # restart, so keeping Forgejo's stored secret in sync avoids a stale
       # "OAuth2 RetrieveError: ... 401 Unauthorized" at token exchange when the
       # secret file has been (re)generated after the source was first created.
-      AUTH_ID="$(${config.services.forgejo.package}/bin/forgejo admin auth list --config /var/lib/forgejo/custom/conf/app.ini | awk -F'|' '/kanidm/ {gsub(/^ +| +$/,"",$1); print $1; exit}')"
+      AUTH_ID="$(${config.services.forgejo.package}/bin/forgejo admin auth list --config /var/lib/forgejo/custom/conf/app.ini | awk -F'\t' 'NR>1 && $2 ~ /kanidm/ {gsub(/^ +| +$/,"",$1); print $1; exit}')"
       if [ -n "$AUTH_ID" ]; then
         ${config.services.forgejo.package}/bin/forgejo admin auth update-oauth \
           --config /var/lib/forgejo/custom/conf/app.ini \

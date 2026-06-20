@@ -123,7 +123,9 @@ Use these commands to manage users, groups, and passwords.
 ### Convenience CLI helper
 The [`scratch/idm-users.sh`](../scratch/idm-users.sh) script wraps the `kanidm`
 CLI into a simple CRUD interface for onboarding and day-to-day admin. Run it on
-the `nixidm` container after a one-time `kanidm login -D idm_admin`:
+the `nixidm` container — it auto-logs in as `idm_admin` using the password in
+`/var/lib/secrets/kanidm/idm-admin-password` (the same file the provisioning
+hook uses), so a manual `kanidm login -D idm_admin` is no longer required:
 
 ```bash
 # Create a user (no password is set at creation time — see §3 below)
@@ -141,20 +143,50 @@ the `nixidm` container after a one-time `kanidm login -D idm_admin`:
 # Lock (expire) an account instantly
 ./scratch/idm-users.sh user lock alice
 
-# Group membership (groups themselves are provisioned declaratively in kanidm.nix)
+# Unlock (clear expiry) an account
+./scratch/idm-users.sh user unlock alice
+
+# Edit a user (display/legal name, mail list, rename)
+./scratch/idm-users.sh user set-name alice "Alice Example" --legal "Alice Q. Example"
+./scratch/idm-users.sh user set-mail alice alice@minnecker.com alice.personal@minnecker.com
+./scratch/idm-users.sh user add-mail alice alice.alias@minnecker.com
+./scratch/idm-users.sh user del-mail alice alice.personal@minnecker.com
+./scratch/idm-users.sh user rename alice alice.smith
+
+# Group membership (groups themselves are provisioned declaratively in kanidm.nix;
+# use create/delete only for ad-hoc groups)
 ./scratch/idm-users.sh group list
 ./scratch/idm-users.sh group members mail_users
 ./scratch/idm-users.sh group add mail_users alice bob
 ./scratch/idm-users.sh group remove mail_users bob
+./scratch/idm-users.sh group create adhoc-project
+./scratch/idm-users.sh group delete adhoc-project
+
+# Account policy / MFA (credential floor resolves to the strictest among a user's groups)
+./scratch/idm-users.sh policy get idm_all_persons
+./scratch/idm-users.sh policy enable mail_users
+./scratch/idm-users.sh policy min-credential idm_all_persons any     # allow plain password globally
+./scratch/idm-users.sh policy min-credential mail_users mfa          # require MFA for this group
 
 # Service-account API token (e.g. the `mailservice` LDAP bind token for nixmail/nixnginx)
 ./scratch/idm-users.sh svc-token create mailservice "Mail Search Service" mail_token
 ./scratch/idm-users.sh svc-token status mailservice
 ./scratch/idm-users.sh svc-token revoke mailservice <token_id>
+
+# OAuth2/OIDC clients (declared provisioned in kanidm.nix; read-only here)
+./scratch/idm-users.sh oauth2 list
+./scratch/idm-users.sh oauth2 get forgejo
+# Print a non-public client's basic secret straight from the secrets file (no
+# manual `kanidm system oauth2 show-basic-secret` / cat needed). Pipe it to the
+# consuming container to seed its oauth-secret:
+./scratch/idm-users.sh oauth2 secret forgejo \
+  | ssh nixforgejo 'cat > /var/lib/secrets/forgejo/oauth-secret'
 ```
 
-Override the acting admin with `KANIDM_ADMIN=...` or the default reset-token TTL
-with `RESET_TTL=...` (env vars).
+Override the acting admin with `KANIDM_ADMIN=...`, the auto-login password file
+with `KANIDM_ADMIN_PASSFILE=...`, the OAuth2 secrets dir with
+`KANIDM_OAUTH2_SECRETS=...`, or the default reset-token TTL with `RESET_TTL=...`
+(env vars). Set `KANIDM_SKIP_LOGIN=1` to skip the auto-login attempt.
 
 ### Creating a user (manual equivalent of the script)
 ```bash

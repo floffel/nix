@@ -43,7 +43,8 @@
     };
   };
 
-  # Post-start script to automatically register OAuth2/OIDC authentication source if not already present
+  # Post-start script to register and reconcile the OAuth2/OIDC (kanidm)
+  # authentication source, keeping its client secret in sync on every boot.
   systemd.services.forgejo = {
     postStart = ''
       export FORGEJO_WORK_DIR=${config.services.forgejo.stateDir}
@@ -56,9 +57,24 @@
         sleep 1
       done
 
-      # Check if "kanidm" authentication source exists
-      if ! ${config.services.forgejo.package}/bin/forgejo admin auth list --config /var/lib/forgejo/custom/conf/app.ini | grep -q "kanidm"; then
-        # Add OAuth2/OIDC connection
+      # The OIDC auth source is reconciled on every boot: if it does not yet
+      # exist it is created, and in both cases its client secret is rewritten
+      # to the current contents of the secret file. The Kanidm provisioning
+      # hook re-applies the *same* secret to the OAuth2 client on every Kanidm
+      # restart, so keeping Forgejo's stored secret in sync avoids a stale
+      # "OAuth2 RetrieveError: ... 401 Unauthorized" at token exchange when the
+      # secret file has been (re)generated after the source was first created.
+      AUTH_ID="$(${config.services.forgejo.package}/bin/forgejo admin auth list --config /var/lib/forgejo/custom/conf/app.ini | awk -F'|' '/kanidm/ {gsub(/^ +| +$/,"",$1); print $1; exit}')"
+      if [ -n "$AUTH_ID" ]; then
+        ${config.services.forgejo.package}/bin/forgejo admin auth update-oauth \
+          --config /var/lib/forgejo/custom/conf/app.ini \
+          --id "$AUTH_ID" \
+          --name "kanidm" \
+          --secret "$(cat /var/lib/secrets/forgejo/oauth-secret)" \
+          --auto-discover-url "https://idm.minnecker.com/oauth2/openid/forgejo/.well-known/openid-configuration" \
+          --scopes "openid email profile"
+      else
+        # First-time creation: register the OIDC connection.
         ${config.services.forgejo.package}/bin/forgejo admin auth add-oauth \
           --config /var/lib/forgejo/custom/conf/app.ini \
           --name "kanidm" \

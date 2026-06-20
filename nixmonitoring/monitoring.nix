@@ -108,7 +108,7 @@
         name = "Kanidm SSO";
         allow_sign_up = true;
         client_id = "grafana";
-        client_secret = "$__file{/var/lib/secrets/grafana/oauth-secret}";
+        client_secret = "$__file{/var/lib/secrets/oauth2/grafana/secret}";
         scopes = "openid email profile groups";
         auth_url = "https://idm.minnecker.com/oauth2/authorise";
         token_url = "https://idm.minnecker.com/oauth2/token";

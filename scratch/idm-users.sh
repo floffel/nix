@@ -45,8 +45,8 @@
 #   RESET_TTL             default reset-token TTL in seconds (default: 3600)
 #   KANIDM_ADMIN_PASSFILE password file for auto-login (default:
 #                         /var/lib/secrets/kanidm/idm-admin-password)
-#   KANIDM_OAUTH2_SECRETS dir holding oauth2-<client>-basic-secret files
-#                         (default: /var/lib/secrets/kanidm)
+#   KANIDM_OAUTH2_SECRETS dir holding per-client <client>/secret files
+#                         (default: /var/lib/secrets/oauth2)
 #   KANIDM_SKIP_LOGIN     set to 1 to skip the auto-login attempt
 #
 # The kanidm CLI reads its endpoint from /etc/kanidm/config (set up by the
@@ -61,7 +61,7 @@ set -euo pipefail
 ADMIN="${KANIDM_ADMIN:-idm_admin}"
 RESET_TTL_DEFAULT="${RESET_TTL:-3600}"
 ADMIN_PASSFILE="${KANIDM_ADMIN_PASSFILE:-/var/lib/secrets/kanidm/idm-admin-password}"
-OAUTH2_SECRETS_DIR="${KANIDM_OAUTH2_SECRETS:-/var/lib/secrets/kanidm}"
+  OAUTH2_SECRETS_DIR="${KANIDM_OAUTH2_SECRETS:-/var/lib/secrets/oauth2}"
 
 die() { echo "Error: $*" >&2; exit 1; }
 
@@ -314,13 +314,13 @@ cmd_oauth2() {
       k system oauth2 get "$client"
       ;;
     secret)
-      # Print a non-public client's basic secret straight from the secrets
-      # file the provisioning hook also reads, so you no longer have to run
-      # `kanidm system oauth2 show-basic-secret <client>` or cat the file by
-      # hand. For the consuming container, pipe this into its secret path:
-      #   idm-users.sh oauth2 secret forgejo | ssh nixforgejo 'cat > /var/lib/secrets/forgejo/oauth-secret'
+      # Print a non-public client's basic secret straight from the shared
+      # secrets file the provisioning hook also reads. This is the same file
+      # bind-mounted (read-only) into the consuming container, so no manual
+      # copy/sync to the consumer is needed anymore — the file IS the shared
+      # secret. Useful for inspecting the value or seeding a fresh NAS share.
       local client="${1:-}"; [ -n "$client" ] || die "usage: oauth2 secret <client>"
-      local f="$OAUTH2_SECRETS_DIR/oauth2-${client}-basic-secret"
+      local f="$OAUTH2_SECRETS_DIR/$client/secret"
       [ -r "$f" ] || die "basic secret file '$f' not found/unreadable (client '$client' may be public/PKCE, or set KANIDM_OAUTH2_SECRETS)"
       cat "$f"
       ;;

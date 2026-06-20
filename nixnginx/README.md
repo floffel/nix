@@ -47,32 +47,22 @@ To ensure no secret keys or passwords end up in the world-readable Nix store (`/
 ### 5. Nextcloud & OIDC Secrets
 *   `/var/lib/secrets/nginx/nextcloud-db-password.txt`: Contains the plain database password for the Nextcloud PostgreSQL database.
 *   `/var/lib/secrets/nginx/nextcloud-admin-password.txt`: Contains the admin user password for Nextcloud.
-*   `/var/lib/secrets/nginx/nextcloud-oauth-secret`: Contains the client secret generated in Kanidm for Nextcloud OIDC (SSO) authentication.
+*   `/var/lib/secrets/oauth2/nextcloud/secret`: Contains the client secret for Nextcloud OIDC (SSO). This is the **shared OAuth2 secrets mount** (bind-mounted read-only from the NAS, provisioned on `nixidm`) — no local copy is needed. See the root README's "Shared OAuth2 client secrets" section for the Proxmox mount entry.
 
 ### 6. Nextcloud OIDC Client Registration in Kanidm
-Before Nextcloud can authenticate users, the OIDC client must be registered and configured in your Kanidm directory server. Run the following commands inside your `nixidm` container CLI using the `idm_admin` account (using `example.com` as a generic template):
+The Nextcloud OAuth2/OIDC client (`nextcloud`), its `nextcloud_users`
+authorization group, scope maps and admin claim are **declared provisioned** in
+[`nixidm/kanidm.nix`](../nixidm/kanidm.nix) and reconciled automatically on
+each Kanidm start — you no longer create them by hand. The client secret lives
+in the shared OAuth2 secrets mount at
+`/var/lib/secrets/oauth2/nextcloud/secret` (populate it once on `nixidm`, see
+the `nixidm` README). The same file is bind-mounted read-only into `nixnginx`,
+so no manual copy is needed.
 
-1. **Create the authorization group:**
-   ```bash
-   kanidm -D idm_admin group create nextcloud_users idm_admins
-   kanidm -D idm_admin group set-description nextcloud_users "Nextcloud Users"
-   ```
-
-2. **Create the OAuth2/OIDC client:**
-   ```bash
-   kanidm -D idm_admin system oauth2 create nextcloud "Nextcloud Cloud" https://cloud.example.com/index.php/apps/user_oidc/code
-   ```
-
-3. **Map client scopes to the authorization group:**
-   ```bash
-   kanidm -D idm_admin system oauth2 update-scope-map nextcloud nextcloud_users openid profile email
-   ```
-
-4. **Retrieve the client secret:**
-   Save the output of this command to the `/var/lib/secrets/nginx/nextcloud-oauth-secret` file in your `nixnginx` container:
-   ```bash
-   kanidm -D idm_admin system oauth2 show-basic-secret nextcloud
-   ```
+To grant a user access to Nextcloud, add them to the provisioned group:
+```bash
+kanidm -D idm_admin group add-members nextcloud_users <username>
+```
 
 ---
 
@@ -87,6 +77,9 @@ mp0: /mnt/pve/nas/shared/secrets/ssl,mp=/var/lib/secrets/ssl,ro=1
 
 # Mount point for Nginx-specific secrets (keep read-only for security)
 mp1: /tank/secrets/nixnginx,mp=/var/lib/secrets/nginx,ro=1
+
+# Mount point for the shared Nextcloud OAuth2 client secret (read-only)
+mp3: /mnt/pve/nas/shared/secrets/oauth2/nextcloud,mp=/var/lib/secrets/oauth2/nextcloud,ro=1
 
 # Mount point for the static web applications
 mp2: /tank/webapps,mp=/usr/share/webapps,ro=1

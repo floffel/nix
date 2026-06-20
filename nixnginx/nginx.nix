@@ -647,8 +647,8 @@ in
 
         # Check if the "kanidm" provider is already registered
         if ! $occ user_oidc:provider-list | grep -q "kanidm"; then
-          if [ -f /var/lib/secrets/nginx/nextcloud-oauth-secret ]; then
-            client_secret=$(cat /var/lib/secrets/nginx/nextcloud-oauth-secret)
+          if [ -f /var/lib/secrets/oauth2/nextcloud/secret ]; then
+            client_secret=$(cat /var/lib/secrets/oauth2/nextcloud/secret)
             # Add provider but do not crash the service if Kanidm is temporarily unreachable
             $occ user_oidc:provider-add \
               --client-id="nextcloud" \
@@ -656,7 +656,7 @@ in
               --discovery-url="https://idm.minnecker.com/oauth2/openid/nextcloud/.well-known/openid-configuration" \
               kanidm || echo "Warning: Failed to register Kanidm OIDC provider (is nixidm reachable?)"
           else
-            echo "Warning: /var/lib/secrets/nginx/nextcloud-oauth-secret not found. Skipping OIDC registration."
+            echo "Warning: /var/lib/secrets/oauth2/nextcloud/secret not found. Skipping OIDC registration."
           fi
         fi
       '';

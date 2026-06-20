@@ -85,9 +85,12 @@
       };
 
       # OAuth2 / OIDC resource servers. Each non-public client reads its basic
-      # client secret from the shared secrets mount; the corresponding file on
-      # the consumer container is populated from `kanidm system oauth2
-      # show-basic-secret <client>` once (see each service's README).
+      # client secret from a per-client directory on the shared secrets mount
+      # (`/var/lib/secrets/oauth2/<client>/secret`). The same file is bind-mounted
+      # (read-only) into the consuming container at the same path, so Kanidm and
+      # the consumer always read the identical secret and can never drift — no
+      # manual copy/sync step is needed. Kanidm's provisioning hook is the sole
+      # writer (the mount is read-write on nixidm, read-only on consumers).
       #
       # Admin notes per upstream capability:
       #  * grafana, nextcloud, open-webui support OIDC-driven admin via a
@@ -100,7 +103,7 @@
           displayName = "Forgejo Git";
           originUrl = "https://git.minnecker.com/user/oauth2/kanidm/callback";
           originLanding = "https://git.minnecker.com/";
-          basicSecretFile = "/var/lib/secrets/kanidm/oauth2-forgejo-basic-secret";
+          basicSecretFile = "/var/lib/secrets/oauth2/forgejo/secret";
           scopeMaps = { forgejo_users = [ "openid" "email" "profile" ]; };
         };
 
@@ -108,7 +111,7 @@
           displayName = "Nextcloud Cloud";
           originUrl = "https://cloud.minnecker.com/index.php/apps/user_oidc/code";
           originLanding = "https://cloud.minnecker.com/";
-          basicSecretFile = "/var/lib/secrets/kanidm/oauth2-nextcloud-basic-secret";
+          basicSecretFile = "/var/lib/secrets/oauth2/nextcloud/secret";
           # user_oidc maps a `groups` claim onto local Nextcloud groups; a
           # claim value of "admin" grants server admin. The groups_name scope
           # also flows regular group membership through.
@@ -128,7 +131,7 @@
           displayName = "Grafana Monitoring";
           originUrl = "https://monitoring.minnecker.com/generic_oauth/callback";
           originLanding = "https://monitoring.minnecker.com/";
-          basicSecretFile = "/var/lib/secrets/kanidm/oauth2-grafana-basic-secret";
+          basicSecretFile = "/var/lib/secrets/oauth2/grafana/secret";
           # Grafana's role_attribute_path = contains(groups, 'admin') && 'Admin'
           # || 'Viewer' reads the `groups` claim for an "admin" value.
           scopeMaps = {
@@ -147,7 +150,7 @@
           displayName = "Matrix Synapse";
           originUrl = "https://matrix.minnecker.com/_synapse/client/oauth2/callback";
           originLanding = "https://matrix.minnecker.com/";
-          basicSecretFile = "/var/lib/secrets/kanidm/oauth2-matrix-basic-secret";
+          basicSecretFile = "/var/lib/secrets/oauth2/matrix/secret";
           scopeMaps = { matrix_users = [ "openid" "email" "profile" ]; };
         };
 

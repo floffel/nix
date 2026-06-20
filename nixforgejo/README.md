@@ -28,15 +28,14 @@ authorization group are **declared provisioned** in
 [`nixidm/kanidm.nix`](../nixidm/kanidm.nix) and reconciled automatically on
 each Kanidm start — you no longer create them by hand.
 
-The client's basic secret is the contents of
-`/var/lib/secrets/kanidm/oauth2-forgejo-basic-secret` on the `nixidm`
-container (see the `nixidm` README for how to populate it). Copy that same
-value to `nixforgejo` as the `oauth-secret` used in Step 3. From `nixidm` you
-can push it directly with the helper (no manual `show-basic-secret`/`cat`):
-```bash
-./scratch/idm-users.sh oauth2 secret forgejo \
-  | ssh nixforgejo 'cat > /var/lib/secrets/forgejo/oauth-secret'
-```
+The client's basic secret lives in the **shared OAuth2 secrets mount** at
+`/var/lib/secrets/oauth2/forgejo/secret`. This file is bind-mounted into
+**both** `nixidm` (read-write, so the provisioning hook writes it) and
+`nixforgejo` (read-only). Forgejo reads the same file, so no manual copy/sync
+is needed — the two can never drift. Populate it once on `nixidm` (see the
+`nixidm` README's "One-time secrets for non-public clients" section) and add
+the Proxmox bind-mount entries (see the root README's "Shared OAuth2 client
+secrets" section).
 
 To grant a user access to Forgejo afterwards, add them to the provisioned
 group:
@@ -60,11 +59,15 @@ Log into the `nixforgejo` container as root:
    cd /root/nixos-config && git pull
    ```
 2. **Execute the Secrets Setup Helper Script**:
-   Provide the Postgres database password (from Step 1) and the OAuth OIDC client secret (from Step 2):
+   Provide the Postgres database password (from Step 1). The OAuth OIDC client
+   secret no longer needs to be written here — it comes from the shared mount
+   provisioned on `nixidm` (Step 2):
    ```bash
-   ./scratch/setup-forgejo-secrets.sh <FORGEJO_DB_PASSWORD> <FORGEJO_OAUTH_SECRET>
+   ./scratch/setup-forgejo-secrets.sh <FORGEJO_DB_PASSWORD>
    ```
-   *(This script automatically creates `/var/lib/secrets/forgejo` and configures the files with secure `0600` permissions).*
+   *(This script creates `/var/lib/secrets/forgejo` and writes `db-password`
+   with secure `0600` permissions. The OAuth secret is read from the
+   read-only shared mount at `/var/lib/secrets/oauth2/forgejo/secret`.)*
 3. **Switch to the New Configuration**:
    ```bash
    nixos-rebuild switch
@@ -82,19 +85,20 @@ Standard users will immediately see a **Kanidm SSO** button on the Forgejo login
 
 This error at the OIDC token-exchange step means the client secret Forgejo has
 stored no longer matches the secret Kanidm expects for the `forgejo` OAuth2
-client. The most common cause is that
-`/var/lib/secrets/kanidm/oauth2-forgejo-basic-secret` on `nixidm` was
-regenerated after the auth source was first created (the Kanidm provisioning
-hook re-applies that file's value on every Kanidm restart).
+client. With the shared OAuth2 secrets mount, Forgejo and Kanidm read the
+**same file** (`/var/lib/secrets/oauth2/forgejo/secret`), so this drift can no
+longer happen under normal operation.
 
-The `postStart` hook reconciles this on every boot: it rewrites the stored
-secret via `forgejo admin auth update-oauth` to match
-`/var/lib/secrets/forgejo/oauth-secret`. So to recover from a 401:
+The `postStart` hook rewrites Forgejo's stored secret from that shared file on
+every boot. If you still see a 401, the usual cause is a stale stored secret
+from before the shared mount was in use, or the mount not being attached. To
+recover:
 
-1. Ensure `/var/lib/secrets/forgejo/oauth-secret` on `nixforgejo` contains the
-   **same** value as `/var/lib/secrets/kanidm/oauth2-forgejo-basic-secret` on
-   `nixidm` (see the `nixidm` README).
-2. Restart Forgejo (or its `postStart`) so the secret is re-synced:
+1. Ensure the shared mount is present and readable:
+   ```bash
+   ls -l /var/lib/secrets/oauth2/forgejo/secret
+   ```
+2. Restart Forgejo so `postStart` re-syncs the secret from the shared file:
    ```bash
    systemctl restart forgejo
    ```

@@ -76,28 +76,25 @@ no admin group is declared for them — promote admins manually in those apps.
 
 ### One-time secrets for non-public clients
 Each non-public OAuth2 client (`forgejo`, `nextcloud`, `grafana`, `matrix`)
-reads a basic client secret from the shared secrets mount via
-`basicSecretFile` in `kanidm.nix`. The provisioning hook **sets** the client's
-secret to the contents of that file on every run, so the file must exist and
-be populated with your chosen secret before the first `nixos-rebuild switch`.
-The same secret value is then used on the consuming container.
+reads a basic client secret from a **per-client directory on the shared OAuth2
+secrets mount** (`/var/lib/secrets/oauth2/<client>/secret`). The provisioning
+hook **sets** the client's secret to the contents of that file on every run, so
+the file must exist and be populated with your chosen secret before the first
+`nixos-rebuild switch`.
+
+The same file is bind-mounted **read-only** into the consuming container at the
+identical path, so both Kanidm and the consumer always read the same secret —
+**no manual copy/sync to the consumer is needed.** See the root README's
+"Shared OAuth2 client secrets" section for the Proxmox mount entries.
 
 ```bash
-# On nixidm, pre-populate the basic secrets (one per non-public client):
-mkdir -p /var/lib/secrets/kanidm && chmod 700 /var/lib/secrets/kanidm
+# On nixidm, pre-populate the basic secrets (one per non-public client).
+# The /var/lib/secrets/oauth2 mount is read-write here.
+mkdir -p /var/lib/secrets/oauth2/{forgejo,nextcloud,grafana,matrix}
 for c in forgejo nextcloud grafana matrix; do
-  printf '%s' "$(openssl rand -hex 32)" > /var/lib/secrets/kanidm/oauth2-${c}-basic-secret
-  chmod 600 /var/lib/secrets/kanidm/oauth2-${c}-basic-secret
+  printf '%s' "$(openssl rand -hex 32)" > /var/lib/secrets/oauth2/$c/secret
+  chmod 600 /var/lib/secrets/oauth2/$c/secret
 done
-```
-
-Then copy each client's secret value to the consuming container at the path
-its README documents, e.g. for Forgejo:
-
-```bash
-# Place the forgejo basic secret on nixforgejo as its oauth-secret:
-cat /var/lib/secrets/kanidm/oauth2-forgejo-basic-secret \
-  | ssh nixforgejo 'cat > /var/lib/secrets/forgejo/oauth-secret'
 ```
 
 > [!IMPORTANT]
@@ -176,11 +173,11 @@ hook uses), so a manual `kanidm login -D idm_admin` is no longer required:
 # OAuth2/OIDC clients (declared provisioned in kanidm.nix; read-only here)
 ./scratch/idm-users.sh oauth2 list
 ./scratch/idm-users.sh oauth2 get forgejo
-# Print a non-public client's basic secret straight from the secrets file (no
-# manual `kanidm system oauth2 show-basic-secret` / cat needed). Pipe it to the
-# consuming container to seed its oauth-secret:
-./scratch/idm-users.sh oauth2 secret forgejo \
-  | ssh nixforgejo 'cat > /var/lib/secrets/forgejo/oauth-secret'
+# Print a non-public client's basic secret straight from the shared secrets
+# file (the same file bind-mounted into the consuming container). Useful for
+# inspecting the value or seeding a fresh NAS share — no manual copy to the
+# consumer is needed since both sides read the identical file:
+./scratch/idm-users.sh oauth2 secret forgejo
 ```
 
 Override the acting admin with `KANIDM_ADMIN=...`, the auto-login password file

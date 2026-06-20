@@ -43,13 +43,13 @@
     };
   };
 
-  # Ensure the secrets directory and its files are owned by the forgejo user
-  # so the postStart hook (which runs as forgejo) can read them. Secrets are
-  # often pushed via `ssh ... 'cat > file'` (which writes as root); this rule
-  # reconciles ownership on every boot without touching the file contents.
+  # Ensure the local secrets directory (holding the db-password) is owned by
+  # the forgejo user so the service can read it. The OAuth2 client secret lives
+  # on the shared NAS mount at /var/lib/secrets/oauth2/forgejo/secret, which is
+  # bind-mounted read-only here and read-write on nixidm — the same file Kanidm
+  # provisions, so the two can never drift (no manual sync needed).
   systemd.tmpfiles.rules = [
     "d /var/lib/secrets/forgejo 0700 forgejo forgejo -"
-    "Z /var/lib/secrets/forgejo 0700 forgejo forgejo -"
   ];
 
   # Post-start script to register and reconcile the OAuth2/OIDC (kanidm)
@@ -69,18 +69,17 @@
 
       # The OIDC auth source is reconciled on every boot: if it does not yet
       # exist it is created, and in both cases its client secret is rewritten
-      # to the current contents of the secret file. The Kanidm provisioning
-      # hook re-applies the *same* secret to the OAuth2 client on every Kanidm
-      # restart, so keeping Forgejo's stored secret in sync avoids a stale
-      # "OAuth2 RetrieveError: ... 401 Unauthorized" at token exchange when the
-      # secret file has been (re)generated after the source was first created.
+      # to the current contents of the shared secret file. The file is the same
+      # one Kanidm's provisioning hook reads (bind-mounted from the NAS), so
+      # Forgejo's stored secret always matches what Kanidm expects — the
+      # "OAuth2 RetrieveError: ... 401 Unauthorized" drift can no longer occur.
       AUTH_ID="$(${config.services.forgejo.package}/bin/forgejo admin auth list --config /var/lib/forgejo/custom/conf/app.ini | awk -F'\t' 'NR>1 && $2 ~ /kanidm/ {gsub(/^ +| +$/,"",$1); print $1; exit}')"
       if [ -n "$AUTH_ID" ]; then
         ${config.services.forgejo.package}/bin/forgejo admin auth update-oauth \
           --config /var/lib/forgejo/custom/conf/app.ini \
           --id "$AUTH_ID" \
           --name "kanidm" \
-          --secret "$(cat /var/lib/secrets/forgejo/oauth-secret)" \
+          --secret "$(cat /var/lib/secrets/oauth2/forgejo/secret)" \
           --auto-discover-url "https://idm.minnecker.com/oauth2/openid/forgejo/.well-known/openid-configuration" \
           --scopes "openid email profile"
       else
@@ -90,7 +89,7 @@
           --name "kanidm" \
           --provider "openidConnect" \
           --key "forgejo" \
-          --secret "$(cat /var/lib/secrets/forgejo/oauth-secret)" \
+          --secret "$(cat /var/lib/secrets/oauth2/forgejo/secret)" \
           --auto-discover-url "https://idm.minnecker.com/oauth2/openid/forgejo/.well-known/openid-configuration" \
           --scopes "openid email profile"
       fi

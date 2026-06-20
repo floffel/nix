@@ -124,6 +124,40 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/nsd var/lib/secrets/nsd none bind,r
 | `nixnsd` | `/mnt/pve/nas/shared/secrets/nsd` | `var/lib/secrets/nsd` |
 | `nixnginx` | `/mnt/pve/nas/shared/secrets/nginx` | `var/lib/secrets/nginx` |
 
+#### Shared OAuth2 client secrets
+Each non-public OAuth2/OIDC client's basic secret lives in its own directory on
+the NAS and is bind-mounted into **both** `nixidm` (read-write, so the Kanidm
+provisioning hook is the sole writer) and the consuming container (read-only).
+Both sides read the identical file at `/var/lib/secrets/oauth2/<client>/secret`,
+so the secret can never drift between Kanidm and the consumer — no manual
+copy/sync step is required.
+
+```text
+/mnt/pve/nas/shared/secrets/oauth2/
+├── forgejo/secret
+├── nextcloud/secret
+├── grafana/secret
+└── matrix/secret
+```
+
+Add one `lxc.mount.entry` per container in `/etc/pve/lxc/<VMID>.conf`:
+
+| Container | Host path | Mount dest | Mode |
+| :--- | :--- | :--- | :--- |
+| `nixidm` (provisions all clients) | `/mnt/pve/nas/shared/secrets/oauth2` | `var/lib/secrets/oauth2` | `rw` |
+| `nixforgejo` | `/mnt/pve/nas/shared/secrets/oauth2/forgejo` | `var/lib/secrets/oauth2/forgejo` | `ro` |
+| `nixnginx` (nextcloud) | `/mnt/pve/nas/shared/secrets/oauth2/nextcloud` | `var/lib/secrets/oauth2/nextcloud` | `ro` |
+| `nixmonitoring` (grafana) | `/mnt/pve/nas/shared/secrets/oauth2/grafana` | `var/lib/secrets/oauth2/grafana` | `ro` |
+| `nixmatrix` | `/mnt/pve/nas/shared/secrets/oauth2/matrix` | `var/lib/secrets/oauth2/matrix` | `ro` |
+
+Example entries:
+```ini
+# nixidm (read-write — provisioning hook writes the secret here)
+lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2 var/lib/secrets/oauth2 none bind,rw 0 0
+# nixforgejo (read-only — only sees its own client)
+lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2/forgejo var/lib/secrets/oauth2/forgejo none bind,ro 0 0
+```
+
 #### Shared SSL Certificates Mount Setup
 To handle automated SSL certificate acquisition dynamically:
 1. `nixnsd` runs ACME via DNS-01 challenge and writes the acquired wildcard certificates to `/var/lib/secrets/ssl/`.
@@ -202,20 +236,20 @@ Below are the key files and credentials required per container:
 #### 🛡️ nixidm (Kanidm Identity Management)
 * **SSL/TLS Certificates**: Kanidm requires valid SSL certificates to boot. Since these are acquired by `nixnsd` via DNS-01 and placed in the shared SSL storage, mount `/mnt/pve/nas/shared/secrets/ssl` to `/var/lib/secrets/ssl` in the container. Kanidm will read:
   `/var/lib/secrets/ssl/minnecker.com/fullchain.pem` and `/var/lib/secrets/ssl/minnecker.com/key.pem`.
-* **Provisioning password & OAuth2 basic secrets**: The declarative provisioning hook in `nixidm/kanidm.nix` authenticates as `idm_admin` and reconciles groups + OAuth2 clients on each start. Place these files under the mounted `/var/lib/secrets/kanidm/` directory:
-  * `idm-admin-password` — the recovered `idm_admin` password (used by the provision hook; `chmod 600`).
-  * `oauth2-forgejo-basic-secret`, `oauth2-nextcloud-basic-secret`, `oauth2-grafana-basic-secret`, `oauth2-matrix-basic-secret` — the basic client secret for each non-public OAuth2 client. The provisioning hook **sets** the client secret to this file's contents on every run, so the file is authoritative and must be populated before the first rebuild (`chmod 600`). Copy the same value to the consuming container's secret path.
+* **Provisioning password & OAuth2 basic secrets**: The declarative provisioning hook in `nixidm/kanidm.nix` authenticates as `idm_admin` and reconciles groups + OAuth2 clients on each start. Place these files under the mounted secrets directories:
+  * `/var/lib/secrets/kanidm/idm-admin-password` — the recovered `idm_admin` password (used by the provision hook; `chmod 600`).
+  * `/var/lib/secrets/oauth2/<client>/secret` — the basic client secret for each non-public OAuth2 client (`forgejo`, `nextcloud`, `grafana`, `matrix`). The provisioning hook **sets** the client secret to this file's contents on every run, so the file is authoritative. The same file is bind-mounted (read-only) into the consuming container (see the "Shared OAuth2 client secrets" section above), so **no manual copy to the consumer is needed** — both sides read the identical file. Populate it once before the first rebuild (`chmod 600`).
 
 #### 🦊 nixforgejo (Forgejo Git Service)
 1. **Database Password**: Write the Postgres database password to `/var/lib/secrets/forgejo/db-password` (owned by `forgejo:forgejo`, `chmod 600`).
-2. **Kanidm OAuth2/OIDC Secret**: Write the SSO secret to `/var/lib/secrets/forgejo/oauth-secret` (owned by `forgejo:forgejo`, `chmod 600`).
+2. **Kanidm OAuth2/OIDC Secret**: Read from the shared mount at `/var/lib/secrets/oauth2/forgejo/secret` (bind-mounted read-only from the NAS; provisioned on `nixidm`). No local copy needed.
 
 #### 📊 nixmonitoring (Grafana, Prometheus & Loki)
 * **Grafana Configuration**: Write credentials and OAuth2 SSO secrets to:
   * `/var/lib/secrets/grafana/admin-password` (admin UI password)
   * `/var/lib/secrets/grafana/secret-key` (used for database encryption, generate via `openssl rand -hex 16`)
-  * `/var/lib/secrets/grafana/oauth-secret` (Kanidm OIDC client secret)
-  * Ensure all are owned by `grafana:grafana` and set to `chmod 600`.
+  * `/var/lib/secrets/oauth2/grafana/secret` (Kanidm OIDC client secret — shared mount, provisioned on `nixidm`)
+  * Ensure all are owned by `grafana:grafana` and set to `chmod 600` (the shared oauth2 file is owned on the NAS).
 
 #### 🤖 nixopenwebui (Open WebUI)
 * **SSO & LLM Configuration**: Write the environment file `/var/lib/secrets/open-webui/env` (owned by user `994:994`, `chmod 600`) containing OIDC client secrets and LLM backend URLs:
@@ -246,6 +280,7 @@ Below are the key files and credentials required per container:
           display_name_claim: "name"
           email_claim: "email"
   ```
+  The `client_secret` line is **rewritten on every Synapse start** from the shared OAuth2 secret mount at `/var/lib/secrets/oauth2/matrix/secret` (provisioned on `nixidm`), so the value in the YAML above is only the initial placeholder — it stays in sync with Kanidm automatically.
 
 #### 🔑 nixvaultwarden (Vaultwarden)
 * **Database & Admin Token**: Write `/var/lib/secrets/vaultwarden/env` (owned by `vaultwarden:vaultwarden`, `chmod 600`):

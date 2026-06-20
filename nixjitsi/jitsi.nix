@@ -6,6 +6,24 @@
     "jitsi-meet-1.0.8792"
   ];
 
+  # The logrotate-checkconf.service runs as root without capabilities and fails
+  # inside this unprivileged LXC: its `su nginx nginx` switch cannot traverse
+  # the 750 nginx-owned log directory, producing a false "Permission denied".
+  # The actual logrotate.service (which does the rotation) keeps working.
+  systemd.services.logrotate-checkconf.enable = false;
+
+  # A reverse proxy sits in front of this container, so nginx here sees little
+  # direct traffic. The NixOS nginx module registers a logrotate block under the
+  # `nginx` key (weekly, rotate 26); override the same key so we merge into one
+  # block and cap retention to avoid unbounded growth: rotate daily, keep only
+  # a few compressed archives, and trigger early rotation on size so the total
+  # stays well under ~500 MB.
+  services.logrotate.settings.nginx = {
+    frequency = "daily";
+    rotate = 3;
+    maxsize = "100M";
+  };
+
   services.jitsi-meet = {
     enable = true;
     hostName = "meet.minnecker.com";

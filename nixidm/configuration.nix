@@ -24,6 +24,9 @@
     kanidm_1_10
   ];
 
+  # CLI client config for manual administration (kanidm login -D admin, etc.).
+  # The declarative provisioning hook uses services.kanidm.provision.instanceUrl
+  # directly and does not rely on this file.
   environment.etc."kanidm/config".text = ''
     uri = "https://localhost:8443"
     verify_ca = false

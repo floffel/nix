@@ -15,7 +15,21 @@ kanidmd recover-init admin
 ```
 *(This command will output the generated passwords for `admin` and `idm_admin`—save these securely!)*
 
-### 2. Login to the CLI
+### 2. Provide the idm_admin provisioning password
+The NixOS module reconciles the directory against the declarative state in
+[`kanidm.nix`](kanidm.nix) on every Kanidm start (via an `ExecStartPost` hook).
+To do so it authenticates as `idm_admin` using a stable password instead of
+regenerating one each restart. Write the recovered `idm_admin` password to the
+shared secrets mount so the provisioning hook can read it:
+
+```bash
+mkdir -p /var/lib/secrets/kanidm && chmod 700 /var/lib/secrets/kanidm
+# Set the password recovered in step 1 (or reset it with: kanidmd recover-account idm_admin)
+printf '%s' 'YOUR_IDM_ADMIN_PASSWORD' > /var/lib/secrets/kanidm/idm-admin-password
+chmod 600 /var/lib/secrets/kanidm/idm-admin-password
+```
+
+### 3. Login to the CLI
 On the container CLI, log in as `admin` to verify credentials:
 ```bash
 kanidm login -D admin
@@ -23,23 +37,150 @@ kanidm login -D admin
 
 ---
 
-## 👥 2. User & Group Administration
+## 🧩 2. Declarative Provisioning (Groups & OAuth2 Clients)
+
+The access-control groups and OAuth2/OIDC resource servers consumed by every
+downstream service are declared in [`kanidm.nix`](kanidm.nix) under
+`services.kanidm.provision` and are reconciled automatically on each Kanidm
+start. **You no longer need to run the per-service `kanidm system oauth2
+create ...` / `group create ...` commands by hand.**
+
+### Provisioned groups
+Access-control groups (membership managed via CLI/Web UI, see §3):
+`mail_users`, `forgejo_users`, `nextcloud_users`, `grafana_users`,
+`matrix_users`, `open_webui_users`.
+
+Per-service admin groups (only for services that support OIDC-driven admin):
+`nextcloud_admins`, `grafana_admins`, `open_webui_admins`. Plus the built-in
+`idm_admins` group, declared so the claimMaps below can reference it; members
+of `idm_admins` are granted admin in every service that supports OIDC-driven
+admin as a global fallback. Forgejo and Matrix have no OIDC admin mapping, so
+no admin group is declared for them — promote admins manually in those apps.
+
+### Provisioned OAuth2/OIDC clients & admin mapping
+| Client | Access group | Admin group(s) → admin claim | Redirect URL | Secret |
+| :--- | :--- | :--- | :--- | :--- |
+| `forgejo` | `forgejo_users` | *(none — promote manually)* | `https://git.minnecker.com/user/oauth2/kanidm/callback` | basic secret file |
+| `nextcloud` | `nextcloud_users` | `nextcloud_admins` + `idm_admins` → `groups` claim value `admin` | `https://cloud.minnecker.com/index.php/apps/user_oidc/code` | basic secret file |
+| `grafana` | `grafana_users` | `grafana_admins` + `idm_admins` → `groups` claim value `admin` | `https://monitoring.minnecker.com/generic_oauth/callback` | basic secret file |
+| `matrix` | `matrix_users` | *(none — promote manually)* | `https://matrix.minnecker.com/_synapse/client/oauth2/callback` | basic secret file |
+| `open-webui` | `open_webui_users` | `open_webui_admins` + `idm_admins` → `roles` claim value `admin` | `https://ai.minnecker.com/oauth/oidc/callback` | public (PKCE, no secret) |
+
+> [!NOTE]
+> Forgejo and Matrix Synapse have **no upstream OIDC admin mapping** — admins
+> must be promoted manually in the app (Forgejo admin panel; Synapse Admin
+> API). Nextcloud (`user_oidc` `groups` claim), Grafana (`groups` claim with
+> `admin` value) and Open WebUI (`roles` claim with `admin` value) are granted
+> admin automatically when a user is in the corresponding admin group (or
+> `idm_admins`).
+
+### One-time secrets for non-public clients
+Each non-public OAuth2 client (`forgejo`, `nextcloud`, `grafana`, `matrix`)
+reads a basic client secret from the shared secrets mount via
+`basicSecretFile` in `kanidm.nix`. The provisioning hook **sets** the client's
+secret to the contents of that file on every run, so the file must exist and
+be populated with your chosen secret before the first `nixos-rebuild switch`.
+The same secret value is then used on the consuming container.
+
+```bash
+# On nixidm, pre-populate the basic secrets (one per non-public client):
+mkdir -p /var/lib/secrets/kanidm && chmod 700 /var/lib/secrets/kanidm
+for c in forgejo nextcloud grafana matrix; do
+  printf '%s' "$(openssl rand -hex 32)" > /var/lib/secrets/kanidm/oauth2-${c}-basic-secret
+  chmod 600 /var/lib/secrets/kanidm/oauth2-${c}-basic-secret
+done
+```
+
+Then copy each client's secret value to the consuming container at the path
+its README documents, e.g. for Forgejo:
+
+```bash
+# Place the forgejo basic secret on nixforgejo as its oauth-secret:
+cat /var/lib/secrets/kanidm/oauth2-forgejo-basic-secret \
+  | ssh nixforgejo 'cat > /var/lib/secrets/forgejo/oauth-secret'
+```
+
+> [!IMPORTANT]
+> Because the provisioning hook re-applies the secret from the file on every
+> Kanidm restart, the value in the file **is** the authoritative client secret.
+> Do not run `kanidm system oauth2 show-basic-secret` expecting it to differ —
+> it will match the file contents.
+>
+> `open-webui` is a public PKCE client and has no basic secret; the consumer
+> only needs its client id (`open-webui`).
+
+> [!NOTE]
+> Person accounts are intentionally **not** declared in Nix. Create and manage
+> users via the Kanidm CLI or Web UI as described in §3. Adding a person to a
+> provisioned group is what grants them access to the corresponding service.
+
+---
+
+## 👥 3. User & Group Administration
 
 Use these commands to manage users, groups, and passwords.
 
-### Creating a User
+### Convenience CLI helper
+The [`scratch/idm-users.sh`](../scratch/idm-users.sh) script wraps the `kanidm`
+CLI into a simple CRUD interface for onboarding and day-to-day admin. Run it on
+the `nixidm` container after a one-time `kanidm login -D idm_admin`:
+
+```bash
+# Create a user (no password is set at creation time — see §3 below)
+./scratch/idm-users.sh user create alice "Alice Example" alice@minnecker.com admin@minnecker.com
+
+# Inspect / list / delete
+./scratch/idm-users.sh user get alice
+./scratch/idm-users.sh user list
+./scratch/idm-users.sh user delete alice
+
+# Issue a single-use reset token so Alice sets her own password (+ optional passkey/MFA)
+./scratch/idm-users.sh user reset-token alice            # default 1h TTL
+./scratch/idm-users.sh user reset-token alice 86400      # 24h (max)
+
+# Lock (expire) an account instantly
+./scratch/idm-users.sh user lock alice
+
+# Group membership (groups themselves are provisioned declaratively in kanidm.nix)
+./scratch/idm-users.sh group list
+./scratch/idm-users.sh group members mail_users
+./scratch/idm-users.sh group add mail_users alice bob
+./scratch/idm-users.sh group remove mail_users bob
+
+# Service-account API token (e.g. the `mailservice` LDAP bind token for nixmail/nixnginx)
+./scratch/idm-users.sh svc-token create mailservice "Mail Search Service" mail_token
+./scratch/idm-users.sh svc-token status mailservice
+./scratch/idm-users.sh svc-token revoke mailservice <token_id>
+```
+
+Override the acting admin with `KANIDM_ADMIN=...` or the default reset-token TTL
+with `RESET_TTL=...` (env vars).
+
+### Creating a user (manual equivalent of the script)
 ```bash
 kanidm -D idm_admin person create username "Display Name"
+kanidm -D idm_admin person update username --mail username@minnecker.com
 ```
+*(The first `--mail` is the primary address; additional `--mail` flags are aliases.)*
 
-### Setting/Updating a User's Password (As Administrator)
+### Passwords — reset-token flow (no shared temp password)
+Kanidm has **no** `--password` flag for `person create`. Instead of setting a
+temporary password an administrator can read, issue a **single-use credential
+reset token** that the user redeems in the web UI to set their own password and
+optionally enroll a passkey/MFA. The token is invalidated as soon as it is used
+and expires after its TTL (default 1h, max 24h).
+
 ```bash
-kanidm -D idm_admin person credential update username
+# Prints a QR code plus a redeem URL like:
+#   https://idm.minnecker.com/ui/reset?token=XXXX-XXXX-XXXX-XXXX
+kanidm -D idm_admin person credential create-reset-token username        # 1h
+kanidm -D idm_admin person credential create-reset-token username 86400  # 24h
 ```
-*(This command will prompt you interactively to input the new password.)*
+Send the printed link to the user. They visit it once to set their credential.
+This is the intended non-interactive/admin-driven onboarding path; the script's
+`user reset-token` command wraps this.
 
 ### Self-Service Password Changes (For Standard Users)
-Standard users can update their own passwords:
 * **Via WebUI (Recommended):** Log in to the Kanidm Web UI dashboard (e.g. `https://idm.minnecker.com`) and navigate to **Profile** settings to change passwords or configure passkeys/MFA.
 * **Via CLI:**
   ```bash
@@ -47,24 +188,47 @@ Standard users can update their own passwords:
   kanidm person credential update username
   ```
 
+### Disabling the mandatory second factor (MFA)
+By default Kanidm does **not** require a second factor for everyone; the
+credential floor is controlled per-group via Account Policy, and the policy that
+applies to all persons lives on the built-in `idm_all_persons` group. To allow a
+plain password (no MFA/passkey required) for everyone, set the floor to `any`:
+
+```bash
+kanidm -D idm_admin group account-policy credential-type-minimum idm_all_persons any
+```
+The credential-type floor resolves to the **strictest** among a user's groups
+(ordered `any < mfa < passkey < attested_passkey`), so if you later scope a
+group to `mfa`/`passkey` its members will need that factor regardless of the
+global floor. To require MFA for a specific group instead of globally:
+
+```bash
+kanidm -D idm_admin group account-policy enable <group>
+kanidm -D idm_admin group account-policy credential-type-minimum <group> mfa
+```
+
 ### Deleting a User
 ```bash
 kanidm -D idm_admin person delete username
 ```
 
 ### Creating a Group
+Groups used by services are **declared provisioned** in `kanidm.nix` and created
+automatically. For ad-hoc groups only:
 ```bash
 kanidm -D idm_admin group create group_name idm_admins
-kanidm -D idm_admin group set-description group_name "Group Description"
 ```
 
 ### Managing Group Membership
 ```bash
-# Add user to a group
+# Add user(s) to a group
 kanidm -D idm_admin group add-members group_name username
 
-# Remove user from a group
+# Remove user(s) from a group
 kanidm -D idm_admin group remove-members group_name username
+
+# List members of a group
+kanidm -D idm_admin group list-members group_name
 ```
 
 ---
@@ -86,25 +250,25 @@ The mail server (`nixmail`) checks group membership via LDAP before accepting ma
   ```
 
 ### B. OAuth2/OIDC Service Authorization (Nextcloud, Matrix, Forgejo, etc.)
-Kanidm allows you to restrict OAuth2/OIDC clients by mapping scopes to specific groups. If a user is not in a mapped group, they cannot receive the scopes (like `openid`, `profile`, `email`) requested by the application, and the OIDC login flow will fail.
+The OAuth2 clients, their authorization groups, and scope maps are **declared
+provisioned** in [`kanidm.nix`](kanidm.nix) (see §2). A user can only receive
+the scopes (`openid`, `profile`, `email`, ...) an OAuth2 client requests if they
+are a member of the group mapped to those scopes; otherwise the OIDC login flow
+fails. So to grant or revoke service access you only manage group membership —
+no `system oauth2` CLI commands are needed:
 
-#### Step 1: Create a group for the service
 ```bash
-kanidm -D idm_admin group create nextcloud_users idm_admins
-kanidm -D idm_admin group set-description nextcloud_users "Users authorized to access Nextcloud"
-```
-
-#### Step 2: Map the scopes to the group
-Restrict the OAuth2 client (e.g., `nextcloud`) to only authorize members of `nextcloud_users`:
-```bash
-kanidm -D idm_admin system oauth2 update-scope-map nextcloud nextcloud_users openid profile email
-```
-
-#### Step 3: Grant access to a user
-```bash
+# Grant access to a service (group already exists via provisioning)
 kanidm -D idm_admin group add-members nextcloud_users username
+# or via the helper:
+./scratch/idm-users.sh group add nextcloud_users username
+
+# Revoke access
+kanidm -D idm_admin group remove-members nextcloud_users username
 ```
-*(Now, only users added to `nextcloud_users` can log in to Nextcloud. Unmapped users will be denied access during authentication.)*
+
+To add an entirely new service client/group, edit `kanidm.nix` and rebuild; the
+provisioning hook reconciles the directory on the next Kanidm start.
 
 ---
 
@@ -114,23 +278,19 @@ Suppose you want to create a contractor account named `alice`:
 * Authorized to use: **Matrix** and **Mail**
 * Blocked from using: **Nextcloud**
 
-### 1. Create the account
+Using the helper script:
+
 ```bash
-kanidm -D idm_admin person create alice "Alice Contractor"
-kanidm -D idm_admin person credential update alice
+# 1. Create the account + email (no password set at creation)
+./scratch/idm-users.sh user create alice "Alice Contractor" alice@example.com
+
+# 2. Issue a one-time reset token so Alice sets her own password
+./scratch/idm-users.sh user reset-token alice
+
+# 3. Authorize Mail & Matrix (groups are provisioned in kanidm.nix)
+./scratch/idm-users.sh group add mail_users alice
+./scratch/idm-users.sh group add matrix_users alice
 ```
 
-### 2. Set email & alias
-```bash
-kanidm -D idm_admin person update alice --mail alice@example.com
-```
-
-### 3. Authorize Mail & Matrix
-```bash
-# Add to Mail access group
-kanidm -D idm_admin group add-members mail_users alice
-
-# Add to Matrix access group (assuming 'matrix' scope-map is restricted to 'matrix_users')
-kanidm -D idm_admin group add-members matrix_users alice
-```
-*(Since Alice is not added to the `nextcloud_users` group, any attempts she makes to log into Nextcloud via SSO will be blocked by Kanidm.)*
+Since Alice is **not** added to `nextcloud_users`, any SSO login attempt to
+Nextcloud is blocked by Kanidm.

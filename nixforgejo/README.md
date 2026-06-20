@@ -21,36 +21,28 @@ Setting up the Forgejo container involves initializing the Postgres database rol
 
 ---
 
-### Step 2: Register OIDC Client (on `nixidm`)
+### Step 2: OIDC Client (provisioned on `nixidm`)
 
-Log into the `nixidm` container as root and run the following commands:
+The Forgejo OAuth2/OIDC client (`forgejo`) and its `forgejo_users`
+authorization group are **declared provisioned** in
+[`nixidm/kanidm.nix`](../nixidm/kanidm.nix) and reconciled automatically on
+each Kanidm start — you no longer create them by hand.
 
-1. **Create the OAuth2/OIDC Client** in Kanidm:
-   ```bash
-   kanidm -D idm_admin system oauth2 create forgejo "Forgejo Git" https://git.minnecker.com
-   ```
-2. **Register the OAuth2 Redirect URL**:
-   ```bash
-   kanidm -D idm_admin system oauth2 add-redirect-url forgejo https://git.minnecker.com/user/oauth2/kanidm/callback
-   ```
-3. **Retrieve the OIDC Client Secret**:
-   ```bash
-   kanidm -D idm_admin system oauth2 show-basic-secret forgejo
-   ```
-   *(Note down the returned basic client secret).*
-4. **Create the Authorization Group**:
-   ```bash
-   kanidm -D idm_admin group create forgejo_users idm_admins
-   kanidm -D idm_admin group set-description forgejo_users "Users authorized to access Forgejo"
-   ```
-5. **Map requested scopes** to only authorize members of the `forgejo_users` group:
-   ```bash
-   kanidm -D idm_admin system oauth2 update-scope-map forgejo forgejo_users openid profile email
-   ```
-6. **Grant access to users**:
-   ```bash
-   kanidm -D idm_admin group add-members forgejo_users <username>
-   ```
+The client's basic secret is the contents of
+`/var/lib/secrets/kanidm/oauth2-forgejo-basic-secret` on the `nixidm`
+container (see the `nixidm` README for how to populate it). Copy that same
+value to `nixforgejo` as the `oauth-secret` used in Step 3.
+
+To grant a user access to Forgejo afterwards, add them to the provisioned
+group:
+```bash
+kanidm -D idm_admin group add-members forgejo_users <username>
+```
+
+> [!NOTE]
+> Forgejo has no upstream OIDC admin mapping, so OIDC cannot grant the admin
+> role automatically. To make a user a Forgejo administrator, promote them
+> manually in the Forgejo admin panel (Site Administration → Users → Edit).
 
 ---
 

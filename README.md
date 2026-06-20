@@ -202,6 +202,9 @@ Below are the key files and credentials required per container:
 #### 🛡️ nixidm (Kanidm Identity Management)
 * **SSL/TLS Certificates**: Kanidm requires valid SSL certificates to boot. Since these are acquired by `nixnsd` via DNS-01 and placed in the shared SSL storage, mount `/mnt/pve/nas/shared/secrets/ssl` to `/var/lib/secrets/ssl` in the container. Kanidm will read:
   `/var/lib/secrets/ssl/minnecker.com/fullchain.pem` and `/var/lib/secrets/ssl/minnecker.com/key.pem`.
+* **Provisioning password & OAuth2 basic secrets**: The declarative provisioning hook in `nixidm/kanidm.nix` authenticates as `idm_admin` and reconciles groups + OAuth2 clients on each start. Place these files under the mounted `/var/lib/secrets/kanidm/` directory:
+  * `idm-admin-password` — the recovered `idm_admin` password (used by the provision hook; `chmod 600`).
+  * `oauth2-forgejo-basic-secret`, `oauth2-nextcloud-basic-secret`, `oauth2-grafana-basic-secret`, `oauth2-matrix-basic-secret` — the basic client secret for each non-public OAuth2 client. The provisioning hook **sets** the client secret to this file's contents on every run, so the file is authoritative and must be populated before the first rebuild (`chmod 600`). Copy the same value to the consuming container's secret path.
 
 #### 🦊 nixforgejo (Forgejo Git Service)
 1. **Database Password**: Write the Postgres database password to `/var/lib/secrets/forgejo/db-password` (owned by `forgejo:forgejo`, `chmod 600`).

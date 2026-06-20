@@ -51,21 +51,37 @@
       # (persons.<name>.groups), so these are left empty here and only declare
       # that the groups must exist. Downstream services gate authorization on
       # (memberof=cn=<group>,...) via LDAP or via oauth2 scope maps below.
+      #
+      # overwriteMembers = false: with the default (true) kanidm-provision
+      # issues DELETE /v1/group/<name>/_attr/member to reconcile an empty
+      # member list, which 404s ("nomatchingentries") on a freshly created
+      # group that has never had a member attribute and aborts the provision
+      # hook. Append-mode treats an empty list as a no-op.
       groups = {
         # Built-in administrator group. Declared so the claimMaps below can
         # reference it (the module asserts every referenced group is declared,
         # even built-ins). Members of idm_admins act as a global fallback that
         # is granted admin in every service that supports OIDC admin claims.
         idm_admins.present = true;
+        idm_admins.overwriteMembers = false;
         mail_users.present = true;
+        mail_users.overwriteMembers = false;
         forgejo_users.present = true;
+        forgejo_users.overwriteMembers = false;
         nextcloud_users.present = true;
+        nextcloud_users.overwriteMembers = false;
         nextcloud_admins.present = true;
+        nextcloud_admins.overwriteMembers = false;
         grafana_users.present = true;
+        grafana_users.overwriteMembers = false;
         grafana_admins.present = true;
+        grafana_admins.overwriteMembers = false;
         matrix_users.present = true;
+        matrix_users.overwriteMembers = false;
         open_webui_users.present = true;
+        open_webui_users.overwriteMembers = false;
         open_webui_admins.present = true;
+        open_webui_admins.overwriteMembers = false;
       };
 
       # OAuth2 / OIDC resource servers. Each non-public client reads its basic

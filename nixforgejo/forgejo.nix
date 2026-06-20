@@ -46,6 +46,7 @@
   # Post-start script to register and reconcile the OAuth2/OIDC (kanidm)
   # authentication source, keeping its client secret in sync on every boot.
   systemd.services.forgejo = {
+    path = [ pkgs.gawk ];
     postStart = ''
       export FORGEJO_WORK_DIR=${config.services.forgejo.stateDir}
       

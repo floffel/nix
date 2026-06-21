@@ -11,7 +11,7 @@
       host = "nixpostgres";
       name = "forgejo";
       user = "forgejo";
-      passwordFile = "/var/lib/secrets/forgejo/db-password";
+      passwordFile = "/var/lib/secrets/postgres/forgejo/db-password";
     };
 
     # Forgejo configuration file settings
@@ -43,14 +43,15 @@
     };
   };
 
-  # Ensure the local secrets directory (holding the db-password) is owned by
-  # the forgejo user so the service can read it. The OAuth2 client secret lives
-  # on the shared NAS mount at /var/lib/secrets/oauth2/forgejo/secret, which is
-  # bind-mounted read-only here and read-write on nixidm — the same file Kanidm
-  # provisions, so the two can never drift (no manual sync needed).
-  systemd.tmpfiles.rules = [
-    "d /var/lib/secrets/forgejo 0700 forgejo forgejo -"
-  ];
+  # The forgejo database password is read from the shared Postgres secrets
+  # mount at /var/lib/secrets/postgres/forgejo/db-password (bind-mounted
+  # read-only, provisioned on nixpostgres). The OAuth2 client secret lives on
+  # the shared OAuth2 secrets mount at /var/lib/secrets/oauth2/forgejo/secret,
+  # which is bind-mounted read-only here and read-write on nixidm — the same
+  # file Kanidm provisions, so the two can never drift (no manual sync
+  # needed). No local secrets directory is required on this container; the
+  # Forgejo Actions runner token lives in the separate nixforgejo-runner
+  # container.
 
   # Post-start script to register and reconcile the OAuth2/OIDC (kanidm)
   # authentication source, keeping its client secret in sync on every boot.

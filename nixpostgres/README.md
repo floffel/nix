@@ -38,29 +38,19 @@ ln -sf /root/nixos-config/$CONTAINER/postgresql.nix /etc/nixos/postgresql.nix
 nixos-rebuild switch
 ```
 
-### Step 2: Set Database Role Passwords
-When PostgreSQL is initialized, NixOS creates the database roles, but they do **not** have passwords configured. Since other services connect remotely over the network using `scram-sha-256` authentication, you must assign secure passwords to each role.
+### Step 2: Database Role Passwords (auto-provisioned)
+Role passwords are **no longer set manually**. The
+`postgresql-password-provisioning` unit runs after `postgresql.service` on
+every start and writes each role's password to the shared Postgres secrets
+mount at `/var/lib/secrets/postgres/<role>/db-password`, then applies it to the
+role via `ALTER ROLE ... WITH PASSWORD`. A missing file is generated with a
+fresh random value; an existing file is re-applied verbatim (the file is
+authoritative — see the root README's "Shared Postgres DB passwords" section).
 
-Run the following commands inside your `nixpostgres` container to set the passwords:
-
-```bash
-# Enter the PostgreSQL interactive terminal as the admin postgres user
-sudo -u postgres psql
-```
-
-Inside the `psql` shell, execute the password settings (replace `your_secure_password` with the actual passwords you plan to use in the corresponding service containers):
-
-```sql
-ALTER ROLE roundcube WITH PASSWORD 'your_roundcube_db_password';
-ALTER ROLE nextcloud WITH PASSWORD 'your_nextcloud_db_password';
-ALTER ROLE forgejo WITH PASSWORD 'your_forgejo_db_password';
-ALTER ROLE matrix WITH PASSWORD 'your_matrix_db_password';
-ALTER ROLE vaultwarden WITH PASSWORD 'your_vaultwarden_db_password';
-ALTER ROLE wikijs WITH PASSWORD 'your_wikijs_db_password';
-
--- Exit the psql terminal
-\q
-```
+Consuming containers bind-mount their own `<role>` subdirectory read-only and
+read the password from the same file, so the password can never drift between
+Postgres and the consumer. No `psql` / `ALTER ROLE` step and no per-container
+`setup-*-secrets.sh` DB-password helper is required.
 
 ---
 

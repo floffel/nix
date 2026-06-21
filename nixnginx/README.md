@@ -37,17 +37,13 @@ To ensure no secret keys or passwords end up in the world-readable Nix store (`/
 *   `/var/lib/secrets/nginx/dh.param`: The Diffie-Hellman parameters file (copied from `/etc/nginx/dh.param`).
 
 ### 4. Roundcube Secrets
-*   `/var/lib/secrets/nginx/roundcube-db-password.txt`: Contains the plain database password for the PostgreSQL database (`your_roundcube_db_password`).
-*   `/var/lib/secrets/nginx/roundcube-db-password-pgpass.txt`: Contains the database password formatted as a PostgreSQL `.pgpass` file. This is required by the NixOS Roundcube activation script.
-    ```
-    *:*:*:roundcube:your_roundcube_db_password
-    ```
-*   `/var/lib/secrets/nginx/roundcube-des-key.txt`: Contains the 24-character session encryption key (`your_roundcube_des_key`).
+* `/var/lib/secrets/postgres/roundcube/db-password`: The plain database password for the PostgreSQL `roundcube` role. This is the **shared Postgres secrets mount** (bind-mounted read-only from the NAS, provisioned on `nixpostgres`) — no local copy is needed. The `.pgpass` file is generated automatically from this file by the `roundcube-setup` `preStart` hook on every start.
+* `/var/lib/secrets/nginx/roundcube-des-key.txt`: Contains the 24-character session encryption key (`your_roundcube_des_key`).
 
 ### 5. Nextcloud & OIDC Secrets
-*   `/var/lib/secrets/nginx/nextcloud-db-password.txt`: Contains the plain database password for the Nextcloud PostgreSQL database.
-*   `/var/lib/secrets/nginx/nextcloud-admin-password.txt`: Contains the admin user password for Nextcloud.
-*   `/var/lib/secrets/oauth2/nextcloud/secret`: Contains the client secret for Nextcloud OIDC (SSO). This is the **shared OAuth2 secrets mount** (bind-mounted read-only from the NAS, provisioned on `nixidm`) — no local copy is needed. See the root README's "Shared OAuth2 client secrets" section for the Proxmox mount entry.
+* `/var/lib/secrets/postgres/nextcloud/db-password`: The plain database password for the Nextcloud PostgreSQL role. This is the **shared Postgres secrets mount** (bind-mounted read-only from the NAS, provisioned on `nixpostgres`) — no local copy is needed.
+* `/var/lib/secrets/nginx/nextcloud-admin-password.txt`: Contains the admin user password for Nextcloud.
+* `/var/lib/secrets/oauth2/nextcloud/secret`: Contains the client secret for Nextcloud OIDC (SSO). This is the **shared OAuth2 secrets mount** (bind-mounted read-only from the NAS, provisioned on `nixidm`) — no local copy is needed. See the root README's "Shared OAuth2 client secrets" section for the Proxmox mount entry.
 
 ### 6. Nextcloud OIDC Client Registration in Kanidm
 The Nextcloud OAuth2/OIDC client (`nextcloud`), its `nextcloud_users`
@@ -80,6 +76,10 @@ mp1: /tank/secrets/nixnginx,mp=/var/lib/secrets/nginx,ro=1
 
 # Mount point for the shared Nextcloud OAuth2 client secret (read-only)
 mp3: /mnt/pve/nas/shared/secrets/oauth2/nextcloud,mp=/var/lib/secrets/oauth2/nextcloud,ro=1
+
+# Mount points for the shared Postgres DB passwords (read-only)
+mp4: /mnt/pve/nas/shared/secrets/postgres/roundcube,mp=/var/lib/secrets/postgres/roundcube,ro=1
+mp5: /mnt/pve/nas/shared/secrets/postgres/nextcloud,mp=/var/lib/secrets/postgres/nextcloud,ro=1
 
 # Mount point for the static web applications
 mp2: /tank/webapps,mp=/usr/share/webapps,ro=1

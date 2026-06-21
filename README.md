@@ -128,7 +128,14 @@ bind-mounted into **multiple** containers from the same NAS path.
 | `nixnginx` | `/mnt/pve/nas/shared/secrets/oauth2/nextcloud` | `var/lib/secrets/oauth2/nextcloud` | `ro` | Nextcloud OIDC client secret |
 | `nixmonitoring` | `/mnt/pve/nas/shared/secrets/oauth2/grafana` | `var/lib/secrets/oauth2/grafana` | `ro` | Grafana OIDC client secret |
 | `nixmatrix` | `/mnt/pve/nas/shared/secrets/oauth2/matrix` | `var/lib/secrets/oauth2/matrix` | `ro` | Matrix Synapse OIDC client secret |
-| `nixforgejo` | `/mnt/pve/nas/shared/secrets/forgejo` | `var/lib/secrets/forgejo` | `rw` | Forgejo DB password |
+| `nixpostgres` | `/mnt/pve/nas/shared/secrets/postgres` | `var/lib/secrets/postgres` | `rw` | Provisions **all** DB role passwords (sole writer) |
+| `nixforgejo` | `/mnt/pve/nas/shared/secrets/postgres/forgejo` | `var/lib/secrets/postgres/forgejo` | `ro` | Forgejo DB password |
+| `nixnginx` | `/mnt/pve/nas/shared/secrets/postgres/roundcube` | `var/lib/secrets/postgres/roundcube` | `ro` | Roundcube DB password |
+| `nixnginx` | `/mnt/pve/nas/shared/secrets/postgres/nextcloud` | `var/lib/secrets/postgres/nextcloud` | `ro` | Nextcloud DB password |
+| `nixmatrix` | `/mnt/pve/nas/shared/secrets/postgres/matrix` | `var/lib/secrets/postgres/matrix` | `ro` | Matrix DB password |
+| `nixvaultwarden` | `/mnt/pve/nas/shared/secrets/postgres/vaultwarden` | `var/lib/secrets/postgres/vaultwarden` | `ro` | Vaultwarden DB password |
+| `nixwikijs` | `/mnt/pve/nas/shared/secrets/postgres/wikijs` | `var/lib/secrets/postgres/wikijs` | `ro` | Wiki.js DB password |
+| `nixforgejo` | `/mnt/pve/nas/shared/secrets/forgejo` | `var/lib/secrets/forgejo` | `rw` | Forgejo Actions runner registration token |
 | `nixmonitoring` | `/mnt/pve/nas/shared/secrets/grafana` | `var/lib/secrets/grafana` | `rw` | Grafana admin password, secret key |
 | `nixopenwebui` | `/mnt/pve/nas/shared/secrets/open-webui` | `var/lib/secrets/open-webui` | `rw` | Open WebUI env (LLM URLs, PKCE client) |
 | `nixmatrix` | `/mnt/pve/nas/shared/secrets/matrix` | `var/lib/secrets/matrix` | `rw` | Synapse `secrets.yaml` (DB pw, OIDC config) |
@@ -146,6 +153,9 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/ssl var/lib/secrets/ssl none bind,r
 # Shared OAuth2 client secrets — nixidm gets the parent (rw), consumers get their own subdir (ro)
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2 var/lib/secrets/oauth2 none bind,rw 0 0
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2/forgejo var/lib/secrets/oauth2/forgejo none bind,ro 0 0
+# Shared Postgres DB passwords — nixpostgres gets the parent (rw), consumers get their own subdir (ro)
+lxc.mount.entry: /mnt/pve/nas/shared/secrets/postgres var/lib/secrets/postgres none bind,rw 0 0
+lxc.mount.entry: /mnt/pve/nas/shared/secrets/postgres/forgejo var/lib/secrets/postgres/forgejo none bind,ro 0 0
 ```
 
 #### Shared SSL Certificates
@@ -169,6 +179,38 @@ copy/sync step is required.
 ├── grafana/secret
 └── matrix/secret
 ```
+
+#### Shared Postgres DB passwords
+Each service's PostgreSQL role password lives in its own directory on the NAS
+and is bind-mounted into **both** `nixpostgres` (read-write, so the
+provisioning unit is the sole writer) and the consuming container (read-only).
+Both sides read the identical file at
+`/var/lib/secrets/postgres/<role>/db-password`, so the password can never drift
+between Postgres and the consumer — no manual `ALTER ROLE` or per-container
+`setup-*-secrets.sh` step is required.
+
+A `oneshot` unit (`postgresql-password-provisioning`) on `nixpostgres` runs
+after `postgresql.service` on every start: for each role it generates a random
+password if the file is missing, then **re-applies** the file's contents to the
+role via `ALTER ROLE ... WITH PASSWORD`. The file is authoritative — a password
+changed via `psql` is reset back to the file on the next restart.
+
+```text
+/mnt/pve/nas/shared/secrets/postgres/
+├── forgejo/db-password
+├── nextcloud/db-password
+├── roundcube/db-password
+├── matrix/db-password
+├── vaultwarden/db-password
+└── wikijs/db-password
+```
+
+Consumers read the password directly where the NixOS module supports a
+`passwordFile`/`dbpassFile` (forgejo, nextcloud, roundcube). For services that
+take a bundled env/yaml file (vaultwarden, wiki.js, matrix), a runtime unit /
+`preStart` assembles the final file from a per-container template plus the
+password read from the shared mount, so the DB password still never lives
+outside the shared mount.
 
 
 On the guest container, create the local mount point directory by setting a variable first:
@@ -233,8 +275,9 @@ Below are the key files and credentials required per container:
   * `/var/lib/secrets/oauth2/<client>/secret` — the basic client secret for each non-public OAuth2 client (`forgejo`, `nextcloud`, `grafana`, `matrix`). The provisioning hook **sets** the client secret to this file's contents on every run, so the file is authoritative. The same file is bind-mounted (read-only) into the consuming container (see the "Shared OAuth2 client secrets" section above), so **no manual copy to the consumer is needed** — both sides read the identical file. Populate it once before the first rebuild (`chmod 600`).
 
 #### 🦊 nixforgejo (Forgejo Git Service)
-1. **Database Password**: Write the Postgres database password to `/var/lib/secrets/forgejo/db-password` (owned by `forgejo:forgejo`, `chmod 600`).
+1. **Database Password**: Read from the shared Postgres secrets mount at `/var/lib/secrets/postgres/forgejo/db-password` (bind-mounted read-only from the NAS; provisioned on `nixpostgres`). No local copy needed.
 2. **Kanidm OAuth2/OIDC Secret**: Read from the shared mount at `/var/lib/secrets/oauth2/forgejo/secret` (bind-mounted read-only from the NAS; provisioned on `nixidm`). No local copy needed.
+3. **Forgejo Actions Runner Token**: Write `/var/lib/secrets/forgejo/runner-token` (the per-container `rw` mount, `chmod 600`). This is a manual registration token, not a DB password.
 
 #### 📊 nixmonitoring (Grafana, Prometheus & Loki)
 * **Grafana Configuration**: Write credentials and OAuth2 SSO secrets to:
@@ -253,17 +296,17 @@ Below are the key files and credentials required per container:
   ```
 
 #### 💬 nixmatrix (Matrix Synapse)
-* **Synapse Configuration**: Write the YAML configuration `/var/lib/secrets/matrix/secrets.yaml` (owned by `matrix-synapse:matrix-synapse`, `chmod 600`) containing the database password and Kanidm OIDC client secret:
+* **Synapse Configuration**: Write the YAML configuration `/var/lib/secrets/matrix/secrets.yaml` (owned by `matrix-synapse:matrix-synapse`, `chmod 600`) containing the **OIDC client config** only. The database password and OIDC client secret are both rewritten on every Synapse start from their shared mounts, so only placeholder values are needed here:
   ```yaml
   database:
     args:
-      password: "your_matrix_postgresql_password"
+      password: "PLACEHOLDER_REWRITTEN_FROM_SHARED_MOUNT"
   oidc_providers:
     - idp_id: "kanidm"
       idp_name: "Kanidm SSO"
       issuer: "https://idm.minnecker.com/oauth2/openid/matrix"
       client_id: "matrix"
-      client_secret: "your_kanidm_matrix_oauth_secret"
+      client_secret: "PLACEHOLDER_REWRITTEN_FROM_SHARED_MOUNT"
       scopes: ["openid", "profile", "email"]
       user_mapping_provider:
         config:
@@ -272,20 +315,18 @@ Below are the key files and credentials required per container:
           display_name_claim: "name"
           email_claim: "email"
   ```
-  The `client_secret` line is **rewritten on every Synapse start** from the shared OAuth2 secret mount at `/var/lib/secrets/oauth2/matrix/secret` (provisioned on `nixidm`), so the value in the YAML above is only the initial placeholder — it stays in sync with Kanidm automatically.
+  * The `password` line is **rewritten on every Synapse start** from the shared Postgres secrets mount at `/var/lib/secrets/postgres/matrix/db-password` (provisioned on `nixpostgres`), so the value above is only the initial placeholder — it stays in sync with the role's actual password automatically.
+  * The `client_secret` line is **rewritten on every Synapse start** from the shared OAuth2 secret mount at `/var/lib/secrets/oauth2/matrix/secret` (provisioned on `nixidm`), so the value above is only the initial placeholder — it stays in sync with Kanidm automatically.
 
 #### 🔑 nixvaultwarden (Vaultwarden)
-* **Database & Admin Token**: Write `/var/lib/secrets/vaultwarden/env` (owned by `vaultwarden:vaultwarden`, `chmod 600`):
+* **Admin Token**: Write `/var/lib/secrets/vaultwarden/env-template` (owned by `vaultwarden:vaultwarden`, `chmod 600`) containing only the admin token:
   ```env
-  DATABASE_URL="postgresql://vaultwarden:your_vaultwarden_db_password@nixpostgres/vaultwarden"
   ADMIN_TOKEN="your_secure_admin_token_or_hash" # Generate hash with: vaultwarden hash
   ```
+  The database password is **not** in this file. On every start, the `vaultwarden-secrets` unit assembles `/run/vaultwarden/env` from this template plus the DB password read from the shared Postgres secrets mount at `/var/lib/secrets/postgres/vaultwarden/db-password` (provisioned on `nixpostgres`, read-only here), producing the final `DATABASE_URL=postgresql://vaultwarden:<password>@nixpostgres/vaultwarden`.
 
 #### 📝 nixwikijs (Wiki.js)
-* **Database Password**: Write `/var/lib/secrets/wikijs/env` (owned by `wiki-js:wiki-js`, `chmod 600`):
-  ```env
-  WIKI_DB_PASS="your_wikijs_db_password"
-  ```
+* **Database Password**: No local secret file is needed. On every start, the `wikijs-secrets` unit assembles `/run/wikijs/env` from the DB password read from the shared Postgres secrets mount at `/var/lib/secrets/postgres/wikijs/db-password` (provisioned on `nixpostgres`, read-only here), producing `WIKI_DB_PASS=<password>`.
 
 #### 📹 nixjitsi (Jitsi Meet)
 * **Port Forwarding**: Forward external **UDP port 10000** on your router to the `nixjitsi` container IP (`172.16.16.20`) to allow group video bridge audio/video data.

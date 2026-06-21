@@ -563,8 +563,8 @@ in
 
     # Inject variables dynamically at runtime from external secrets file (not in nix store)
     extraConfig = ''
-      // Load database credentials from mounted secrets
-      $db_password = rtrim(file_get_contents('/var/lib/secrets/nginx/roundcube-db-password.txt'));
+      // Load database credentials from the shared Postgres secrets mount
+      $db_password = rtrim(file_get_contents('/var/lib/secrets/postgres/roundcube/db-password'));
       $config['db_dsnw'] = "pgsql://roundcube:$db_password@nixpostgres/roundcube";
 
       // Load session encryption key from mounted secrets
@@ -610,7 +610,7 @@ in
       dbhost = "nixpostgres";
       dbname = "nextcloud";
       dbuser = "nextcloud";
-      dbpassFile = "/var/lib/secrets/nginx/nextcloud-db-password.txt";
+      dbpassFile = "/var/lib/secrets/postgres/nextcloud/db-password";
       adminpassFile = "/var/lib/secrets/nginx/nextcloud-admin-password.txt";
       adminuser = "admin";
     };
@@ -667,12 +667,12 @@ in
   # to bypass permission issues with the read-only mounted secrets directory.
   systemd.services.roundcube-setup = {
     preStart = ''
-      if [ -f /var/lib/secrets/nginx/roundcube-db-password.txt ]; then
-        password=$(cat /var/lib/secrets/nginx/roundcube-db-password.txt)
+      if [ -f /var/lib/secrets/postgres/roundcube/db-password ]; then
+        password=$(cat /var/lib/secrets/postgres/roundcube/db-password)
         echo "*:*:*:roundcube:$password" > /var/lib/roundcube/pgpass
         chmod 600 /var/lib/roundcube/pgpass
       else
-        echo "Error: /var/lib/secrets/nginx/roundcube-db-password.txt not found!"
+        echo "Error: /var/lib/secrets/postgres/roundcube/db-password not found!"
         exit 1
       fi
     '';

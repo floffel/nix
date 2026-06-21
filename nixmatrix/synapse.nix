@@ -60,16 +60,32 @@
     ];
   };
 
-  # Keep the OIDC client_secret in secrets.yaml in sync with the shared secret
-  # file that Kanidm provisions (/var/lib/secrets/oauth2/matrix/secret, the same
-  # file nixidm reads). This avoids a stale secret -> 401 at token exchange.
+  # Keep secrets.yaml in sync with the shared secrets mounts on every start:
+  #   * the OIDC client_secret is rewritten from the shared OAuth2 secret file
+  #     that Kanidm provisions (/var/lib/secrets/oauth2/matrix/secret, the same
+  #     file nixidm reads), avoiding a stale secret -> 401 at token exchange.
+  #   * the database password is rewritten from the shared Postgres secrets
+  #     mount (/var/lib/secrets/postgres/matrix/db-password, provisioned on
+  #     nixpostgres), so Postgres remains the sole writer of DB passwords and
+  #     the value in secrets.yaml can never drift from the role's password.
   systemd.services.matrix-synapse.preStart = ''
-    SECRET_FILE="/var/lib/secrets/oauth2/matrix/secret"
     YAML_FILE="/var/lib/secrets/matrix/secrets.yaml"
+
+    SECRET_FILE="/var/lib/secrets/oauth2/matrix/secret"
     if [ -r "$SECRET_FILE" ] && [ -f "$YAML_FILE" ]; then
       SECRET=$(cat "$SECRET_FILE")
+      grep -q '^      client_secret:' "$YAML_FILE" || { echo "Error: client_secret: line not found in $YAML_FILE" >&2; exit 1; }
       ${pkgs.gnused}/bin/sed -i \
         "s#^      client_secret:.*#      client_secret: \"$SECRET\"#" \
+        "$YAML_FILE"
+    fi
+
+    DBPW_FILE="/var/lib/secrets/postgres/matrix/db-password"
+    if [ -r "$DBPW_FILE" ] && [ -f "$YAML_FILE" ]; then
+      DBPW=$(cat "$DBPW_FILE")
+      grep -q '^      password:' "$YAML_FILE" || { echo "Error: password: line not found in $YAML_FILE" >&2; exit 1; }
+      ${pkgs.gnused}/bin/sed -i \
+        "s#^      password:.*#      password: \"$DBPW\"#" \
         "$YAML_FILE"
     fi
   '';

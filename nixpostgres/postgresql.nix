@@ -92,4 +92,78 @@
 
   # Override systemd service user to run as postgres to use peer auth over unix sockets
   systemd.services.prometheus-postgres-exporter.serviceConfig.User = "postgres";
+
+  # Auto-provision each ensureUsers role's password on the shared secrets
+  # mount (/var/lib/secrets/postgres/<role>/db-password), which is bind-mounted
+  # read-write here and read-only into each consuming container. The file is the
+  # sole source of truth: on every run the role's password is re-applied from the
+  # file, so Postgres state can never drift from what consumers read. A missing
+  # file is generated with a fresh random value before being applied.
+  #
+  # This removes the manual `ALTER ROLE ... WITH PASSWORD` step and the per
+  # consumer `setup-*-secrets.sh` DB-password helpers: consumers read the same
+  # file Kanidm-style (single writer, identical file on both sides).
+  #
+  # partOf + bindsTo couple this oneshot to postgresql.service so it is stopped
+  # and re-pulled on every postgres restart; RemainAfterExit is intentionally
+  # omitted so the unit re-runs (rather than staying "active (exited)") on each
+  # restart, re-applying the file's password to the role.
+  systemd.services.postgresql-password-provisioning = {
+    description = "Provision PostgreSQL role passwords on the shared secrets mount";
+    wantedBy = [ "postgresql.service" ];
+    after = [ "postgresql.service" ];
+    partOf = [ "postgresql.service" ];
+    bindsTo = [ "postgresql.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      User = "postgres";
+      Group = "postgres";
+      # /var/lib/secrets/postgres is the rw NAS bind mount on this container.
+      ReadWritePaths = [ "/var/lib/secrets/postgres" ];
+    };
+    path = [ config.services.postgresql.package pkgs.util-linux pkgs.coreutils ];
+    script = ''
+      set -euo pipefail
+
+      # Fail loudly if the shared mount is not attached — otherwise we would
+      # silently write passwords to a throwaway rootfs dir, apply them to the
+      # roles, and lose them on container restart (consumers would never see
+      # the file and could never authenticate).
+      mountpoint -q /var/lib/secrets/postgres || {
+        echo "Error: /var/lib/secrets/postgres is not a mount point (missing Proxmox bind entry?)" >&2
+        exit 1
+      }
+
+      # ensureUsers roles are created in a post-start phase of postgresql.service,
+      # which `after` does not strictly guarantee has completed. Wait until the
+      # server accepts connections before issuing ALTER ROLE.
+      for i in {1..30}; do
+        if pg_isready -q; then break; fi
+        sleep 1
+      done
+      pg_isready -q || { echo "Error: postgres not ready after 30s" >&2; exit 1; }
+
+      # Single source of truth: derive the role list from ensureUsers so a role
+      # added there can never be missed by this provisioning loop.
+      ROLES="${lib.concatStringsSep " " (map (u: u.name) config.services.postgresql.ensureUsers)}"
+      for role in $ROLES; do
+        d="/var/lib/secrets/postgres/$role"
+        install -d -m 700 "$d"
+        f="$d/db-password"
+        if [ ! -s "$f" ]; then
+          # 32 random bytes as 64 hex chars (CSPRNG, no extra dependency).
+          pw="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+          printf '%s' "$pw" > "$f"
+        fi
+        chmod 600 "$f"
+        # Re-apply from file on every run so Postgres matches the file exactly.
+        # Use psql variable substitution (:'pw') so the password is never
+        # interpolated into the SQL text — this prevents both SQL injection from
+        # a hand-edited file and password leakage via psql error output.
+        pw="$(cat "$f")"
+        psql -v ON_ERROR_STOP=1 -v pw="$pw" \
+          -c 'ALTER ROLE "'"$role"'" WITH PASSWORD :'pw';' >/dev/null
+      done
+    '';
+  };
 }

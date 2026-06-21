@@ -6,18 +6,19 @@ This directory contains the NixOS configuration files for the Forgejo Git hostin
 
 ## 🛠️ Deployment Step-by-Step
 
-Setting up the Forgejo container involves initializing the Postgres database role, registering the OIDC client in Kanidm, writing secure runtime secrets, and switching the NixOS configuration.
+Setting up the Forgejo container involves the shared Postgres DB password mount (auto-provisioned on `nixpostgres`), the OIDC client (auto-provisioned on `nixidm`), and switching the NixOS configuration.
 
 ---
 
-### Step 1: Initialize Database Role (on `nixpostgres`)
+### Step 1: Database Role (auto-provisioned on `nixpostgres`)
 
-1. Log into the `nixpostgres` container as root.
-2. Run the secure random password generator script to set the passwords for all service roles:
-   ```bash
-   /root/nixos-config/scratch/setup-postgres-passwords.sh
-   ```
-3. Copy the outputted password for the **`forgejo`** role.
+The `forgejo` database role and its password are **no longer set up manually**.
+The `postgresql-password-provisioning` unit on `nixpostgres` generates the
+password on first start and writes it to the shared Postgres secrets mount at
+`/var/lib/secrets/postgres/forgejo/db-password`, which is bind-mounted
+read-only into `nixforgejo`. See the root README's "Shared Postgres DB
+passwords" section. Ensure the Proxmox bind-mount entries for the postgres
+secrets are present on both `nixpostgres` (`rw`) and `nixforgejo` (`ro`).
 
 ---
 
@@ -58,20 +59,22 @@ Log into the `nixforgejo` container as root:
    ```bash
    cd /root/nixos-config && git pull
    ```
-2. **Execute the Secrets Setup Helper Script**:
-   Provide the Postgres database password (from Step 1). The OAuth OIDC client
-   secret no longer needs to be written here — it comes from the shared mount
-   provisioned on `nixidm` (Step 2):
-   ```bash
-   ./scratch/setup-forgejo-secrets.sh <FORGEJO_DB_PASSWORD>
-   ```
-   *(This script creates `/var/lib/secrets/forgejo` and writes `db-password`
-   with secure `0600` permissions. The OAuth secret is read from the
-   read-only shared mount at `/var/lib/secrets/oauth2/forgejo/secret`.)*
-3. **Switch to the New Configuration**:
+2. **Switch to the New Configuration**:
    ```bash
    nixos-rebuild switch
    ```
+
+No DB-password or OAuth-secret setup step is needed on this container:
+* The **database password** is read from the shared Postgres secrets mount at
+  `/var/lib/secrets/postgres/forgejo/db-password` (bind-mounted read-only,
+  provisioned on `nixpostgres` — see the root README's "Shared Postgres DB
+  passwords" section).
+* The **OAuth2/OIDC client secret** is read from the shared OAuth2 secrets
+  mount at `/var/lib/secrets/oauth2/forgejo/secret` (bind-mounted read-only,
+  provisioned on `nixidm`).
+* The local `/var/lib/secrets/forgejo` directory still exists for the
+  **Forgejo Actions runner registration token** (`runner-token`), which is a
+  manual secret unrelated to the DB password.
 
 ---
 

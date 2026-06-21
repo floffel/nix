@@ -108,21 +108,51 @@ For example, to mount secrets for the `nixnsd` container:
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/nsd var/lib/secrets/nsd none bind,rw 0 0
 ```
 
-#### Mapping Table:
-| Container Name | Host Secret Path (`<type>`) | Container Mount Destination |
-| :--- | :--- | :--- |
-| `nixnsd` (RW), `nixnginx` (RO), `nixidm` (RO) | `/mnt/pve/nas/shared/secrets/ssl` | `var/lib/secrets/ssl` |
-| `nixmail` | `/mnt/pve/nas/shared/secrets/mail` | `var/lib/secrets/mail` |
-| `nixvpn` | `/mnt/pve/nas/shared/secrets/wireguard` | `var/lib/secrets/nixvpn` |
-| `nixidm` | `/mnt/pve/nas/shared/secrets/kanidm` | `var/lib/secrets/kanidm` |
-| `nixforgejo` | `/mnt/pve/nas/shared/secrets/forgejo` | `var/lib/secrets/forgejo` |
-| `nixmonitoring` | `/mnt/pve/nas/shared/secrets/grafana` | `var/lib/secrets/grafana` |
-| `nixopenwebui` | `/mnt/pve/nas/shared/secrets/open-webui` | `var/lib/secrets/open-webui` |
-| `nixmatrix` | `/mnt/pve/nas/shared/secrets/matrix` | `var/lib/secrets/matrix` |
-| `nixvaultwarden` | `/mnt/pve/nas/shared/secrets/vaultwarden` | `var/lib/secrets/vaultwarden` |
-| `nixwikijs` | `/mnt/pve/nas/shared/secrets/wikijs` | `var/lib/secrets/wikijs` |
-| `nixnsd` | `/mnt/pve/nas/shared/secrets/nsd` | `var/lib/secrets/nsd` |
-| `nixnginx` | `/mnt/pve/nas/shared/secrets/nginx` | `var/lib/secrets/nginx` |
+#### Complete Bind-Mount Table
+
+Add one `lxc.mount.entry` line per row to the container listed in the first
+column. The `Mode` column indicates whether the mount is read-write (`rw`) or
+read-only (`ro`). Shared mounts (SSL certificates, OAuth2 client secrets) are
+bind-mounted into **multiple** containers from the same NAS path.
+
+| Container | NAS Host Path | Container Mount Dest | Mode | Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| `nixnsd` | `/mnt/pve/nas/shared/secrets/ssl` | `var/lib/secrets/ssl` | `rw` | ACME writes wildcard certs here (DNS-01) |
+| `nixnginx` | `/mnt/pve/nas/shared/secrets/ssl` | `var/lib/secrets/ssl` | `ro` | Reads TLS certs for reverse-proxy vhosts |
+| `nixidm` | `/mnt/pve/nas/shared/secrets/ssl` | `var/lib/secrets/ssl` | `ro` | Reads TLS certs for the Kanidm server |
+| `nixmail` | `/mnt/pve/nas/shared/secrets/mail` | `var/lib/secrets/mail` | `rw` | Postfix/Dovecot LDAP configs, DKIM keys |
+| `nixvpn` | `/mnt/pve/nas/shared/secrets/wireguard` | `var/lib/secrets/nixvpn` | `rw` | WireGuard server private/public keys |
+| `nixidm` | `/mnt/pve/nas/shared/secrets/kanidm` | `var/lib/secrets/kanidm` | `rw` | `idm-admin-password` for the provision hook |
+| `nixidm` | `/mnt/pve/nas/shared/secrets/oauth2` | `var/lib/secrets/oauth2` | `rw` | Provisions **all** OAuth2 client secrets (sole writer) |
+| `nixforgejo` | `/mnt/pve/nas/shared/secrets/oauth2/forgejo` | `var/lib/secrets/oauth2/forgejo` | `ro` | Forgejo OIDC client secret |
+| `nixnginx` | `/mnt/pve/nas/shared/secrets/oauth2/nextcloud` | `var/lib/secrets/oauth2/nextcloud` | `ro` | Nextcloud OIDC client secret |
+| `nixmonitoring` | `/mnt/pve/nas/shared/secrets/oauth2/grafana` | `var/lib/secrets/oauth2/grafana` | `ro` | Grafana OIDC client secret |
+| `nixmatrix` | `/mnt/pve/nas/shared/secrets/oauth2/matrix` | `var/lib/secrets/oauth2/matrix` | `ro` | Matrix Synapse OIDC client secret |
+| `nixforgejo` | `/mnt/pve/nas/shared/secrets/forgejo` | `var/lib/secrets/forgejo` | `rw` | Forgejo DB password |
+| `nixmonitoring` | `/mnt/pve/nas/shared/secrets/grafana` | `var/lib/secrets/grafana` | `rw` | Grafana admin password, secret key |
+| `nixopenwebui` | `/mnt/pve/nas/shared/secrets/open-webui` | `var/lib/secrets/open-webui` | `rw` | Open WebUI env (LLM URLs, PKCE client) |
+| `nixmatrix` | `/mnt/pve/nas/shared/secrets/matrix` | `var/lib/secrets/matrix` | `rw` | Synapse `secrets.yaml` (DB pw, OIDC config) |
+| `nixvaultwarden` | `/mnt/pve/nas/shared/secrets/vaultwarden` | `var/lib/secrets/vaultwarden` | `rw` | Vaultwarden env (DB url, admin token) |
+| `nixwikijs` | `/mnt/pve/nas/shared/secrets/wikijs` | `var/lib/secrets/wikijs` | `rw` | Wiki.js env (DB password) |
+| `nixnsd` | `/mnt/pve/nas/shared/secrets/nsd` | `var/lib/secrets/nsd` | `rw` | NSD TSIG sync key |
+| `nixnginx` | `/mnt/pve/nas/shared/secrets/nginx` | `var/lib/secrets/nginx` | `ro` | Nextcloud/Roundcube DB pws, LDAP config |
+
+Example `lxc.mount.entry` lines (one per row above):
+```ini
+# Per-service secrets
+lxc.mount.entry: /mnt/pve/nas/shared/secrets/forgejo var/lib/secrets/forgejo none bind,rw 0 0
+# Shared SSL certificates
+lxc.mount.entry: /mnt/pve/nas/shared/secrets/ssl var/lib/secrets/ssl none bind,ro 0 0
+# Shared OAuth2 client secrets — nixidm gets the parent (rw), consumers get their own subdir (ro)
+lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2 var/lib/secrets/oauth2 none bind,rw 0 0
+lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2/forgejo var/lib/secrets/oauth2/forgejo none bind,ro 0 0
+```
+
+#### Shared SSL Certificates
+`nixnsd` runs ACME via DNS-01 challenge and writes the acquired wildcard
+certificates to `/var/lib/secrets/ssl/<domain>/` (`fullchain.pem` and
+`key.pem`). `nixnginx` and `nixidm` read them read-only from the same NAS
+path (see the table above).
 
 #### Shared OAuth2 client secrets
 Each non-public OAuth2/OIDC client's basic secret lives in its own directory on
@@ -139,44 +169,6 @@ copy/sync step is required.
 ├── grafana/secret
 └── matrix/secret
 ```
-
-Add one `lxc.mount.entry` per container in `/etc/pve/lxc/<VMID>.conf`:
-
-| Container | Host path | Mount dest | Mode |
-| :--- | :--- | :--- | :--- |
-| `nixidm` (provisions all clients) | `/mnt/pve/nas/shared/secrets/oauth2` | `var/lib/secrets/oauth2` | `rw` |
-| `nixforgejo` | `/mnt/pve/nas/shared/secrets/oauth2/forgejo` | `var/lib/secrets/oauth2/forgejo` | `ro` |
-| `nixnginx` (nextcloud) | `/mnt/pve/nas/shared/secrets/oauth2/nextcloud` | `var/lib/secrets/oauth2/nextcloud` | `ro` |
-| `nixmonitoring` (grafana) | `/mnt/pve/nas/shared/secrets/oauth2/grafana` | `var/lib/secrets/oauth2/grafana` | `ro` |
-| `nixmatrix` | `/mnt/pve/nas/shared/secrets/oauth2/matrix` | `var/lib/secrets/oauth2/matrix` | `ro` |
-
-Example entries:
-```ini
-# nixidm (read-write — provisioning hook writes the secret here)
-lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2 var/lib/secrets/oauth2 none bind,rw 0 0
-# nixforgejo (read-only — only sees its own client)
-lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2/forgejo var/lib/secrets/oauth2/forgejo none bind,ro 0 0
-```
-
-#### Shared SSL Certificates Mount Setup
-To handle automated SSL certificate acquisition dynamically:
-1. `nixnsd` runs ACME via DNS-01 challenge and writes the acquired wildcard certificates to `/var/lib/secrets/ssl/`.
-2. The renewed certificates (`fullchain.pem` and `key.pem`) are saved in the domain's subfolder (e.g., `/var/lib/secrets/ssl/minnecker.com/`).
-3. Services like Nginx and Kanidm read the `fullchain.pem` and `key.pem` files directly from this directory.
-
-Configure the mounts by adding these lines to the LXC container configuration files on the Proxmox host (`/etc/pve/lxc/<VMID>.conf`):
-* **nixnsd** (Primary nameserver, needs **read-write** access to save new/renewed certificates):
-  ```ini
-  lxc.mount.entry: /mnt/pve/nas/shared/secrets/ssl var/lib/secrets/ssl none bind,rw 0 0
-  ```
-* **nixnginx** (Reverse proxy, needs **read-only** access):
-  ```ini
-  lxc.mount.entry: /mnt/pve/nas/shared/secrets/ssl var/lib/secrets/ssl none bind,ro 0 0
-  ```
-* **nixidm** (Identity Manager, needs **read-only** access):
-  ```ini
-  lxc.mount.entry: /mnt/pve/nas/shared/secrets/ssl var/lib/secrets/ssl none bind,ro 0 0
-  ```
 
 
 On the guest container, create the local mount point directory by setting a variable first:

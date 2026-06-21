@@ -2,6 +2,33 @@
 { config, pkgs, lib, ... }:
 
 {
+  # Auto-provision the per-client OAuth2 basic secret files on the shared
+  # rw mount if they are missing. Runs once before kanidm.service so the
+  # files exist before systemd sets up the kanidm unit's read-only bind
+  # mounts derived from basicSecretFile (which resolve at ExecStartPre /
+  # namespace-setup time and abort the unit with 226/NAMESPACE if a source
+  # path is absent on first boot).
+  systemd.services.kanidm-oauth2-secrets = {
+    description = "Provision OAuth2 client basic secret files";
+    wantedBy = [ "kanidm.service" ];
+    before = [ "kanidm.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    path = [ pkgs.openssl ];
+    script = ''
+      for c in forgejo nextcloud grafana matrix; do
+        d=/var/lib/secrets/oauth2/$c
+        mkdir -p "$d"
+        if [ ! -s "$d/secret" ]; then
+          printf '%s' "$(openssl rand -hex 32)" > "$d/secret"
+        fi
+        chmod 600 "$d/secret"
+      done
+    '';
+  };
+
   services.kanidm = {
     # Use the build of kanidm that ships the kanidm-provision tooling used by the
     # declarative provisioning hook below. The versioned package is required

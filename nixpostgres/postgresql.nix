@@ -157,12 +157,15 @@
         fi
         chmod 600 "$f"
         # Re-apply from file on every run so Postgres matches the file exactly.
-        # Use psql variable substitution (:'pw') so the password is never
-        # interpolated into the SQL text — this prevents both SQL injection from
-        # a hand-edited file and password leakage via psql error output.
+        # Feed the statement via a here-doc so psql's :'pw' quoting works
+        # correctly (the -c flag mangles the quoting under shell interpolation).
+        # :'pw' makes psql emit the value as a properly-quoted SQL string
+        # literal, preventing both SQL injection from a hand-edited file and
+        # password leakage via psql error output.
         pw="$(cat "$f")"
-        psql -v ON_ERROR_STOP=1 -v pw="$pw" \
-          -c 'ALTER ROLE "'"$role"'" WITH PASSWORD :'pw';' >/dev/null
+        psql -v ON_ERROR_STOP=1 -v role="$role" -v pw="$pw" <<'SQL' >/dev/null
+ALTER ROLE :"role" WITH PASSWORD :'pw';
+SQL
       done
     '';
   };

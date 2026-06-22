@@ -37,6 +37,11 @@
   # couple this oneshot to wiki-js.service so it re-runs on every (re)start
   # (not just at boot), keeping the tmpfs env file fresh; RemainAfterExit is
   # omitted so each restart re-assembles it.
+  #
+  # The wiki-js module uses DynamicUser, so there is no static system user to
+  # chown the file to. systemd reads EnvironmentFile as root before dropping
+  # privileges, so a root-owned 0600 file is readable by the dynamic service
+  # user via the manager — no chown needed.
   systemd.services.wikijs-secrets = {
     description = "Assemble Wiki.js runtime env from shared DB password";
     wantedBy = [ "wiki-js.service" ];
@@ -51,7 +56,7 @@
       set -euo pipefail
       dbpw_file=/var/lib/secrets/postgres/wikijs/db-password
       out=/run/wikijs/env
-      install -d -m 700 -o wiki-js -g wiki-js /run/wikijs
+      install -d -m 700 /run/wikijs
       if [ ! -s "$dbpw_file" ]; then
         echo "Error: $dbpw_file missing or empty (is the shared Postgres mount attached?)" >&2
         exit 1
@@ -61,7 +66,6 @@
       # even momentarily, before the chmod below.
       ( umask 077; printf 'WIKI_DB_PASS=%s\n' "$dbpw" > "$out" )
       chmod 600 "$out"
-      chown wiki-js:wiki-js "$out"
     '';
   };
 }

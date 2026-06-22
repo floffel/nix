@@ -29,6 +29,10 @@
       service = {
         DISABLE_REGISTRATION = true; 
         ALLOW_ONLY_EXTERNAL_REGISTRATION = true;
+        # Disable the local password login form so only SSO (Kanidm OIDC) can
+        # be used to sign in. Existing local accounts remain but cannot log in
+        # via password; admin access is retained via the CLI/owner account.
+        ENABLE_PASSWORD_SIGNIN_FORM = false;
       };
 
       # Enable Forgejo Actions (CI/CD)

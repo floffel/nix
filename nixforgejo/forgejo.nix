@@ -27,7 +27,13 @@
       };
 
       service = {
-        DISABLE_REGISTRATION = true; 
+        # DISABLE_REGISTRATION must be false for ALLOW_ONLY_EXTERNAL_REGISTRATION
+        # and ENABLE_AUTO_REGISTRATION (oauth2_client) to work — the Gitea/Forgejo
+        # docs state ALLOW_ONLY_EXTERNAL_REGISTRATION only takes effect when
+        # DISABLE_REGISTRATION is false. With it true, the external/OIDC
+        # registration path is blocked and SSO users land on the link_account
+        # page instead of being auto-provisioned.
+        DISABLE_REGISTRATION = false;
         ALLOW_ONLY_EXTERNAL_REGISTRATION = true;
         # Disable the local password login form so only SSO (Kanidm OIDC) can
         # be used to sign in. Existing local accounts remain but cannot log in

@@ -35,12 +35,14 @@
         # page instead of being auto-provisioned.
         DISABLE_REGISTRATION = false;
         ALLOW_ONLY_EXTERNAL_REGISTRATION = true;
-        # Forgejo (unlike Gitea) uses ENABLE_INTERNAL_SIGN_IN to control the
+        # Forgejo (unlike Gitea) uses ENABLE_INTERNAL_SIGNIN to control the
         # password login form, not ENABLE_PASSWORD_SIGNIN_FORM. Setting it to
         # false hides the username/password form so only the Kanidm SSO button
         # remains on the login page. The local admin account can still manage
         # the instance via the CLI (`forgejo admin user ...`).
-        ENABLE_INTERNAL_SIGN_IN = false;
+        # Note: the key is ENABLE_INTERNAL_SIGNIN (no underscore between SIGN
+        # and IN) — Forgejo's setting loader reads exactly that string.
+        ENABLE_INTERNAL_SIGNIN = false;
       };
 
       # Auto-provision Forgejo accounts from Kanidm OIDC claims. Without

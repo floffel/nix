@@ -36,9 +36,12 @@
         DISABLE_REGISTRATION = false;
         ALLOW_ONLY_EXTERNAL_REGISTRATION = true;
         # Disable the local password login form so only SSO (Kanidm OIDC) can
-        # be used to sign in. Existing local accounts remain but cannot log in
-        # via password; admin access is retained via the CLI/owner account.
+        # be used to sign in. ENABLE_BASIC_AUTHENTICATION must also be false
+        # to completely disable password-based auth (otherwise the form may
+        # still appear). The local admin account can still manage the instance
+        # via the CLI (`forgejo admin user ...`).
         ENABLE_PASSWORD_SIGNIN_FORM = false;
+        ENABLE_BASIC_AUTHENTICATION = false;
       };
 
       # Auto-provision Forgejo accounts from Kanidm OIDC claims. Without

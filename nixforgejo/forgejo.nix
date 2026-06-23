@@ -35,6 +35,20 @@
         ENABLE_PASSWORD_SIGNIN_FORM = false;
       };
 
+      # Auto-provision Forgejo accounts from Kanidm OIDC claims. Without
+      # ENABLE_AUTO_REGISTRATION a first-time SSO user lands on a blank
+      # "complete account" page because no local user exists yet. With it on,
+      # Forgejo creates the account automatically from the returned claims.
+      # USERNAME = userid uses the OIDC `sub` claim (always present, unique,
+      # stable) as the local username — Kanidm's profile scope returns `name`
+      # but not `nickname`/`preferred_username`, so the Gitea/Forgejo default
+      # (`nickname`) yields an empty username.
+      oauth2_client = {
+        ENABLE_AUTO_REGISTRATION = true;
+        USERNAME = "userid";
+        UPDATE_AVATAR = false;
+      };
+
       # Enable Forgejo Actions (CI/CD)
       actions = {
         ENABLED = true;

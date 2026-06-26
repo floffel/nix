@@ -19,6 +19,9 @@
           bind_addresses = [ "0.0.0.0" ];
           type = "http";
           tls = false;
+          # Trust X-Forwarded-For from the nixnginx reverse proxy so Synapse
+          # logs and tracks the real client IP instead of the proxy address.
+          x_forwarded = true;
           resources = [
             {
               names = [ "client" ];

@@ -21,7 +21,12 @@
         compatibility_level = "3.10";
         recipient_delimiter = "+.";
         smtpd_banner = "$myhostname ESMTP";
-        smtpd_authorized_xclient_hosts = "172.16.16.95";
+        # Authorize the nginx mail proxy (nixnginx, 10.20.20.14 on the LXC
+        # mgmt LAN) to issue XCLIENT so Postfix learns the real client IP/port
+        # for logging, Received headers and policy checks instead of the proxy
+        # address. Without this the XCLIENT command is rejected and Postfix
+        # sees only nginx's IP.
+        smtpd_authorized_xclient_hosts = "10.20.20.14";
 
         local_destination_concurrency_limit = "10";
         default_destination_concurrency_limit = "20";
@@ -100,8 +105,12 @@
       auth_allow_cleartext = true;
       auth_mechanisms = [ "plain" "login" ];
 
-      haproxy_trusted_networks = [ "172.16.16.3/24" "fd0c:dead:beef::16:3/64" ];
-      login_trusted_networks = [ "172.16.16.2/24" "fd0c:dead:beef::16:2/64" ];
+      # nginx (nixnginx) reaches this server from 10.20.20.14 / fd01::14 on the
+      # LXC mgmt LAN (see auth.js backend host 10.20.20.13). Trust it for both
+      # HAProxy/PROXY-protocol (IMAP real client IP) and login-Trusted-Networks
+      # (used by some auth flows) so the real client IP is recorded.
+      haproxy_trusted_networks = [ "10.20.20.14/32" "fd01::14/128" ];
+      login_trusted_networks = [ "10.20.20.14/32" "fd01::14/128" ];
 
       lda_mailbox_autocreate = true;
       lda_mailbox_autosubscribe = true;
@@ -149,7 +158,10 @@
 
       "service imap-login" = {
         "inet_listener imap" = { port = 143; };
-        "inet_listener imap_haproxy" = { port = 10143; };
+        # Listener used by the nginx mail proxy (PROXY protocol). auth.js
+        # points IMAP here (port 10143); haproxy is enabled so Dovecot reads
+        # the real client IP from the PROXY header sent by nginx.
+        "inet_listener imap_haproxy" = { port = 10143; haproxy = true; };
       };
 
       "service pop3-login" = { "inet_listener pop3" = { port = 110; }; };

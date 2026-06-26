@@ -9,6 +9,9 @@
     settings = {
       port = 3000;
       bindIP = "0.0.0.0";
+      # Trust X-Forwarded-For from the nixnginx reverse proxy so Wiki.js
+      # records the real client IP instead of the proxy address.
+      trustProxy = true;
       db = {
         type = "postgres";
         host = "nixpostgres";

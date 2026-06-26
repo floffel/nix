@@ -24,6 +24,15 @@
         ROOT_URL = "https://git.minnecker.com/";
         HTTP_ADDR = "0.0.0.0";
         HTTP_PORT = 3000;
+
+        # Forgejo sits behind the nixnginx reverse proxy. Trust the forwarded
+        # client-IP headers it sends so logs, rate limiting and audit entries
+        # show the real remote client instead of the proxy's address.
+        # REVERSE_PROXY_TRUSTED_PROXIES accepts CIDR ranges; nginx reaches us
+        # from both the service LAN (172.16.16.3) and the LXC mgmt LAN
+        # (10.20.20.14), plus their IPv6 link addresses.
+        REVERSE_PROXY_LIMITER = true;
+        REVERSE_PROXY_TRUSTED_PROXIES = "172.16.16.3/32, 10.20.20.14/32, fd0c:dead:beef::16:3/128, fd01::14/128, 127.0.0.1/32";
       };
 
       service = {

@@ -170,6 +170,14 @@ in
         sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         locations."/" = {
           proxyPass = "http://forgejo";
+          proxyWebsockets = true;
+          extraConfig = ''
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $host;
+          '';
         };
         extraConfig = ''
           charset utf-8;
@@ -544,6 +552,10 @@ in
           listen [::]:993 ssl ipv6only=off;
           protocol imap;
           imap_auth login plain;
+          # Speak PROXY protocol to Dovecot so it learns the real client IP
+          # for login/audit logging. The matching Dovecot listener
+          # (imap_haproxy on port 10143, see auth.js) has haproxy enabled.
+          proxy_protocol on;
         }
       }
     '';

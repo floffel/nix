@@ -8,8 +8,9 @@ var options =  {
   server: {
     imap: [{
       host: '10.20.20.13',
-      //port: '587',
-      port: '143',
+      // Route IMAP to the Dovecot listener that has haproxy (PROXY protocol)
+      // enabled, so Dovecot sees the real client IP conveyed by nginx.
+      port: '10143',
       auth: ['plain', 'login'],
     }],
     pop3: [{

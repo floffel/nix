@@ -629,6 +629,19 @@ in
     
     settings = {
       overwriteprotocol = "https";
+      overwrite.cli.url = "https://cloud.minnecker.com/";
+
+      # nixnginx terminates TLS directly in front of php-fpm.
+      # Declare the local proxy as trusted, and crucially set
+      # forwarded_for_headers to an EMPTY array. Nextcloud otherwise defaults
+      # to reading HTTP_X_FORWARDED_FOR from trusted proxies; since this edge
+      # does not append its own X-Forwarded-For, that default would let
+      # clients spoof the IP Nextcloud sees (ban evasion) or collapse many
+      # clients onto one value — the false "too many failed attempts" lockouts
+      # Nextcloud suffered in the past. With an empty array, brute-force
+      # protection and the audit log key solely off REMOTE_ADDR.
+      trusted_proxies = [ "127.0.0.1" "::1" ];
+      forwarded_for_headers = [];
     };
     
     configureRedis = true;

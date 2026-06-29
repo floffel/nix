@@ -653,39 +653,69 @@ in
     };
   };
 
-  # Auto-configure Nextcloud OIDC client registration on service start
+  # Auto-configure Nextcloud OIDC client registration on service start.
+  #
+  # Registration fetches the OIDC discovery document from idm.minnecker.com,
+  # which is only reachable once networking + DNS are fully up. The service is
+  # therefore allowed to retry: a failed registration exits non-zero and
+  # systemd restarts it (Restart=on-failure) until it succeeds, at which
+  # point the idempotency guard skips re-registration on later boots.
   systemd.services.nextcloud-setup-oidc = {
     description = "Configure Nextcloud OIDC Provider";
-    after = [ "nextcloud-setup.service" ];
+    after = [ "network-online.target" "nextcloud-setup.service" ];
+    wants = [ "network-online.target" ];
     wantedBy = [ "multi-user.target" ];
+
+    startLimitBurst = 10;
+    startLimitIntervalSec = 300;
+
     serviceConfig = {
       Type = "oneshot";
       User = "root";
       Group = "root";
-      ExecStart = pkgs.writeShellScript "nextcloud-setup-oidc" ''
-        occ="${config.services.nextcloud.occ}/bin/nextcloud-occ"
-        
-        # Ensure user_oidc app is enabled
-        if ! $occ app:list | grep -q "user_oidc"; then
-          $occ app:enable user_oidc || true
-        fi
-
-        # Check if the "kanidm" provider is already registered
-        if ! $occ user_oidc:provider-list | grep -q "kanidm"; then
-          if [ -f /var/lib/secrets/oauth2/nextcloud/secret ]; then
-            client_secret=$(cat /var/lib/secrets/oauth2/nextcloud/secret)
-            # Add provider but do not crash the service if Kanidm is temporarily unreachable
-            $occ user_oidc:provider-add \
-              --client-id="nextcloud" \
-              --client-secret="$client_secret" \
-              --discovery-url="https://idm.minnecker.com/oauth2/openid/nextcloud/.well-known/openid-configuration" \
-              kanidm || echo "Warning: Failed to register Kanidm OIDC provider (is nixidm reachable?)"
-          else
-            echo "Warning: /var/lib/secrets/oauth2/nextcloud/secret not found. Skipping OIDC registration."
-          fi
-        fi
-      '';
+      Restart = "on-failure";
+      RestartSec = 10;
     };
+
+    serviceConfig.ExecStart = pkgs.writeShellScript "nextcloud-setup-oidc" ''
+      set -euo pipefail
+      occ="${config.services.nextcloud.occ}/bin/nextcloud-occ"
+      discovery="https://idm.minnecker.com/oauth2/openid/nextcloud/.well-known/openid-configuration"
+
+      # Ensure user_oidc app is enabled
+      if ! $occ app:list | grep -q "user_oidc"; then
+        $occ app:enable user_oidc
+      fi
+
+      # Idempotency guard: nothing to do if the provider already exists.
+      # (user_oidc:provider with no args lists all configured providers.)
+      if $occ user_oidc:provider | grep -q "kanidm"; then
+        echo "Kanidm OIDC provider already registered; nothing to do."
+        exit 0
+      fi
+
+      if [ ! -f /var/lib/secrets/oauth2/nextcloud/secret ]; then
+        echo "Error: /var/lib/secrets/oauth2/nextcloud/secret not found. Retrying."
+        exit 1
+      fi
+
+      # Fail (and thus trigger a restart) if the IdP discovery endpoint is
+      # not yet reachable — e.g. during early boot before DNS/networking settle.
+      if ! curl -fsS --max-time 10 "$discovery" >/dev/null; then
+        echo "Error: IdM discovery endpoint unreachable at $discovery. Retrying."
+        exit 1
+      fi
+
+      client_secret=$(cat /var/lib/secrets/oauth2/nextcloud/secret)
+      # user_oidc's occ command is `user_oidc:provider <identifier>` with
+      # --clientid / --clientsecret / --discoveryuri options (not provider-add).
+      $occ user_oidc:provider kanidm \
+        --clientid="nextcloud" \
+        --clientsecret="$client_secret" \
+        --discoveryuri="$discovery" \
+        --group-provisioning=1
+      echo "Kanidm OIDC provider registered successfully."
+    '';
   };
 
   # Auto-generate the .pgpass file for Roundcube in its writeable StateDirectory

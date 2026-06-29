@@ -690,6 +690,11 @@ in
         $occ app:enable user_oidc
       fi
 
+      # Make OIDC the default login method: hides the local login form and
+      # auto-redirects to the IdP. Admins can still reach the native form via
+      # https://cloud.minnecker.com/login?direct=1 as an escape hatch.
+      $occ config:app:set --value=0 user_oidc allow_multiple_user_backends
+
       # Idempotency guard: nothing to do if the provider already exists.
       # (user_oidc:provider with no args lists all configured providers.)
       if $occ user_oidc:provider | grep -q "kanidm"; then

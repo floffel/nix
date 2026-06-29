@@ -666,6 +666,9 @@ in
     wants = [ "network-online.target" ];
     wantedBy = [ "multi-user.target" ];
 
+    # curl is used to probe the IdP discovery endpoint before registration.
+    path = [ pkgs.curl ];
+
     startLimitBurst = 10;
     startLimitIntervalSec = 300;
 

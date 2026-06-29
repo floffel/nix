@@ -136,7 +136,15 @@
 
         nextcloud = {
           displayName = "Nextcloud Cloud";
-          originUrl = "https://cloud.minnecker.com/index.php/apps/user_oidc/code";
+          # Nextcloud's user_oidc builds the redirect_uri via its URL
+          # generator, which omits index.php when pretty URLs are active
+          # (https://cloud.minnecker.com/apps/user_oidc/code) but includes
+          # it otherwise (.../index.php/apps/user_oidc/code). Kanidm
+          # requires an exact match, so both forms are declared.
+          originUrl = [
+            "https://cloud.minnecker.com/apps/user_oidc/code"
+            "https://cloud.minnecker.com/index.php/apps/user_oidc/code"
+          ];
           originLanding = "https://cloud.minnecker.com/";
           basicSecretFile = "/var/lib/secrets/oauth2/nextcloud/secret";
           # user_oidc maps a `groups` claim onto local Nextcloud groups; a

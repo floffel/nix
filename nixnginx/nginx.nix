@@ -642,6 +642,17 @@ in
       # protection and the audit log key solely off REMOTE_ADDR.
       trusted_proxies = [ "127.0.0.1" "::1" ];
       forwarded_for_headers = [];
+
+      # idm.minnecker.com resolves to this host's own IP (10.20.20.14) via
+      # networking.extraHosts, to dodge the hairpin-NAT self-reference
+      # described in configuration.nix. Nextcloud's Guzzle HTTP client
+      # (used by user_oidc to fetch the OIDC discovery/JWKS documents)
+      # treats any RFC1918 destination as a private address and blocks it
+      # (OC\Http\Client\DnsPinMiddleware → "violates local access rules"),
+      # which surfaces at login as "Could not reach the provider". This
+      # flag explicitly permits local-remote calls so the OIDC flow can
+      # reach the IdP through the local nginx listener.
+      allow_local_remote_servers = true;
     };
     
     configureRedis = true;

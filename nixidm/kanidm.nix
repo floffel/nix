@@ -143,7 +143,7 @@
         exit 1
       fi
       # A valid JWS token starts with "eyJ" (base64 for '{"')
-      if [ "${TOKEN#"eyJ"}" = "$TOKEN" ]; then
+      if [ "''${TOKEN#eyJ}" = "$TOKEN" ]; then
         echo "ERROR: generated token is not a valid JWS: $TOKEN" >&2
         exit 1
       fi

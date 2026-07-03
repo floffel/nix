@@ -74,8 +74,8 @@
       # Auth step 1: initialise session as idm_admin (issue = Token)
       RESP=$(curl -sk -c "$COOKIE_JAR" -X POST "$API/v1/auth" \
         -H "Content-Type: application/json" \
-        -d '{"step":{"Init2":{"username":"idm_admin","issue":"Token","privileged":false}}}')
-      if ! echo "$RESP" | jq -e '.state.Choose' >/dev/null 2>&1; then
+        -d '{"step":{"init2":{"username":"idm_admin","issue":"token","privileged":false}}}')
+      if ! echo "$RESP" | jq -e '.state.choose' >/dev/null 2>&1; then
         echo "ERROR: auth init failed: $RESP" >&2
         exit 1
       fi
@@ -83,13 +83,13 @@
       # Auth step 2: begin password mechanism
       curl -sk -b "$COOKIE_JAR" -X POST "$API/v1/auth" \
         -H "Content-Type: application/json" \
-        -d '{"step":{"Begin":"Password"}}' >/dev/null
+        -d '{"step":{"begin":"password"}}' >/dev/null
 
       # Auth step 3: provide password, extract bearer token
       RESP=$(curl -sk -b "$COOKIE_JAR" -X POST "$API/v1/auth" \
         -H "Content-Type: application/json" \
-        -d "{\"step\":{\"Cred\":{\"Password\":\"$IDM_PASSWORD\"}}}")
-      BEARER=$(echo "$RESP" | jq -r '.state.Success // empty')
+        -d "{\"step\":{\"cred\":{\"password\":\"$IDM_PASSWORD\"}}}")
+      BEARER=$(echo "$RESP" | jq -r '.state.success // empty')
       if [ -z "$BEARER" ]; then
         echo "ERROR: password auth failed: $RESP" >&2
         exit 1

@@ -318,7 +318,7 @@ in
           index = "index.php";
           extraConfig = "try_files $uri $uri/ /index.php?$args;";
         };
-        locations."~ \\.php$" = {
+        locations."~ \\.php(/.*)?$" = {
           extraConfig = ''
             fastcgi_pass unix:${config.services.phpfpm.pools.roundcube.socket};
             fastcgi_index index.php;

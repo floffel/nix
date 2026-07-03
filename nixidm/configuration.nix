@@ -22,6 +22,8 @@
   };
   environment.systemPackages = with pkgs; [
     kanidm_1_10
+    curl
+    jq
   ];
 
   # CLI client config for manual administration (kanidm login -D admin, etc.).

@@ -5,6 +5,82 @@
     "d /var/vmail 0770 dovecot dovecot - -"
   ];
 
+  # Generate Dovecot + Postfix LDAP config files from the shared mail
+  # token (provisioned by nixidm's kanidm-mail-token service on every
+  # Kanidm start).  Runs before dovecot and postfix so the files exist
+  # at service startup.  The token file lives on the shared NAS mount
+  # and is refreshed automatically; this service just renders the
+  # per-consumer config files from it.
+  systemd.services.mail-ldap-config = {
+    description = "Generate Dovecot/Postfix LDAP config from shared mail token";
+    wantedBy = [ "dovecot2.service" "postfix.service" ];
+    before = [ "dovecot2.service" "postfix.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      set -euo pipefail
+
+      TOKEN_FILE=/var/lib/secrets/mail/ldap-token
+      DEST=/var/lib/secrets/mail
+
+      # Wait for the token file to exist (nixidm may not have run yet
+      # on a fresh boot after a Kanidm DB restore)
+      for i in $(seq 1 30); do
+        if [ -s "$TOKEN_FILE" ]; then
+          break
+        fi
+        echo "Waiting for mail LDAP token..."
+        sleep 2
+      done
+      if [ ! -s "$TOKEN_FILE" ]; then
+        echo "ERROR: $TOKEN_FILE not found — start nixidm first." >&2
+        exit 1
+      fi
+
+      TOKEN=$(cat "$TOKEN_FILE")
+      mkdir -p "$DEST/dovecot" "$DEST/postfix"
+
+      # 1. Dovecot LDAP password file
+      printf '%s' "$TOKEN" > "$DEST/dovecot/ldap-password.txt"
+      chmod 600 "$DEST/dovecot/ldap-password.txt"
+      if id dovecot >/dev/null 2>&1; then
+        chown "$(id -u dovecot):$(id -g dovecot)" "$DEST/dovecot/ldap-password.txt"
+      fi
+
+      # 2. Postfix LDAP query configuration files
+      write_cf() {
+        local name="$1" filter="$2" attr="$3" format="$4"
+        {
+          echo "server_host = ldaps://ldap:636"
+          echo "search_base = ou=people,dc=minnecker,dc=com"
+          echo "query_filter = $filter"
+          echo "result_attribute = $attr"
+          [ -n "$format" ] && [ "$format" != "-" ] && echo "result_format = $format"
+          echo "bind = yes"
+          echo "bind_dn = dn=token"
+          echo "bind_pw = $TOKEN"
+          echo "version = 3"
+          echo "tls_require_cert = no"
+        } > "$DEST/postfix/$name"
+        chmod 600 "$DEST/postfix/$name"
+      }
+
+      write_cf ldap-recipients.cf  '(&(mail=%s)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))' mail -
+      write_cf ldap-aliases.cf     '(&(mail=%s)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))' uid '%s@minnecker.com'
+      write_cf ldap-senders.cf      '(&(mail=%s)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))' uid -
+      write_cf ldap-catchalls.cf   '(&(mail=*@%d)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))' uid '%s@minnecker.com'
+      write_cf ldap-domains.cf      '(mail=*@%s)' mail -
+
+      if id postfix >/dev/null 2>&1; then
+        chown -R "$(id -u postfix):$(id -g postfix)" "$DEST/postfix"
+      fi
+
+      echo "Dovecot/Postfix LDAP configs generated."
+    '';
+  };
+
   systemd.services.dovecot.environment = {
     LDAPTLS_REQCERT = "never";
   };

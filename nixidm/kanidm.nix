@@ -29,6 +29,129 @@
     '';
   };
 
+  # Auto-generate the mail LDAP API token on every Kanidm (re)start and
+  # write it — plus the pre-rendered nginx ldap.conf — to the shared mail
+  # secrets mount.  Dovecot, Postfix (on nixmail) and nginx-auth-ldap (on
+  # nixnginx) all bind with `dn=token` using this JWS token; without it
+  # every mail login fails with "Temporary authentication failure".
+  #
+  # Kanidm signs API tokens with key material stored in its database.  When
+  # the DB is restored or recreated the old keys vanish and every
+  # previously-issued token becomes invalid (KP0022KeyObjectJwsNotAssociated).
+  # Regenerating on every Kanidm start guarantees consumers always have a
+  # token signed by the current key set.  Old tokens with the same label are
+  # destroyed first to avoid accumulating stale entries.
+  #
+  # The script authenticates via the REST API (curl + jq) using the idm_admin
+  # password from the shared kanidm secrets mount.  It also creates the
+  # `mailservice` service account if it is missing (e.g. after a DB restore).
+  systemd.services.kanidm-mail-token = {
+    description = "Generate mail LDAP API token and consumer configs";
+    wantedBy = [ "kanidm.service" ];
+    after = [ "kanidm.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    path = [ pkgs.curl pkgs.jq ];
+    script = ''
+      set -euo pipefail
+
+      IDM_PASSWORD=$(cat /var/lib/secrets/kanidm/idm-admin-password)
+      COOKIE_JAR=$(mktemp)
+      trap 'rm -f "$COOKIE_JAR"' EXIT
+      API="https://localhost:8443"
+
+      # Wait for Kanidm to be ready
+      echo "Waiting for Kanidm to be ready..."
+      for i in $(seq 1 30); do
+        if curl -sk "$API/v1/health/live" >/dev/null 2>&1; then
+          break
+        fi
+        sleep 2
+      done
+
+      # Auth step 1: initialise session as idm_admin (issue = Token)
+      RESP=$(curl -sk -c "$COOKIE_JAR" -X POST "$API/v1/auth" \
+        -H "Content-Type: application/json" \
+        -d '{"step":{"Init2":{"username":"idm_admin","issue":"Token","privileged":false}}}')
+      if ! echo "$RESP" | jq -e '.state.Choose' >/dev/null 2>&1; then
+        echo "ERROR: auth init failed: $RESP" >&2
+        exit 1
+      fi
+
+      # Auth step 2: begin password mechanism
+      curl -sk -b "$COOKIE_JAR" -X POST "$API/v1/auth" \
+        -H "Content-Type: application/json" \
+        -d '{"step":{"Begin":"Password"}}' >/dev/null
+
+      # Auth step 3: provide password, extract bearer token
+      RESP=$(curl -sk -b "$COOKIE_JAR" -X POST "$API/v1/auth" \
+        -H "Content-Type: application/json" \
+        -d "{\"step\":{\"Cred\":{\"Password\":\"$IDM_PASSWORD\"}}}")
+      BEARER=$(echo "$RESP" | jq -r '.state.Success // empty')
+      if [ -z "$BEARER" ]; then
+        echo "ERROR: password auth failed: $RESP" >&2
+        exit 1
+      fi
+      echo "Authenticated as idm_admin."
+
+      # Ensure the mailservice service account exists (missing after DB restore)
+      HTTP_CODE=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+        "$API/v1/service_account/mailservice" -o /dev/null -w '%{http_code}')
+      if [ "$HTTP_CODE" = "404" ]; then
+        echo "Creating mailservice service account..."
+        curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+          -X POST "$API/v1/service_account" \
+          -H "Content-Type: application/json" \
+          -d '{"attrs":{"name":["mailservice"],"displayname":["Mail Service"],"entry_managed_by":["idm_admins"]}}' \
+          >/dev/null
+      fi
+
+      # Destroy old tokens with label "mail_token" to avoid accumulation
+      echo "Destroying old mail_token tokens..."
+      TOKENS=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+        "$API/v1/service_account/mailservice/_api_token")
+      for tid in $(echo "$TOKENS" | jq -r '.[] | select(.label=="mail_token") | .token_id'); do
+        echo "  destroying $tid"
+        curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+          -X DELETE "$API/v1/service_account/mailservice/_api_token/$tid" \
+          -d '[]' >/dev/null
+      done
+
+      # Generate a fresh read-only API token
+      echo "Generating new mail_token..."
+      RESP=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+        -X POST "$API/v1/service_account/mailservice/_api_token" \
+        -H "Content-Type: application/json" \
+        -d '{"label":"mail_token","expiry":null,"read_write":false,"compact":false}')
+      TOKEN=$(echo "$RESP" | jq -r '.')
+      if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+        echo "ERROR: token generation failed: $RESP" >&2
+        exit 1
+      fi
+      echo "Token generated."
+
+      # Write the raw token (consumed by nixmail's mail-ldap-config service)
+      mkdir -p /var/lib/secrets/mail
+      printf '%s' "$TOKEN" > /var/lib/secrets/mail/ldap-token
+      chmod 600 /var/lib/secrets/mail/ldap-token
+
+      # Write the pre-rendered nginx ldap.conf (consumed directly by nixnginx)
+      cat > /var/lib/secrets/mail/nginx-ldap.conf <<EOF
+      ldap_server mail_users {
+        url "ldaps://ldap:636/ou=people,dc=minnecker,dc=com?uid?sub?(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com)";
+        binddn "dn=token";
+        binddn_passwd "$TOKEN";
+        require valid_user;
+      }
+      EOF
+      chmod 600 /var/lib/secrets/mail/nginx-ldap.conf
+
+      echo "Mail LDAP token and nginx ldap.conf written to shared mount."
+    '';
+  };
+
   services.kanidm = {
     # Use the build of kanidm that ships the kanidm-provision tooling used by the
     # declarative provisioning hook below. The versioned package is required

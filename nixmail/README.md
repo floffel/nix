@@ -67,22 +67,36 @@ kanidm -D idm_admin group add-members mail_users john jane
 
 ## 🚀 Mail Server Secrets Setup
 
-To generate the secure LDAP query files and authenticate Dovecot/Postfix:
+The Dovecot/Postfix LDAP configuration files are **auto-provisioned** — no
+manual token generation or `setup-mail-secrets.sh` step is required.
 
-1. **Generate service account API token (Mail Search Token):**
-   In your Kanidm shell, generate a token for the mail service account. This API token acts as the **Mail Search Token / LDAP Bind Token** used by Postfix, Dovecot, and Nginx to perform lookups:
-   ```bash
-   kanidm -D idm_admin service-account api-token generate mailservice mail_token
-   ```
+1. **Token generation (automatic):**
+   `nixidm` generates a fresh `mail_token` API token on every Kanidm start
+   via the `kanidm-mail-token` systemd service (REST API auth as `idm_admin`).
+   The token is written to `/var/lib/secrets/mail/ldap-token` on the shared
+   NAS mount. Old tokens with the same label are destroyed first.
 
-2. **Initialize configuration files on `nixmail`:**
-   Log into the `nixmail` server, pull the latest git changes, and run the helper script with the generated API token:
-   ```bash
-   # Run the script (this generates LDAP maps inside /var/lib/secrets/mail/)
-   ./scratch/setup-mail-secrets.sh "<API_TOKEN>"
-   ```
+2. **Config rendering (automatic):**
+   On `nixmail`, the `mail-ldap-config` systemd service runs before Dovecot
+   and Postfix. It reads the shared token and renders:
+   - `/var/lib/secrets/mail/dovecot/ldap-password.txt`
+   - `/var/lib/secrets/mail/postfix/ldap-*.cf` (recipients, aliases, senders, catchalls, domains)
 
-3. **Rebuild the NixOS configuration:**
+   On `nixnginx`, the pre-rendered `nginx-ldap.conf` is read directly from
+   the shared mount.
+
+3. **Proxmox mounts required:**
+   - `nixidm`: `/mnt/pve/nas/shared/secrets/mail` → `var/lib/secrets/mail` (`rw`)
+   - `nixmail`: `/mnt/pve/nas/shared/secrets/mail` → `var/lib/secrets/mail` (`rw`)
+   - `nixnginx`: `/mnt/pve/nas/shared/secrets/mail` → `var/lib/secrets/mail` (`ro`)
+
+   See the root README's "Shared mail LDAP token" section for details.
+
+4. **Rebuild:**
    ```bash
    nixos-rebuild switch
    ```
+
+> **Note:** The `scratch/setup-mail-secrets.sh` script is retained as a
+> fallback for manual recovery but is no longer needed during normal operation.
+

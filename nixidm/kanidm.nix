@@ -38,11 +38,13 @@
     server = {
       enable = true;
       settings = {
-        # Bind the HTTP/HTTPS/SSO server to port 8443
-        bindaddress = "0.0.0.0:8443";
+        # Bind the HTTP/HTTPS/SSO server to port 8443. [::] dual-stacks on
+        # Linux, covering both IPv4 and IPv6 (hosts.nix maps the short names
+        # to both 10.20.20.15 and fd01::15, so IPv6 must be served too).
+        bindaddress = "[::]:8443";
 
-        # Bind the read-only LDAP compatibility server to port 636
-        ldapbindaddress = "0.0.0.0:636";
+        # Bind the read-only LDAP compatibility server to port 636 (dual-stack).
+        ldapbindaddress = "[::]:636";
 
         # The domain and origin of the identity manager
         domain = "minnecker.com";

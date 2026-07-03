@@ -23,7 +23,7 @@ To ensure no secret keys or passwords end up in the world-readable Nix store (`/
 *   **Nginx-Specific Secrets**: Placed or mounted in `/var/lib/secrets/nginx/` inside the container:
 
 ### 2. LDAP Configuration
-*   `/var/lib/secrets/mail-ldap/nginx-ldap.conf`: The LDAP server configuration block, including the bindDN and API token password. This file is **auto-generated** by nixidm's `kanidm-mail-token` service on every Kanidm start and shared via the isolated read-only `mail-ldap` secrets mount (a subdir of the mail secrets, so nixnginx never sees DKIM/Dovecot/Postfix secrets). No manual setup is required. See the root README's "Shared mail LDAP token" section for details.
+*   `/var/lib/secrets/mail/ldap/nginx-ldap.conf`: The LDAP server configuration block, including the bindDN and API token password. This file is **auto-generated** by nixidm's `kanidm-mail-token` service on every Kanidm start and shared via the isolated read-only `mail/ldap` secrets mount (a subdir of the mail secrets, so nixnginx never sees DKIM/Dovecot/Postfix secrets). No manual setup is required. See the root README's "Shared mail LDAP token" section for details.
 
 ### 3. DH Parameters
 *   `/var/lib/secrets/nginx/dh.param`: The Diffie-Hellman parameters file (copied from `/etc/nginx/dh.param`).

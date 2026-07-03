@@ -86,11 +86,14 @@ manual token generation or `setup-mail-secrets.sh` step is required.
    the shared mount.
 
 3. **Proxmox mounts required:**
-   - `nixidm`: `/mnt/pve/nas/shared/secrets/mail` → `var/lib/secrets/mail` (`rw`)
-   - `nixmail`: `/mnt/pve/nas/shared/secrets/mail` → `var/lib/secrets/mail` (`rw`)
-   - `nixnginx`: `/mnt/pve/nas/shared/secrets/mail` → `var/lib/secrets/mail` (`ro`)
+   - `nixidm`: `/mnt/pve/nas/shared/secrets/mail/ldap` → `var/lib/secrets/mail-ldap` (`rw`) — isolated subdir only
+   - `nixmail`: `/mnt/pve/nas/shared/secrets/mail` → `var/lib/secrets/mail` (`rw`) — full mount (reads `ldap/` subdir, writes dovecot/postfix)
+   - `nixnginx`: `/mnt/pve/nas/shared/secrets/mail/ldap` → `var/lib/secrets/mail-ldap` (`ro`) — isolated subdir only
 
-   See the root README's "Shared mail LDAP token" section for details.
+   The `ldap` subdir must exist on the NAS before the first deploy:
+   ```bash
+   mkdir -p /mnt/pve/nas/shared/secrets/mail/ldap
+   ```
 
 4. **Rebuild:**
    ```bash

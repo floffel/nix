@@ -22,7 +22,7 @@
     script = ''
       set -euo pipefail
 
-      TOKEN_FILE=/var/lib/secrets/mail/ldap-token
+      TOKEN_FILE=/var/lib/secrets/mail/ldap/ldap-token
       DEST=/var/lib/secrets/mail
 
       # Wait for the token file to exist (nixidm may not have run yet

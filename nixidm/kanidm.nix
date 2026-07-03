@@ -132,13 +132,16 @@
       fi
       echo "Token generated."
 
-      # Write the raw token (consumed by nixmail's mail-ldap-config service)
-      mkdir -p /var/lib/secrets/mail
-      printf '%s' "$TOKEN" > /var/lib/secrets/mail/ldap-token
-      chmod 600 /var/lib/secrets/mail/ldap-token
+      # Write the raw token (consumed by nixmail's mail-ldap-config service).
+      # Lives in the ldap/ subdir of the shared mail mount, which nixidm and
+      # nixnginx mount in isolation (ro/rw) so they never see DKIM keys or
+      # Dovecot/Postfix configs that live alongside on nixmail's full mount.
+      mkdir -p /var/lib/secrets/mail-ldap
+      printf '%s' "$TOKEN" > /var/lib/secrets/mail-ldap/ldap-token
+      chmod 600 /var/lib/secrets/mail-ldap/ldap-token
 
       # Write the pre-rendered nginx ldap.conf (consumed directly by nixnginx)
-      cat > /var/lib/secrets/mail/nginx-ldap.conf <<EOF
+      cat > /var/lib/secrets/mail-ldap/nginx-ldap.conf <<EOF
       ldap_server mail_users {
         url "ldaps://ldap:636/ou=people,dc=minnecker,dc=com?uid?sub?(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com)";
         binddn "dn=token";
@@ -146,7 +149,7 @@
         require valid_user;
       }
       EOF
-      chmod 600 /var/lib/secrets/mail/nginx-ldap.conf
+      chmod 600 /var/lib/secrets/mail-ldap/nginx-ldap.conf
 
       echo "Mail LDAP token and nginx ldap.conf written to shared mount."
     '';

@@ -96,10 +96,12 @@
       fi
       echo "Authenticated as idm_admin."
 
-      # Ensure the mailservice service account exists (missing after DB restore)
-      HTTP_CODE=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
-        "$API/v1/service_account/mailservice" -o /dev/null -w '%{http_code}')
-      if [ "$HTTP_CODE" = "404" ]; then
+      # Ensure the mailservice service account exists (missing after DB restore).
+      # The GET endpoint returns 200 + null (not 404) for missing accounts, so
+      # check the body rather than the HTTP status code.
+      RESP=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+        "$API/v1/service_account/mailservice")
+      if [ "$(echo "$RESP" | jq -r '.')" = "null" ] || [ -z "$RESP" ]; then
         echo "Creating mailservice service account..."
         curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
           -X POST "$API/v1/service_account" \
@@ -110,24 +112,39 @@
 
       # Destroy old tokens with label "mail_token" to avoid accumulation
       echo "Destroying old mail_token tokens..."
-      TOKENS=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+      RESP=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
         "$API/v1/service_account/mailservice/_api_token")
-      for tid in $(echo "$TOKENS" | jq -r '.[] | select(.label=="mail_token") | .token_id'); do
-        echo "  destroying $tid"
-        curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
-          -X DELETE "$API/v1/service_account/mailservice/_api_token/$tid" \
-          -d '[]' >/dev/null
-      done
+      # Only iterate if the response is a JSON array (not an error string)
+      if echo "$RESP" | jq -e 'type == "array"' >/dev/null 2>&1; then
+        for tid in $(echo "$RESP" | jq -r '.[] | select(.label=="mail_token") | .token_id'); do
+          echo "  destroying $tid"
+          curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+            -X DELETE "$API/v1/service_account/mailservice/_api_token/$tid" \
+            -d '[]' >/dev/null
+        done
+      fi
 
       # Generate a fresh read-only API token
       echo "Generating new mail_token..."
-      RESP=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+      HTTP_CODE=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
         -X POST "$API/v1/service_account/mailservice/_api_token" \
         -H "Content-Type: application/json" \
-        -d '{"label":"mail_token","expiry":null,"read_write":false,"compact":false}')
+        -d '{"label":"mail_token","expiry":null,"read_write":false,"compact":false}' \
+        -o /tmp/mail-token-resp -w '%{http_code}')
+      RESP=$(cat /tmp/mail-token-resp)
+      rm -f /tmp/mail-token-resp
+      if [ "$HTTP_CODE" != "200" ]; then
+        echo "ERROR: token generation failed (HTTP $HTTP_CODE): $RESP" >&2
+        exit 1
+      fi
       TOKEN=$(echo "$RESP" | jq -r '.')
       if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-        echo "ERROR: token generation failed: $RESP" >&2
+        echo "ERROR: token generation returned empty: $RESP" >&2
+        exit 1
+      fi
+      # A valid JWS token starts with "eyJ" (base64 for '{"')
+      if [ "${TOKEN#"eyJ"}" = "$TOKEN" ]; then
+        echo "ERROR: generated token is not a valid JWS: $TOKEN" >&2
         exit 1
       fi
       echo "Token generated."

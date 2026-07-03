@@ -160,7 +160,7 @@
       # Write the pre-rendered nginx ldap.conf (consumed directly by nixnginx)
       cat > /var/lib/secrets/mail/ldap/nginx-ldap.conf <<EOF
       ldap_server mail_users {
-        url "ldaps://ldap:636/ou=people,dc=minnecker,dc=com?uid?sub?(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com)";
+        url "ldaps://ldap:636/dc=minnecker,dc=com?uid?sub?(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com)";
         binddn "dn=token";
         binddn_passwd "$TOKEN";
         require valid_user;

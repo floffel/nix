@@ -54,7 +54,7 @@
         local name="$1" filter="$2" attr="$3" format="$4"
         {
           echo "server_host = ldaps://ldap:636"
-          echo "search_base = ou=people,dc=minnecker,dc=com"
+          echo "search_base = dc=minnecker,dc=com"
           echo "query_filter = $filter"
           echo "result_attribute = $attr"
           [ -n "$format" ] && [ "$format" != "-" ] && echo "result_format = $format"
@@ -214,7 +214,7 @@
         ldap_uris = "ldaps://ldap";
         ldap_auth_dn = "dn=token";
         ldap_auth_dn_password = "</var/lib/secrets/mail/dovecot/ldap-password.txt";
-        ldap_base = "ou=people,dc=minnecker,dc=com";
+        ldap_base = "dc=minnecker,dc=com";
         ldap_filter = "(&(|(mail=%{user})(uid=%{user}))(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))";
       };
 
@@ -223,7 +223,7 @@
         ldap_uris = "ldaps://ldap";
         ldap_auth_dn = "dn=token";
         ldap_auth_dn_password = "</var/lib/secrets/mail/dovecot/ldap-password.txt";
-        ldap_base = "ou=people,dc=minnecker,dc=com";
+        ldap_base = "dc=minnecker,dc=com";
         ldap_filter = "(&(|(mail=%{user})(uid=%{user}))(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))";
       };
 

@@ -30,7 +30,7 @@ chown -R "$DOVECOT_USER:$DOVECOT_GROUP" "$DEST_DIR/dovecot"
 # ldap-recipients.cf: Validates active mailboxes
 cat <<EOF > "$DEST_DIR/postfix/ldap-recipients.cf"
 server_host = ldaps://ldap:636
-search_base = ou=people,dc=minnecker,dc=com
+search_base = dc=minnecker,dc=com
 query_filter = (&(mail=%s)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))
 result_attribute = mail
 bind = yes
@@ -43,7 +43,7 @@ EOF
 # ldap-aliases.cf: Resolves aliases
 cat <<EOF > "$DEST_DIR/postfix/ldap-aliases.cf"
 server_host = ldaps://ldap:636
-search_base = ou=people,dc=minnecker,dc=com
+search_base = dc=minnecker,dc=com
 query_filter = (&(mail=%s)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))
 result_attribute = uid
 result_format = %s@minnecker.com
@@ -57,7 +57,7 @@ EOF
 # ldap-senders.cf: Validates who is authorized to send from a given envelope address
 cat <<EOF > "$DEST_DIR/postfix/ldap-senders.cf"
 server_host = ldaps://ldap:636
-search_base = ou=people,dc=minnecker,dc=com
+search_base = dc=minnecker,dc=com
 query_filter = (&(mail=%s)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))
 result_attribute = uid
 bind = yes
@@ -70,7 +70,7 @@ EOF
 # ldap-catchalls.cf: Resolves catch-all domain aliases
 cat <<EOF > "$DEST_DIR/postfix/ldap-catchalls.cf"
 server_host = ldaps://ldap:636
-search_base = ou=people,dc=minnecker,dc=com
+search_base = dc=minnecker,dc=com
 query_filter = (&(mail=*@%d)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))
 result_attribute = uid
 result_format = %s@minnecker.com
@@ -84,7 +84,7 @@ EOF
 # ldap-domains.cf: Dynamically validates virtual mailbox domains
 cat <<EOF > "$DEST_DIR/postfix/ldap-domains.cf"
 server_host = ldaps://ldap:636
-search_base = ou=people,dc=minnecker,dc=com
+search_base = dc=minnecker,dc=com
 query_filter = (mail=*@%s)
 result_attribute = mail
 bind = yes

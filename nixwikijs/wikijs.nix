@@ -8,7 +8,7 @@
     # Configure settings matching upstream JSON/YAML keys
     settings = {
       port = 3000;
-      bindIP = "0.0.0.0";
+      bindIP = "::";
       # Trust X-Forwarded-For from the nixnginx reverse proxy so Wiki.js
       # records the real client IP instead of the proxy address.
       trustProxy = true;

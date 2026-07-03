@@ -22,7 +22,7 @@
       server = {
         DOMAIN = "git.minnecker.com";
         ROOT_URL = "https://git.minnecker.com/";
-        HTTP_ADDR = "0.0.0.0";
+        HTTP_ADDR = "::";
         HTTP_PORT = 3000;
 
         # Forgejo sits behind the nixnginx reverse proxy. Trust the forwarded

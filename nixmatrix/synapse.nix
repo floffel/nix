@@ -16,7 +16,7 @@
       listeners = [
         {
           port = 8008;
-          bind_addresses = [ "0.0.0.0" ];
+          bind_addresses = [ "::" ];
           type = "http";
           tls = false;
           # Trust X-Forwarded-For from the nixnginx reverse proxy so Synapse

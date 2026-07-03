@@ -8,7 +8,7 @@
   services.open-webui = {
     enable = true;
     port = 8080;
-    host = "0.0.0.0";
+    host = "::";
     
     # Configure OAuth/OIDC against Kanidm SSO and link local LLM API
     environment = {

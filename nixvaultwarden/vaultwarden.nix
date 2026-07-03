@@ -7,7 +7,7 @@
 
     # Configure non-sensitive settings declaratively
     config = {
-      ROCKET_ADDRESS = "0.0.0.0";
+      ROCKET_ADDRESS = "::";
       ROCKET_PORT = 8080;
 
       # Signups disabled by default. Admin can override this or use invitation links.

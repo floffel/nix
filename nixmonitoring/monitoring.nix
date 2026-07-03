@@ -92,7 +92,7 @@
     enable = true;
     settings = {
       server = {
-        http_addr = "0.0.0.0";
+        http_addr = "::";
         http_port = 3000;
         domain = "monitoring.minnecker.com";
         root_url = "https://monitoring.minnecker.com/";

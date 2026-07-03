@@ -38,6 +38,10 @@
   services.prometheus.exporters.node = {
     enable = true;
     enabledCollectors = [ "systemd" ]; # Scrapes systemd services status in addition to default collectors
+    # Bind on "::" so Prometheus (which scrapes by short name, resolving
+    # IPv6 first) reaches the exporter. "::" dual-stacks on Linux
+    # (net.ipv6.bindv6only=0), covering both IPv4 and IPv6.
+    listenAddress = "::";
   };
 
   # 2. Enable Grafana Alloy globally to aggregate and forward journal logs to Loki

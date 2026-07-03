@@ -86,7 +86,7 @@
   # Enable Prometheus PostgreSQL exporter for database performance metrics scraping
   services.prometheus.exporters.postgres = {
     enable = true;
-    listenAddress = "0.0.0.0";
+    listenAddress = "::";
     port = 9187;
   };
 

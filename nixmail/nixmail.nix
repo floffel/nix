@@ -202,6 +202,13 @@
       recipient_delimiter = "+.";
       ssl = "yes";
 
+      # Dovecot 2.4's lib-ldap sets LDAP_OPT_X_TLS_REQUIRE_CERT per-connection
+      # based on ssl_client_require_valid_cert, overriding LDAPTLS_REQCERT.
+      # Kanidm's TLS cert is for minnecker.com, not the short name 'ldap', so
+      # disable cert verification for outbound LDAP connections (same as
+      # Postfix's tls_require_cert=no).
+      ssl_client_require_valid_cert = false;
+
       "passdb ldap" = {
         driver = "ldap";
         ldap_uris = "ldaps://ldap";
@@ -209,9 +216,6 @@
         ldap_auth_dn_password = "</var/lib/secrets/mail/dovecot/ldap-password.txt";
         ldap_base = "ou=people,dc=minnecker,dc=com";
         ldap_filter = "(&(|(mail=%{user})(uid=%{user}))(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))";
-        # Kanidm's TLS cert is for minnecker.com, not the short name 'ldap',
-        # so disable cert hostname verification (same as Postfix's tls_require_cert=no)
-        tls_require_cert = "never";
       };
 
       "userdb ldap" = {
@@ -221,7 +225,6 @@
         ldap_auth_dn_password = "</var/lib/secrets/mail/dovecot/ldap-password.txt";
         ldap_base = "ou=people,dc=minnecker,dc=com";
         ldap_filter = "(&(|(mail=%{user})(uid=%{user}))(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))";
-        tls_require_cert = "never";
       };
 
       "namespace inbox" = {

@@ -229,14 +229,15 @@
   services.dovecot2 = {
     enable = true;
 
-    # TLS certificates for direct client connections (previously terminated
-    # by the nginx mail proxy; now exposed directly via host port forwarding).
-    sslServerCert = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
-    sslServerKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
-
     settings = {
       dovecot_config_version = "2.4.4";
       dovecot_storage_version = "2.4.4";
+
+      # TLS certificates for direct client connections (previously
+      # terminated by the nginx mail proxy; now exposed directly via host
+      # port forwarding).
+      ssl_server_cert_file = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+      ssl_server_key_file = "/var/lib/secrets/ssl/minnecker.com/key.pem";
 
       auth_allow_cleartext = true;
       # Advertise XOAUTH2 alongside PLAIN/LOGIN. The oauth2 passdb below

@@ -357,9 +357,16 @@
           originLanding = "https://monitoring.minnecker.com/";
           basicSecretFile = "/var/lib/secrets/oauth2/grafana/secret";
           # Grafana's role_attribute_path = contains(groups, 'admin') && 'Admin'
-          # || 'Viewer' reads the `groups` claim for an "admin" value.
+          # || 'Viewer' reads the `groups` claim for an "admin" value. Grafana
+          # requests the `groups` scope (standard OIDC), so the scopeMap must
+          # grant `groups` (not `groups_name` — a distinct scope that returns
+          # group names only). Kanidm refuses authorise if a requested scope
+          # isn't in the granted set, which surfaced as a 401 NotAuthenticated.
+          # The claimMap below injects "admin" into the groups claim for
+          # members of grafana_admins/idm_admins regardless of which groups
+          # scope is used, so role mapping still works.
           scopeMaps = {
-            grafana_users = [ "openid" "email" "profile" "groups_name" ];
+            grafana_users = [ "openid" "email" "profile" "groups" ];
           };
           claimMaps.groups = {
             joinType = "array";

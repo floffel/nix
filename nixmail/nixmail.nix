@@ -291,15 +291,15 @@
         # resolves via hosts.nix (10.20.20.15). TLS cert verification is
         # disabled globally (ssl_client_require_valid_cert = false) because
         # the cert is for minnecker.com, not the short hostname.
-        introspection_url = "https://nixidm:8443/oauth2/openid/mail/userinfo";
+        oauth2_introspection_url = "https://nixidm:8443/oauth2/openid/mail/userinfo";
         # Send the token as Authorization: Bearer (GET). Kanidm's userinfo
         # endpoint expects this — not ?access_token= (which is the default
         # tokeninfo_url mode) or POST body (RFC 7662 introspection).
-        introspection_mode = "auth";
+        oauth2_introspection_mode = "auth";
         # Extract the user's email from the userinfo response as the
         # Dovecot username. The `email` scope is granted via the scope map
         # on the `mail` OAuth2 client in kanidm.nix.
-        username_attribute = "email";
+        oauth2_username_attribute = "email";
       };
 
       "passdb ldap" = {

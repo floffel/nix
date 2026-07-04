@@ -167,7 +167,7 @@
         # plugin supports it, so send a code_challenge with the authorise
         # request. Without this Kanidm rejects with "No PKCE code challenge
         # was provided with client in enforced PKCE mode".
-        use_pkce_code_verifier = true;
+        use_pkce = true;
         # Send unauthenticated users straight to Kanidm instead of showing
         # a login screen with a (now hidden) form.
         oauth_auto_login = true;

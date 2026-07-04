@@ -163,6 +163,11 @@
         token_url = "https://idm.minnecker.com/oauth2/token";
         api_url = "https://idm.minnecker.com/oauth2/openid/grafana/userinfo";
         role_attribute_path = "contains(groups, 'admin') && 'Admin' || 'Viewer'";
+        # Kanidm enforces PKCE on all OAuth2 clients; Grafana's generic_oauth
+        # plugin supports it, so send a code_challenge with the authorise
+        # request. Without this Kanidm rejects with "No PKCE code challenge
+        # was provided with client in enforced PKCE mode".
+        use_pkce_code_verifier = true;
         # Send unauthenticated users straight to Kanidm instead of showing
         # a login screen with a (now hidden) form.
         oauth_auto_login = true;

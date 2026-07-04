@@ -18,7 +18,7 @@
     };
     path = [ pkgs.openssl ];
     script = ''
-      for c in forgejo nextcloud grafana matrix; do
+      for c in forgejo nextcloud grafana matrix roundcube; do
         d=/var/lib/secrets/oauth2/$c
         mkdir -p "$d"
         if [ ! -s "$d/secret" ]; then
@@ -424,6 +424,31 @@
           displayName = "Mail Server (XOAUTH2)";
           originUrl = "http://localhost";
           originLanding = "https://mail.minnecker.com/";
+          scopeMaps = { mail_users = [ "openid" "email" "profile" ]; };
+        };
+
+        # Roundcube webmail OAuth2 client. Roundcube 1.6+ has built-in
+        # OAuth2/OIDC support (no plugin): users log into the webmail via
+        # Kanidm SSO in the browser, and Roundcube then authenticates to
+        # Dovecot via XOAUTH2 with the obtained access token — so webmail
+        # needs no POSIX password either. This is a confidential (basic)
+        # client because Roundcube is a server-side web app that can hold a
+        # client secret (unlike desktop/mobile mail clients). The secret is
+        # auto-provisioned by kanidm-oauth2-secrets and bind-mounted
+        # read-only into nixnginx where Roundcube runs.
+        #
+        # originUrl: Roundcube's OAuth2 callback. With pretty URLs the
+        # redirect_uri is built as .../index.php/login/oauth; without pretty
+        # URLs it's .../login/oauth. Both forms are declared so Kanidm
+        # accepts whichever Roundcube generates.
+        roundcube = {
+          displayName = "Roundcube Webmail";
+          originUrl = [
+            "https://mail.minnecker.com/index.php/login/oauth"
+            "https://mail.minnecker.com/login/oauth"
+          ];
+          originLanding = "https://mail.minnecker.com/";
+          basicSecretFile = "/var/lib/secrets/oauth2/roundcube/secret";
           scopeMaps = { mail_users = [ "openid" "email" "profile" ]; };
         };
       };

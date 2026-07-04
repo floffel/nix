@@ -102,6 +102,7 @@ manual token generation step is required.
 3. **Proxmox mounts required:**
    - `nixidm`: `/mnt/pve/nas/shared/secrets/mail/ldap` → `var/lib/secrets/mail/ldap` (`rw`) — isolated subdir only
    - `nixmail`: `/mnt/pve/nas/shared/secrets/mail` → `var/lib/secrets/mail` (`rw`) — full mount (reads `ldap/` subdir, writes dovecot/postfix)
+   - `nixmail`: `/mnt/pve/nas/shared/secrets/ssl` → `/var/lib/secrets/ssl` (`ro`) — TLS certs for Dovecot/Postfix (now that they terminate TLS directly, not the removed nginx proxy)
 
    The `ldap` subdir must exist on the NAS before the first deploy:
    ```bash

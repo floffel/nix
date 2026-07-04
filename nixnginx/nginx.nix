@@ -535,6 +535,32 @@ in
       $config['draft_autosave'] = 60;
       $config['mime_param_folding'] = 0;
       $config['max_message_size'] = "2G";
+
+      // OAuth2 / OIDC login via Kanidm. Roundcube 1.6+ has built-in
+      // OAuth2 support (no plugin): users click "Login with Kanidm",
+      // authenticate in the browser (with MFA), and Roundcube receives an
+      // access token it then uses to bind to Dovecot via XOAUTH2 — so
+      // webmail needs no POSIX password. The `mail` OAuth2 client is the
+      // same one used by desktop/mobile mail clients; this `roundcube`
+      // client is confidential (holds a client secret, bind-mounted ro).
+      $config['oauth_provider']      = 'generic';
+      $config['oauth_provider_name'] = 'Kanidm';
+      $config['oauth_client_id']     = 'roundcube';
+      $config['oauth_client_secret'] = rtrim(file_get_contents('/var/lib/secrets/oauth2/roundcube/secret'));
+      // OIDC discovery — Kanidm serves a per-client .well-known document
+      // that supplies auth/token/userinfo/jwks endpoints (all under the
+      // public origin https://idm.minnecker.com).
+      $config['oauth_config_uri']    = 'https://idm.minnecker.com/oauth2/openid/roundcube/.well-known/openid-configuration';
+      $config['oauth_scope']         = 'openid email profile';
+      // Resolve the IMAP username from the userinfo `email` claim — must
+      // match Dovecot's oauth2 username_attribute (also `email`).
+      $config['oauth_identity_fields'] = ['email'];
+      // Send users straight to Kanidm SSO on the login page.
+      $config['oauth_login_redirect'] = true;
+      // Cache discovery/JWKS in the Roundcube DB (avoids re-fetching on
+      // every login; required/recommended when oauth_config_uri is set).
+      $config['oauth_cache']     = 'db';
+      $config['oauth_cache_ttl'] = 600;
     '';
 
     # Plugins used in original Roundcube installation

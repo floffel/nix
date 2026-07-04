@@ -139,7 +139,6 @@ bind-mounted into **multiple** containers from the same NAS path.
 | `nixvaultwarden` | `/mnt/pve/nas/shared/secrets/postgres/vaultwarden` | `var/lib/secrets/postgres/vaultwarden` | `ro` | Vaultwarden DB password |
 | `nixwikijs` | `/mnt/pve/nas/shared/secrets/postgres/wikijs` | `var/lib/secrets/postgres/wikijs` | `ro` | Wiki.js DB password |
 | `nixforgejo` | `/mnt/pve/nas/shared/secrets/forgejo` | `var/lib/secrets/forgejo` | `rw` | Forgejo Actions runner registration token |
-| `nixmonitoring` | `/mnt/pve/nas/shared/secrets/grafana` | `var/lib/secrets/grafana` | `rw` | Grafana admin password, secret key |
 | `nixopenwebui` | `/mnt/pve/nas/shared/secrets/open-webui` | `var/lib/secrets/open-webui` | `rw` | Open WebUI env (LLM URLs, PKCE client) |
 | `nixmatrix` | `/mnt/pve/nas/shared/secrets/matrix` | `var/lib/secrets/matrix` | `rw` | Synapse `secrets.yaml` (DB pw, OIDC config) |
 | `nixvaultwarden` | `/mnt/pve/nas/shared/secrets/vaultwarden` | `var/lib/secrets/vaultwarden` | `rw` | Vaultwarden env (DB url, admin token) |
@@ -326,11 +325,10 @@ Below are the key files and credentials required per container:
 3. **Forgejo Actions Runner Token**: Write `/var/lib/secrets/forgejo/runner-token` (the per-container `rw` mount, `chmod 600`). This is a manual registration token, not a DB password.
 
 #### 📊 nixmonitoring (Grafana, Prometheus & Loki)
-* **Grafana Configuration**: Write credentials and OAuth2 SSO secrets to:
-  * `/var/lib/secrets/grafana/admin-password` (admin UI password)
-  * `/var/lib/secrets/grafana/secret-key` (used for database encryption, generate via `openssl rand -hex 16`)
-  * `/var/lib/secrets/oauth2/grafana/secret` (Kanidm OIDC client secret — shared mount, provisioned on `nixidm`)
-  * Ensure all are owned by `grafana:grafana` and set to `chmod 600` (the shared oauth2 file is owned on the NAS).
+* **Grafana Configuration**:
+  * `/var/lib/secrets/grafana/admin-password` and `/var/lib/secrets/grafana/secret-key` are generated automatically on first boot by the `grafana-secrets` systemd oneshot (idempotent — existing files are kept). They are local to the container (no NAS mount) since Grafana uses the embedded sqlite DB in its own persistent rootfs; `secret_key` encrypts sensitive values stored there and must not be lost or regenerated after first boot.
+  * `/var/lib/secrets/oauth2/grafana/secret` (Kanidm OIDC client secret — shared mount, provisioned on `nixidm`, bind-mounted read-only). This is what wires up SSO; members of `grafana_admins`/`idm_admins` get the Grafana `Admin` role automatically.
+  * The oauth2 shared file is owned on the NAS; the two generated files are owned by `grafana:grafana` with `chmod 600` (set by the oneshot).
 
 #### 🤖 nixopenwebui (Open WebUI)
 * **SSO & LLM Configuration**: Write the environment file `/var/lib/secrets/open-webui/env` (owned by user `994:994`, `chmod 600`) containing OIDC client secrets and LLM backend URLs:

@@ -2,6 +2,39 @@
 { config, pkgs, ... }:
 
 {
+  # Generate Grafana's local-only credentials (admin UI password and the
+  # database secret_key) on first boot. These are write-once secrets with no
+  # upstream provisioner: admin_password bootstraps the initial admin login
+  # (OIDC/SSO takes over afterwards) and secret_key encrypts sensitive values
+  # stored in Grafana's sqlite DB (/var/lib/grafana/grafana.db, which lives in
+  # the container's persistent rootfs). Losing secret_key makes those blobs
+  # undecryptable, so both files must persist — but they never need to leave
+  # the container, hence no NAS mount. Idempotent: existing files are kept.
+  systemd.services.grafana-secrets = {
+    description = "Provision Grafana local admin password and secret key";
+    wantedBy = [ "grafana.service" ];
+    before = [ "grafana.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    path = [ pkgs.openssl pkgs.coreutils ];
+    script = ''
+      d=/var/lib/secrets/grafana
+      mkdir -p "$d"
+      if [ ! -s "$d/admin-password" ]; then
+        echo "Generating $d/admin-password"
+        openssl rand -base64 24 > "$d/admin-password"
+      fi
+      if [ ! -s "$d/secret-key" ]; then
+        echo "Generating $d/secret-key"
+        openssl rand -hex 16 > "$d/secret-key"
+      fi
+      chown grafana:grafana "$d/admin-password" "$d/secret-key"
+      chmod 600 "$d/admin-password" "$d/secret-key"
+    '';
+  };
+
   # 1. Prometheus Metrics Storage
   services.prometheus = {
     enable = true;

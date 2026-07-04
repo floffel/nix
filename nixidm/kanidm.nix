@@ -18,7 +18,7 @@
     };
     path = [ pkgs.openssl ];
     script = ''
-      for c in forgejo nextcloud grafana matrix roundcube; do
+      for c in forgejo nextcloud grafana matrix; do
         d=/var/lib/secrets/oauth2/$c
         mkdir -p "$d"
         if [ ! -s "$d/secret" ]; then
@@ -399,56 +399,44 @@
           };
         };
 
-        # Mail XOAUTH2 client. This is a public (PKCE) client used by IMAP
-        # and SMTP clients that support the XOAUTH2 / OAUTHBEARER SASL
-        # mechanism (Thunderbird, K-9 Mail, Apple Mail, etc.). The client
-        # authenticates to Kanidm via a browser-based authorisation code
-        # flow — using their full Kanidm credentials (including MFA) — and
-        # receives an access token that Dovecot then validates via the
-        # /oauth2/openid/mail/userinfo endpoint. This eliminates the need
-        # for a separate POSIX password for mail access.
+        # Mail XOAUTH2 client. A single public (PKCE) OAuth2 client used by
+        # ALL mail consumers: desktop/mobile clients (Thunderbird, K-9 Mail,
+        # Apple Mail) AND Roundcube webmail. Users authenticate to Kanidm
+        # via a browser-based authorisation code flow using their full
+        # Kanidm credentials (including MFA), and receive an access token
+        # that Dovecot validates via the /oauth2/openid/mail/userinfo
+        # endpoint. This eliminates the need for a separate POSIX password.
+        #
+        # Why a single client for everything: Kanidm's userinfo endpoint is
+        # per-client (the client_id is in the URL path and the token's `aud`
+        # must match). Dovecot's oauth2 passdb has a single introspection_url,
+        # so all tokens it validates must come from the same OAuth2 client.
+        # Using separate clients for Roundcube vs desktop apps would require
+        # Dovecot to validate tokens at two different userinfo endpoints,
+        # which it cannot do with a single oauth2 passdb.
         #
         # enableLocalhostRedirects: RFC 8252 loopback redirect with any port
-        # — mail clients spin up a local HTTP server on an ephemeral port to
-        # receive the authorisation code redirect. Without this Kanidm
-        # requires an exact originUrl match, which is impossible for
-        # desktop/mobile clients that pick a random port each time.
+        # — desktop/mobile mail clients spin up a local HTTP server on an
+        # ephemeral port to receive the authorisation code redirect.
+        #
+        # originUrl also includes Roundcube's HTTPS callback so the same
+        # client serves the webmail login flow. Roundcube 1.6+ supports
+        # PKCE (the default), so it can use a public client without a
+        # client_secret — same as desktop/mobile apps.
         #
         # The scope map gates access: only members of `mail_users` receive
         # the `openid email profile` scopes. Dovecot extracts the `email`
-        # field from the userinfo response as the IMAP/SMTP username, so the
-        # mail attribute on the person entry must be set.
+        # field from the userinfo response as the IMAP/SMTP username.
         mail = {
           public = true;
           enableLocalhostRedirects = true;
           displayName = "Mail Server (XOAUTH2)";
-          originUrl = "http://localhost";
-          originLanding = "https://mail.minnecker.com/";
-          scopeMaps = { mail_users = [ "openid" "email" "profile" ]; };
-        };
-
-        # Roundcube webmail OAuth2 client. Roundcube 1.6+ has built-in
-        # OAuth2/OIDC support (no plugin): users log into the webmail via
-        # Kanidm SSO in the browser, and Roundcube then authenticates to
-        # Dovecot via XOAUTH2 with the obtained access token — so webmail
-        # needs no POSIX password either. This is a confidential (basic)
-        # client because Roundcube is a server-side web app that can hold a
-        # client secret (unlike desktop/mobile mail clients). The secret is
-        # auto-provisioned by kanidm-oauth2-secrets and bind-mounted
-        # read-only into nixnginx where Roundcube runs.
-        #
-        # originUrl: Roundcube's OAuth2 callback. With pretty URLs the
-        # redirect_uri is built as .../index.php/login/oauth; without pretty
-        # URLs it's .../login/oauth. Both forms are declared so Kanidm
-        # accepts whichever Roundcube generates.
-        roundcube = {
-          displayName = "Roundcube Webmail";
           originUrl = [
+            "http://localhost"
             "https://mail.minnecker.com/index.php/login/oauth"
             "https://mail.minnecker.com/login/oauth"
           ];
           originLanding = "https://mail.minnecker.com/";
-          basicSecretFile = "/var/lib/secrets/oauth2/roundcube/secret";
           scopeMaps = { mail_users = [ "openid" "email" "profile" ]; };
         };
       };

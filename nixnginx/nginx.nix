@@ -539,17 +539,19 @@ in
       // OAuth2 support (no plugin): users click "Login with Kanidm",
       // authenticate in the browser (with MFA), and Roundcube receives an
       // access token it then uses to bind to Dovecot via XOAUTH2 — so
-      // webmail needs no POSIX password. The `mail` OAuth2 client is the
-      // same one used by desktop/mobile mail clients; this `roundcube`
-      // client is confidential (holds a client secret, bind-mounted ro).
+      // webmail needs no POSIX password.
+      //
+      // Uses the SAME 'mail' OAuth2 client as desktop/mobile mail apps
+      // (public, PKCE, no client_secret). Kanidm's userinfo endpoint is
+      // per-client, so all tokens Dovecot validates must come from the same
+      // client. Dovecot's oauth2 passdb points at /oauth2/openid/mail/userinfo.
       $config['oauth_provider']      = 'generic';
       $config['oauth_provider_name'] = 'Kanidm';
-      $config['oauth_client_id']     = 'roundcube';
-      $config['oauth_client_secret'] = rtrim(file_get_contents('/var/lib/secrets/oauth2/roundcube/secret'));
+      $config['oauth_client_id']     = 'mail';
+      $config['oauth_client_secret'] = '';
       // OIDC discovery — Kanidm serves a per-client .well-known document
-      // that supplies auth/token/userinfo/jwks endpoints (all under the
-      // public origin https://idm.minnecker.com).
-      $config['oauth_config_uri']    = 'https://idm.minnecker.com/oauth2/openid/roundcube/.well-known/openid-configuration';
+      // that supplies auth/token/userinfo/jwks endpoints.
+      $config['oauth_config_uri']    = 'https://idm.minnecker.com/oauth2/openid/mail/.well-known/openid-configuration';
       $config['oauth_scope']         = 'openid email profile';
       // Resolve the IMAP username from the userinfo `email` claim — must
       // match Dovecot's oauth2 username_attribute (also `email`).

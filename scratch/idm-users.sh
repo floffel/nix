@@ -28,6 +28,11 @@
 #   idm-users.sh group create <group>                         # ad-hoc group (service groups are provisioned)
 #   idm-users.sh group delete <group>
 #
+#   idm-users.sh access                                       # list every service group + its members
+#   idm-users.sh access <group>                               # list members of one service group
+#   idm-users.sh access add <group> <user> [<user> ...]       # grant a service (short alias ok, e.g. grafana)
+#   idm-users.sh access remove <group> <user> [<user> ...]   # revoke a service
+#
 #   idm-users.sh policy get <group>
 #   idm-users.sh policy enable <group>                        # turn on account policy for the group
 #   idm-users.sh policy min-credential <group> <any|mfa|passkey|attested_passkey>
@@ -241,6 +246,110 @@ cmd_group() {
   esac
 }
 
+# Service authorization groups provisioned in nixidm/kanidm.nix (see
+# services.kanidm.provision.groups). The OIDC scopeMaps gate login on these,
+# so "can user log into service X?" reduces to "is the user in group X?".
+# Short aliases let you type `access add grafana alice` instead of the full
+# `group add-members grafana_users alice`.
+declare -A SVC_GROUPS=(
+  [mail]="mail_users:Mail (IMAP/SMTP/Roundcube)"
+  [forgejo]="forgejo_users:Forgejo Git"
+  [nextcloud]="nextcloud_users:Nextcloud Cloud"
+  [nextcloud-admin]="nextcloud_admins:Nextcloud Admin"
+  [grafana]="grafana_users:Grafana Monitoring"
+  [grafana-admin]="grafana_admins:Grafana Admin"
+  [matrix]="matrix_users:Matrix Synapse"
+  [openwebui]="open_webui_users:Open WebUI"
+  [open-webui]="open_webui_users:Open WebUI"
+  [openwebui-admin]="open_webui_admins:Open WebUI Admin"
+  [open-webui-admin]="open_webui_admins:Open WebUI Admin"
+  [idm-admins]="idm_admins:IdM Administrators (builtin)"
+)
+
+# Resolve a user-supplied token to a full group name. Accepts:
+#  * a short alias from SVC_GROUPS (e.g. "grafana" -> "grafana_users")
+#  * a bare service name matching exactly one *_users group (e.g. "forgejo")
+#  * a literal group name (validated against SVC_GROUPS values or passed through)
+resolve_group() {
+  local tok="${1:-}"
+  [ -n "$tok" ] || return 1
+  # Direct alias hit.
+  if [ -n "${SVC_GROUPS[$tok]:-}" ]; then
+    echo "${SVC_GROUPS[$tok]%%:*}"
+    return 0
+  fi
+  # Literal group name: return as-is if it looks like a real group.
+  case "$tok" in
+    *_users|*_admins|idm_admins) echo "$tok"; return 0 ;;
+  esac
+  # Bare service name: match "<name>_users" if it exists as an alias value.
+  local g
+  for g in "${SVC_GROUPS[@]}"; do
+    if [ "${g%%:*}" = "${tok}_users" ]; then
+      echo "${tok}_users"
+      return 0
+    fi
+  done
+  die "unknown service group '$tok' (known: ${!SVC_GROUPS[*]})"
+}
+
+# Extract member usernames (without the @domain suffix) from
+# `kanidm group list-members` output. The CLI prints one entry per member
+# with an "spn:" (or "name:") line; we take the first token before '@'.
+group_members_raw() {
+  local group="$1"
+  k group list-members "$group" 2>/dev/null \
+    | sed -n 's/^ *spn: *//p' \
+    | sed 's/@.*//'
+}
+
+cmd_access() {
+  local sub="${1:-}"; shift || true
+  case "$sub" in
+    ""|list)
+      # Overview: every service group with its members. Empty groups are shown
+      # too so it's obvious which services have no authorized users yet.
+      # Multiple aliases can point at the same group (openwebui / open-webui),
+      # so de-duplicate by group name.
+      local seen="" g desc members
+      for key in $(printf '%s\n' "${!SVC_GROUPS[@]}" | sort -u); do
+        g="${SVC_GROUPS[$key]%%:*}"
+        case " $seen " in *" $g "*) continue ;; esac
+        seen="$seen $g"
+        desc="${SVC_GROUPS[$key]#*:}"
+        members="$(group_members_raw "$g" | sort -u)"
+        printf '\n== %s  (%s)\n' "$g" "$desc"
+        if [ -z "$members" ]; then
+          printf '  (no members)\n'
+        else
+          printf '%s\n' "$members" | sed 's/^/  /'
+        fi
+      done
+      ;;
+    add)
+      local group="${1:-}"; shift || true
+      [ -n "$group" ] && [ "$#" -ge 1 ] || die "usage: access add <group> <user> [<user> ...]"
+      group="$(resolve_group "$group")"
+      k group add-members "$group" "$@"
+      echo "Granted '$group' to: $*"
+      ;;
+    remove)
+      local group="${1:-}"; shift || true
+      [ -n "$group" ] && [ "$#" -ge 1 ] || die "usage: access remove <group> <user> [<user> ...]"
+      group="$(resolve_group "$group")"
+      k group remove-members "$group" "$@"
+      echo "Revoked '$group' from: $*"
+      ;;
+    *)
+      # Treat a bare group name/alias as "show members of that group".
+      local group
+      group="$(resolve_group "$sub")" || die "usage: access [list|<group>|add <group> <user>|remove <group> <user>]"
+      echo "Members of '$group':"
+      group_members_raw "$group" | sort -u | sed 's/^/  /'
+      ;;
+  esac
+}
+
 cmd_policy() {
   # Account-policy controls (credential floor, enable). The policy that applies
   # to all persons lives on the built-in idm_all_persons group; per-group
@@ -335,6 +444,7 @@ main() {
   case "$area" in
     user)       cmd_user "$@" ;;
     group)      cmd_group "$@" ;;
+    access)     cmd_access "$@" ;;
     policy)     cmd_policy "$@" ;;
     oauth2)     cmd_oauth2 "$@" ;;
     svc-token)  cmd_svc_token "$@" ;;

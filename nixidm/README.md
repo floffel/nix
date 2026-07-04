@@ -159,6 +159,16 @@ hook uses), so a manual `kanidm login -D idm_admin` is no longer required:
 ./scratch/idm-users.sh group create adhoc-project
 ./scratch/idm-users.sh group delete adhoc-project
 
+# Service access (friendly layer over the provisioned authorization groups)
+# `access list` shows every service group and its members — the quickest way
+# to answer "who can log into what" (login is gated on scopeMaps in kanidm.nix).
+# Short aliases are accepted: mail, forgejo, nextcloud, nextcloud-admin,
+# grafana, grafana-admin, matrix, openwebui/open-webui, openwebui-admin, idm-admins.
+./scratch/idm-users.sh access                       # list all service groups + members
+./scratch/idm-users.sh access grafana                # show members of one service group
+./scratch/idm-users.sh access add grafana alice      # grant Grafana access to alice
+./scratch/idm-users.sh access remove mail bob        # revoke Mail access from bob
+
 # Account policy / MFA (credential floor resolves to the strictest among a user's groups)
 ./scratch/idm-users.sh policy get idm_all_persons
 ./scratch/idm-users.sh policy enable mail_users

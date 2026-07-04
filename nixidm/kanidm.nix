@@ -53,7 +53,7 @@
       Type = "oneshot";
       RemainAfterExit = true;
     };
-    path = [ pkgs.curl pkgs.jq ];
+    path = [ pkgs.curl pkgs.jq pkgs.openldap ];
     script = ''
       set -euo pipefail
 
@@ -61,6 +61,8 @@
       COOKIE_JAR=$(mktemp)
       trap 'rm -f "$COOKIE_JAR"' EXIT
       API="https://localhost:8443"
+      TOKEN_FILE=/var/lib/secrets/mail/ldap/ldap-token
+      export LDAPTLS_REQCERT=never
 
       # Wait for Kanidm to be ready
       echo "Waiting for Kanidm to be ready..."
@@ -110,44 +112,86 @@
           >/dev/null
       fi
 
-      # Destroy old tokens with label "mail_token" to avoid accumulation
-      echo "Destroying old mail_token tokens..."
+      # Grant the mailservice account read access to person PII (the `mail`
+      # attribute is classified as personally identifying information in
+      # Kanidm). Without membership in the builtin `idm_people_pii_read`
+      # group, LDAP searches by Postfix/Dovecot match entries but they are
+      # "denied - no entries were released", so every mailbox lookup fails.
+      # Idempotent: only add the member if not already present.
       RESP=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
-        "$API/v1/service_account/mailservice/_api_token")
-      # Only iterate if the response is a JSON array (not an error string)
-      if echo "$RESP" | jq -e 'type == "array"' >/dev/null 2>&1; then
-        for tid in $(echo "$RESP" | jq -r '.[] | select(.label=="mail_token") | .token_id'); do
-          echo "  destroying $tid"
-          curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
-            -X DELETE "$API/v1/service_account/mailservice/_api_token/$tid" \
-            -d '[]' >/dev/null
-        done
+        "$API/v1/group/idm_people_pii_read/_attr/member")
+      if ! echo "$RESP" | jq -e 'index("mailservice@minnecker.com")' >/dev/null 2>&1; then
+        echo "Adding mailservice to idm_people_pii_read..."
+        curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+          -X POST "$API/v1/group/idm_people_pii_read/_attr/member" \
+          -H "Content-Type: application/json" \
+          -d '["mailservice@minnecker.com"]' >/dev/null
       fi
 
-      # Generate a fresh read-only API token
-      echo "Generating new mail_token..."
-      HTTP_CODE=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
-        -X POST "$API/v1/service_account/mailservice/_api_token" \
-        -H "Content-Type: application/json" \
-        -d '{"label":"mail_token","expiry":null,"read_write":false,"compact":false}' \
-        -o /tmp/mail-token-resp -w '%{http_code}')
-      RESP=$(cat /tmp/mail-token-resp)
-      rm -f /tmp/mail-token-resp
-      if [ "$HTTP_CODE" != "200" ]; then
-        echo "ERROR: token generation failed (HTTP $HTTP_CODE): $RESP" >&2
-        exit 1
+      # Reuse the existing mail_token if it is still valid. Kanidm signs API
+      # tokens with key material stored in its database, so a token survives a
+      # normal service restart (same DB, same keys) and only becomes invalid
+      # after a DB restore/recreate. The previous unconditional destroy +
+      # regenerate on every Kanidm start created a desync window: consumers on
+      # nixmail (and nixnginx) hold the old token in long-lived LDAP
+      # connection pools and cached config files, and the Proxmox/NAS shared
+      # mount does not deliver inotify events across the network boundary, so
+      # a path watcher cannot reliably push the rotated token to them. After
+      # the 5-minute AUTH_TOKEN_GRACE_WINDOW elapses, searches with the now-
+      # destroyed token fail with "SessionExpired". By validating the existing
+      # token via the exact LDAP bind+search path the consumers use, the
+      # common case (plain restart) becomes a no-op and no rotation occurs.
+      EXISTING=""
+      if [ -s "$TOKEN_FILE" ]; then
+        EXISTING=$(cat "$TOKEN_FILE")
       fi
-      TOKEN=$(echo "$RESP" | jq -r '.')
-      if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
-        echo "ERROR: token generation returned empty: $RESP" >&2
-        exit 1
+      if [ -n "$EXISTING" ] && \
+         ldapsearch -x -H ldaps://localhost:636 -D "dn=token" -w "$EXISTING" \
+           -b "dc=minnecker,dc=com" "(objectClass=account)" dn -z 1 >/dev/null 2>&1; then
+        echo "Existing mail_token still valid — keeping it (no rotation)."
+        TOKEN="$EXISTING"
+      else
+        echo "No existing mail_token or it is invalid — regenerating."
+
+        # Destroy old tokens with label "mail_token" to avoid accumulation
+        echo "Destroying old mail_token tokens..."
+        RESP=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+          "$API/v1/service_account/mailservice/_api_token")
+        # Only iterate if the response is a JSON array (not an error string)
+        if echo "$RESP" | jq -e 'type == "array"' >/dev/null 2>&1; then
+          for tid in $(echo "$RESP" | jq -r '.[] | select(.label=="mail_token") | .token_id'); do
+            echo "  destroying $tid"
+            curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+              -X DELETE "$API/v1/service_account/mailservice/_api_token/$tid" \
+              -d '[]' >/dev/null
+          done
+        fi
+
+        # Generate a fresh read-only API token
+        echo "Generating new mail_token..."
+        HTTP_CODE=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+          -X POST "$API/v1/service_account/mailservice/_api_token" \
+          -H "Content-Type: application/json" \
+          -d '{"label":"mail_token","expiry":null,"read_write":false,"compact":false}' \
+          -o /tmp/mail-token-resp -w '%{http_code}')
+        RESP=$(cat /tmp/mail-token-resp)
+        rm -f /tmp/mail-token-resp
+        if [ "$HTTP_CODE" != "200" ]; then
+          echo "ERROR: token generation failed (HTTP $HTTP_CODE): $RESP" >&2
+          exit 1
+        fi
+        TOKEN=$(echo "$RESP" | jq -r '.')
+        if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+          echo "ERROR: token generation returned empty: $RESP" >&2
+          exit 1
+        fi
+        # A valid JWS token starts with "eyJ" (base64 for '{"')
+        if [ "''${TOKEN#eyJ}" = "$TOKEN" ]; then
+          echo "ERROR: generated token is not a valid JWS: $TOKEN" >&2
+          exit 1
+        fi
+        echo "Token generated."
       fi
-      # A valid JWS token starts with "eyJ" (base64 for '{"')
-      if [ "''${TOKEN#eyJ}" = "$TOKEN" ]; then
-        echo "ERROR: generated token is not a valid JWS: $TOKEN" >&2
-        exit 1
-      fi
-      echo "Token generated."
 
       # Write the raw token (consumed by nixmail's mail-ldap-config service).
       # Lives in the ldap/ subdir of the shared mail mount, which nixidm and

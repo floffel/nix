@@ -68,7 +68,7 @@ kanidm -D idm_admin group add-members mail_users john jane
 ## 🚀 Mail Server Secrets Setup
 
 The Dovecot/Postfix LDAP configuration files are **auto-provisioned** — no
-manual token generation or `setup-mail-secrets.sh` step is required.
+manual token generation step is required.
 
 1. **Token generation (automatic):**
    `nixidm` generates a fresh `mail_token` API token on every Kanidm start
@@ -99,7 +99,4 @@ manual token generation or `setup-mail-secrets.sh` step is required.
    ```bash
    nixos-rebuild switch
    ```
-
-> **Note:** The `scratch/setup-mail-secrets.sh` script is retained as a
-> fallback for manual recovery but is no longer needed during normal operation.
 

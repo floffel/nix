@@ -159,7 +159,15 @@
         client_id = "grafana";
         client_secret = "$__file{/var/lib/secrets/oauth2/grafana/secret}";
         scopes = "openid email profile groups";
-        auth_url = "https://idm.minnecker.com/oauth2/authorise";
+        # Kanidm has two authorise endpoints: the raw /oauth2/authorise (which
+        # requires an existing session and 401s with NotAuthenticated otherwise)
+        # and /ui/oauth2 (which drives the login/consent UI for unauthenticated
+        # users). Forgejo reaches the latter via OIDC auto-discovery, but
+        # Grafana's generic_oauth plugin has no discovery mode, so auth_url is
+        # hardcoded here. It MUST point at the UI endpoint — using the raw
+        # endpoint surfaces as a 401 NotAuthenticated the moment oauth_auto_login
+        # sends the user there without a session cookie.
+        auth_url = "https://idm.minnecker.com/ui/oauth2";
         token_url = "https://idm.minnecker.com/oauth2/token";
         api_url = "https://idm.minnecker.com/oauth2/openid/grafana/userinfo";
         role_attribute_path = "contains(groups, 'admin') && 'Admin' || 'Viewer'";

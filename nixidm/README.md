@@ -125,7 +125,13 @@ the `nixidm` container — it auto-logs in as `idm_admin` using the password in
 hook uses), so a manual `kanidm login -D idm_admin` is no longer required:
 
 ```bash
-# Create a user (no password is set at creation time — see §3 below)
+# Interactive guided creation — prompts for username, display name, one or
+# more mail addresses (first = primary), an optional catch-all domain (the
+# user becomes the mail_users recipient for unmatched mail on that domain),
+# and a multi-select of service groups. Issues a reset token at the end.
+./scratch/idm-users.sh user new
+
+# Create a user non-interactively (no password is set at creation time — see §3 below)
 ./scratch/idm-users.sh user create alice "Alice Example" alice@minnecker.com admin@minnecker.com
 
 # Inspect / list / delete

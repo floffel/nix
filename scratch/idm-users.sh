@@ -8,6 +8,7 @@
 # web UI to set their own password (and optionally enroll passkeys/MFA).
 #
 # Usage:
+#   idm-users.sh user new                                       # interactive guided creation
 #   idm-users.sh user create <username> "<Display Name>" [primary_mail] [alias_mail ...]
 #   idm-users.sh user get <username>
 #   idm-users.sh user list
@@ -92,6 +93,120 @@ ensure_login() {
 # All kanidm invocations act as $ADMIN.
 k() { ensure_login; kanidm "$@" --name "$ADMIN"; }
 
+# --- interactive helpers (used by `user new`) ---
+prompt() { local v; read -rp "$1" v; printf '%s' "$v"; }
+prompt_default() { local v; read -rp "$1" "${2:-}" v; printf '%s' "${v:-$2}"; }
+confirm() { local a; read -rp "$1" a; [ "$a" = "y" ] || [ "$a" = "Y" ] || [ "$a" = "yes" ]; }
+
+# Print the service authorization groups as a numbered menu and return the
+# resolved (full) group names chosen by the user as space-separated words on
+# stdout. SVC_GROUPS is defined near cmd_access. The menu itself is written to
+# stderr so it does not pollute the captured selection on stdout.
+pick_groups() {
+  local keys i=1 key g desc tok chosen=""
+  # De-duplicate by group name, keep first alias + description.
+  local seen="" list=()
+  for key in $(printf '%s\n' "${!SVC_GROUPS[@]}" | sort); do
+    g="${SVC_GROUPS[$key]%%:*}"
+    case " $seen " in *" $g "*) continue ;; esac
+    seen="$seen $g"
+    desc="${SVC_GROUPS[$key]#*:}"
+    list+=("$g:$desc")
+  done
+  echo "Pick service groups (enter numbers, space/comma separated, 0 = none):" >&2
+  i=1
+  for e in "${list[@]}"; do
+    g="${e%%:*}"; desc="${e#*:}"
+    printf '  %2d) %-18s %s\n' "$i" "$g" "$desc" >&2
+    i=$((i+1))
+  done
+  local sel; sel="$(prompt 'Selection: ')"
+  sel="${sel//,/ }"
+  for tok in $sel; do
+    [ "$tok" = "0" ] && continue
+    case "$tok" in ''|*[!0-9]*) continue ;; esac
+    [ "$tok" -ge 1 ] 2>/dev/null && [ "$tok" -le "${#list[@]}" ] 2>/dev/null || continue
+    g="${list[$((tok-1))]%%:*}"
+    chosen="$chosen $g"
+  done
+  printf '%s' "$chosen"
+}
+
+cmd_user_new() {
+  # Interactive guided user creation: collects username, display name, one or
+  # more mail addresses (first = primary), an optional catch-all domain (the
+  # user becomes the mail_users recipient for unmatched addresses on that
+  # domain), and a multi-select of service groups. Creates the person, sets
+  # all mail addresses, adds them to the chosen groups, and issues a reset
+  # token. Non-fatal steps (group add, reset token) are reported but never
+  # abort the flow.
+  echo "=== Create new user ==="
+  local username display mail_addr mails=() domain catch_all
+  username="$(prompt 'Username: ')"
+  [ -n "$username" ] || die "username is required"
+  display="$(prompt 'Display name: ')"
+  [ -n "$display" ] || die "display name is required"
+
+  echo "Mail addresses (one per line, first = primary; empty line to finish):"
+  while :; do
+    mail_addr="$(prompt '  mail> ')"
+    [ -z "$mail_addr" ] && break
+    mails+=("$mail_addr")
+  done
+
+  catch_all="$(prompt 'Catch-all domain for this user? (e.g. minnecker.com, empty to skip): ')"
+  if [ -n "$catch_all" ]; then
+    # Ensure the user has a primary address on the catch-all domain so Postfix's
+    # ldap-catchalls.cf routes unmatched recipients to them, and that they are a
+    # mail_users member (prompted again in the group pick below; auto-add here
+    # so the routing is correct even if the operator skips group selection).
+    local primary="${catch_all%%@}" # trim leading @ if given
+    local need="@$primary"
+    local have=0 a
+    for a in "${mails[@]}"; do
+      case "$a" in *"$need") have=1 ;; esac
+    done
+    if [ "$have" = "0" ]; then
+      mails=("$username@$primary" "${mails[@]}")
+      echo "  -> added primary '$username@$primary' (catch-all target)"
+    fi
+  fi
+
+  echo
+  local groups; groups="$(pick_groups)"
+  echo
+  if [ -n "$catch_all" ]; then
+    # Make sure mail_users is in the selection regardless of the menu pick,
+    # otherwise catch-all delivery silently breaks.
+    case " $groups " in *" mail_users "*) ;; *) groups="$groups mail_users"; echo "Note: added 'mail_users' for catch-all routing." ;; esac
+  fi
+
+  echo "=== Summary ==="
+  echo "  username : $username"
+  echo "  display  : $display"
+  printf '  mail     : %s\n' "${mails[*]:-(none)}"
+  printf '  groups   : %s\n' "${groups:- (none)}"
+  [ -n "$catch_all" ] && echo "  catch-all: $catch_all"
+  confirm "Create this user? (y/n): " || { echo "Aborted."; exit 0; }
+
+  echo
+  echo "Creating person..."
+  k person create "$username" "$display" || die "person create failed"
+  if [ "${#mails[@]}" -gt 0 ]; then
+    local mail_args=(); for a in "${mails[@]}"; do mail_args+=(--mail "$a"); done
+    k person update "$username" "${mail_args[@]}" || echo "Warning: setting mail failed (user still created)"
+  fi
+  for g in $groups; do
+    k group add-members "$g" "$username" 2>/dev/null \
+      || echo "Warning: could not add to '$g' (does the group exist?)"
+  done
+  echo
+  echo "Issuing credential reset token (user sets own password / MFA):"
+  k person credential create-reset-token "$username" "$RESET_TTL_DEFAULT" || true
+  echo
+  echo "Done. User '$username' is ready."
+}
+
 cmd_user() {
   local sub="${1:-}"; shift || true
   case "$sub" in
@@ -105,6 +220,9 @@ cmd_user() {
       echo
       echo "User '$username' created. Issue a reset token so they can set their own password:"
       echo "  $0 user reset-token $username"
+      ;;
+    new)
+      cmd_user_new
       ;;
     get)
       local username="${1:-}"; [ -n "$username" ] || die "usage: user get <username>"
@@ -208,7 +326,7 @@ cmd_user() {
       k person update "$old" --newname "$new"
       echo "Renamed '$old' -> '$new'."
       ;;
-    *) die "unknown user subcommand '$sub' (try: create get list delete reset-token lock unlock set-name set-mail add-mail del-mail rename)" ;;
+    *) die "unknown user subcommand '$sub' (try: new create get list delete reset-token lock unlock set-name set-mail add-mail del-mail rename)" ;;
   esac
 }
 

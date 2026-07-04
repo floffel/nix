@@ -557,7 +557,11 @@ in
       // match Dovecot's oauth2 username_attribute (also `email`).
       $config['oauth_identity_fields'] = ['email'];
       // Send users straight to Kanidm SSO on the login page.
-      $config['oauth_login_redirect'] = true;
+      $config['oauth_login_redirect'] = false;
+      // Explicit XOAUTH2 — Dovecot advertises this mechanism; don't rely on
+      // Roundcube's auto-selection ('OAUTH' default may pick OAUTHBEARER
+      // which Dovecot also supports but the format can differ).
+      $config['oauth_auth_type'] = 'XOAUTH2';
       // Cache discovery/JWKS in the Roundcube DB (avoids re-fetching on
       // every login; required/recommended when oauth_config_uri is set).
       $config['oauth_cache']     = 'db';

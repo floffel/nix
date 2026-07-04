@@ -240,6 +240,9 @@
       ssl_server_key_file = "/var/lib/secrets/ssl/minnecker.com/key.pem";
 
       auth_allow_cleartext = true;
+      # Verbose auth logging for debugging XOAUTH2 + userdb lookup failures.
+      auth_verbose = true;
+      auth_debug = true;
       # Advertise XOAUTH2 alongside PLAIN/LOGIN. The oauth2 passdb below
       # validates OAuth2 access tokens issued by Kanidm; PLAIN falls through
       # to the LDAP passdb (POSIX password) for legacy/webmail clients.

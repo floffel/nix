@@ -45,11 +45,18 @@ in
       server_names_hash_bucket_size 128;
       proxy_headers_hash_max_size 1024;
       proxy_headers_hash_bucket_size 128;
-      
+
       brotli on;
       auth_ldap_cache_enabled on;
       auth_ldap_cache_expiration_time 10000;
       auth_ldap_cache_size 1000;
+
+      # Send access + error logs to syslog (journald) so Grafana Alloy's
+      # journald source picks them up and ships them to Loki. Without this,
+      # nginx logs only to /var/log/nginx/*.log and the monitoring dashboard's
+      # {systemd_unit="nginx.service"} Loki queries return nothing.
+      access_log syslog:server=unix:/dev/log;
+      error_log syslog:server=unix:/dev/log;
 
       # Include LDAP configurations from the isolated mail/ldap secrets mount
       include /var/lib/secrets/mail/ldap/nginx-ldap.conf;

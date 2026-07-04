@@ -170,7 +170,12 @@
         auth_url = "https://idm.minnecker.com/ui/oauth2";
         token_url = "https://idm.minnecker.com/oauth2/token";
         api_url = "https://idm.minnecker.com/oauth2/openid/grafana/userinfo";
-        role_attribute_path = "contains(groups, 'admin') && 'Admin' || 'Viewer'";
+        role_attribute_path = "contains(groups, 'idm_admins') && 'GrafanaAdmin' || contains(groups, 'admin') && 'Admin' || contains(groups, 'grafana_admins') && 'Admin' || 'Viewer'";
+        # allow_assign_grafana_admin: without this, even a 'GrafanaAdmin' result
+        # from role_attribute_path only grants org admin, not server admin (the
+        # ability to manage data sources, server settings, and users). Members
+        # of idm_admins get full server admin; grafana_admins get org admin.
+        allow_assign_grafana_admin = true;
         # Kanidm enforces PKCE on all OAuth2 clients; Grafana's generic_oauth
         # plugin supports it, so send a code_challenge with the authorise
         # request. Without this Kanidm rejects with "No PKCE code challenge

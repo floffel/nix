@@ -308,12 +308,11 @@
         ldap_auth_dn = "dn=token";
         ldap_auth_dn_password = "</var/lib/secrets/mail/dovecot/ldap-password.txt";
         ldap_base = "dc=minnecker,dc=com";
-        ldap_filter = "(&(|(mail=%{user})(uid=%{user}))(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))";
+        passdb_ldap_filter = "(&(|(mail=%{user})(uid=%{user}))(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))";
         # Kanidm does NOT expose userPassword over LDAP. Password verification
         # must happen via an LDAP bind as the found user DN using their POSIX
         # password (kanidm person posix set-password). Without passdb_ldap_bind
         # Dovecot tries to read userPassword and auth always fails.
-        # (Renamed from auth_bind in Dovecot 2.4; see db-ldap-settings.c)
         passdb_ldap_bind = true;
       };
 
@@ -323,7 +322,7 @@
         ldap_auth_dn = "dn=token";
         ldap_auth_dn_password = "</var/lib/secrets/mail/dovecot/ldap-password.txt";
         ldap_base = "dc=minnecker,dc=com";
-        ldap_filter = "(&(|(mail=%{user})(uid=%{user}))(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))";
+        userdb_ldap_filter = "(&(|(mail=%{user})(uid=%{user}))(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))";
       };
 
       "namespace inbox" = {

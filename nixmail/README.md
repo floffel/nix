@@ -12,55 +12,70 @@ All user configuration, aliases, catch-alls, and valid domains are configured dy
 
 ---
 
+## 🔐 Authentication
+
+Mail clients authenticate via one of two mechanisms:
+
+### OAuth2 (XOAUTH2) — preferred
+
+Mail clients that support the XOAUTH2 / OAUTHBEARER SASL mechanism
+(Thunderbird, K-9 Mail, Apple Mail, ...) authenticate via Kanidm's OAuth2
+authorization-code flow. The user logs into Kanidm with their full credentials
+(including MFA) in a browser, and the mail client receives an access token
+that it presents to Dovecot/Postfix via XOAUTH2. Dovecot validates the token
+by calling Kanidm's OIDC userinfo endpoint. **No separate mail password is
+required** — the user's Kanidm login authorises the mail client once, and the
+client caches/refreshes the token automatically.
+
+The `mail` OAuth2 client is declared in `kanidm.nix` (public, PKCE,
+`enableLocalhostRedirects = true`). Only members of the `mail_users` group
+receive `openid email profile` scopes; Dovecot extracts the `email` field
+from the userinfo response as the IMAP/SMTP username.
+
+#### Client setup (Thunderbird)
+
+1. In Thunderbird: **Settings → Server Settings → Authentication Method →
+   OAuth2** (and the same for the outgoing SMTP server).
+2. Configure a custom OAuth2 server (or use `autoconfig` if your
+   Thunderbird build reads `/.well-known/autoconfig`):
+   - **Issuer:** `https://idm.minnecker.com`
+   - **Client ID:** `mail`
+   - **Client Secret:** *(empty — public client)*
+   - **Authorization endpoint:** `https://idm.minnecker.com/ui/oauth2`
+   - **Token endpoint:** `https://idm.minnecker.com/oauth2/token`
+   - **Redirect:** `http://localhost:<port>` (any loopback port, allowed by
+     `enableLocalhostRedirects`)
+   - **Scopes:** `openid email profile`
+3. On the next connection, Thunderbird opens a browser window to Kanidm.
+   Log in (with MFA), authorise, and Thunderbird stores the token.
+
+### PLAIN / LOGIN (legacy + webmail)
+
+Clients that don't support XOAUTH2 (e.g. Roundcube webmail, older clients)
+fall back to PLAIN auth. Dovecot validates the password via an LDAP bind to
+Kanidm using the user's **POSIX password** (`kanidm person posix set-password`).
+This is a separate, single-factor credential by design — Kanidm does not
+expose the primary (MFA) password over LDAP.
+
+---
+
 ## 🛠️ Step-by-Step Directory Setup (Examples)
 
-Here is how to set up mailboxes, aliases, and catch-alls in Kanidm using example domains (`example.com`, `example.org`) and usernames (`john`, `jane`).
-
-### 1. Create the Mail Group
-Create a group that authorizes members to access the mail service:
+### 1. Grant Mail Access
+The `mail_users` group is auto-provisioned in `kanidm.nix`. Add the user:
 ```bash
-# Create the group managed by idm_admins
-kanidm -D idm_admin group create mail_users idm_admins
-
-# Set a descriptive display name
-kanidm -D idm_admin group set-description mail_users "Mail Server Users"
+kanidm -D idm_admin group add-members mail_users <username>
 ```
 
-### 2. Create User Accounts & Set Passwords
+### 2. Set the user's mail attribute
 ```bash
-# Create the users
-kanidm -D idm_admin person create john "John Doe"
-kanidm -D idm_admin person create jane "Jane Smith"
-
-# Set their passwords (you will be prompted interactively)
-kanidm -D idm_admin person credential update john
-kanidm -D idm_admin person credential update jane
+kanidm -D idm_admin person update <username> --mail <user>@minnecker.com
 ```
 
-### 3. Configure Email Addresses & Catch-Alls
-Update the user's `mail` attribute. The first email address specified is the primary mailbox. Additional entries act as aliases or catch-alls. 
-
-> [!IMPORTANT]
-> When setting catch-alls, you must use the `*` prefix (e.g. `"*@domain.com"`). Always wrap these values in **double quotes** to prevent your shell from interpreting the asterisk `*` character.
-
+### 3. (Legacy PLAIN auth only) Set a POSIX password
+Only needed for clients that don't support XOAUTH2:
 ```bash
-# Configure John (Primary mailbox, admin alias, and catch-alls for two domains)
-kanidm -D idm_admin person update john \
-  --mail john@example.com \
-  --mail admin@example.com \
-  --mail "*@example.com" \
-  --mail "*@example.org"
-
-# Configure Jane (Primary mailbox and standard alias)
-kanidm -D idm_admin person update jane \
-  --mail jane@example.com \
-  --mail j.smith@example.com
-```
-
-### 4. Grant Mail Access
-Add the configured users to the `mail_users` group:
-```bash
-kanidm -D idm_admin group add-members mail_users john jane
+kanidm -D idm_admin person posix set-password <username>
 ```
 
 ---
@@ -71,10 +86,12 @@ The Dovecot/Postfix LDAP configuration files are **auto-provisioned** — no
 manual token generation step is required.
 
 1. **Token generation (automatic):**
-   `nixidm` generates a fresh `mail_token` API token on every Kanidm start
-   via the `kanidm-mail-token` systemd service (REST API auth as `idm_admin`).
-   The token is written to `/var/lib/secrets/mail/ldap-token` on the shared
-   NAS mount. Old tokens with the same label are destroyed first.
+   `nixidm` generates a `mail_token` API token on Kanidm start via the
+   `kanidm-mail-token` systemd service (REST API auth as `idm_admin`). The
+   existing token is validated first via an LDAP bind+search; it is only
+   regenerated when genuinely invalid (e.g. after a DB restore), avoiding
+   desync with consumers that cache it. The token is written to
+   `/var/lib/secrets/mail/ldap/ldap-token` on the shared NAS mount.
 
 2. **Config rendering (automatic):**
    On `nixmail`, the `mail-ldap-config` systemd service runs before Dovecot
@@ -82,21 +99,24 @@ manual token generation step is required.
    - `/var/lib/secrets/mail/dovecot/ldap-password.txt`
    - `/var/lib/secrets/mail/postfix/ldap-*.cf` (recipients, aliases, senders, catchalls, domains)
 
-   On `nixnginx`, the pre-rendered `nginx-ldap.conf` is read directly from
-   the shared mount.
-
 3. **Proxmox mounts required:**
    - `nixidm`: `/mnt/pve/nas/shared/secrets/mail/ldap` → `var/lib/secrets/mail/ldap` (`rw`) — isolated subdir only
    - `nixmail`: `/mnt/pve/nas/shared/secrets/mail` → `var/lib/secrets/mail` (`rw`) — full mount (reads `ldap/` subdir, writes dovecot/postfix)
-   - `nixnginx`: `/mnt/pve/nas/shared/secrets/mail/ldap` → `var/lib/secrets/mail/ldap` (`ro`) — isolated subdir only
 
    The `ldap` subdir must exist on the NAS before the first deploy:
    ```bash
    mkdir -p /mnt/pve/nas/shared/secrets/mail/ldap
    ```
 
-4. **Rebuild:**
+4. **Direct client connections:**
+   Clients connect directly to `nixmail` via host-level port forwarding
+   (25, 143, 465, 587, 993). Dovecot and Postfix handle TLS termination
+   themselves. The nginx mail proxy on `nixnginx` has been removed — it
+   could not pass XOAUTH2 through to Dovecot.
+
+5. **Rebuild:**
    ```bash
    nixos-rebuild switch
    ```
+
 

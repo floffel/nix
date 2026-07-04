@@ -496,71 +496,12 @@ in
       };
     };
 
-    # Append Mail Proxy block directly since standard NixOS module only natively manages HTTP/Stream contexts
-    appendConfig = ''
-      mail {
-        server_name riese.minnecker.com;
-
-        ssl_certificate /var/lib/secrets/ssl/minnecker.com/fullchain.pem;
-        ssl_certificate_key /var/lib/secrets/ssl/minnecker.com/key.pem;
-
-        ssl_protocols TLSv1.2;
-        ssl_prefer_server_ciphers on;
-        ssl_ciphers "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384";
-
-        ssl_ecdh_curve secp521r1:secp384r1;
-        ssl_dhparam /var/lib/secrets/nginx/dh.param;
-
-        ssl_session_cache   shared:SSLMAIL:10m;
-        ssl_session_timeout 10m;
-
-        starttls off;
-
-        auth_http localhost/auth/;
-        proxy_pass_error_message on;
-        error_log /var/log/nginx/mail.proxy.err.log;
-
-        proxy on;
-
-        server {
-          server_name riese.minnecker.com;
-          listen [::]:25 ipv6only=off;
-          protocol smtp;
-          smtp_auth none;
-          smtp_capabilities "250-STARTTLS" "PIPELINING" "VRFY" "ETRN" "ENHANCEDSTATUSCODES" "8BITMIME" "DSN" "SMTPUTF8" "CHUNKING" "SIZE 53687063712";
-          xclient on;
-        }
-
-        server {
-          server_name riese.minnecker.com;
-          listen [::]:465 ssl ipv6only=off;
-          protocol smtp;
-          smtp_auth none plain;
-          smtp_capabilities "250-STARTTLS" "PIPELINING" "VRFY" "ETRN" "ENHANCEDSTATUSCODES" "8BITMIME" "DSN" "SMTPUTF8" "CHUNKING" "SIZE 53687063712";
-          xclient on;
-        }
-
-        server {
-          listen [::]:587 ipv6only=off;
-          protocol smtp;
-          smtp_auth plain login;
-          smtp_capabilities "AUTH" "PIPELINING" "VRFY" "ETRN" "ENHANCEDSTATUSCODES" "8BITMIME" "DSN" "SMTPUTF8" "CHUNKING" "SIZE 53687063712";
-          starttls only;
-          xclient on;
-        }
-
-        server {
-          listen [::]:143 ipv6only=off;
-          listen [::]:993 ssl ipv6only=off;
-          protocol imap;
-          imap_auth login plain;
-          # Speak PROXY protocol to Dovecot so it learns the real client IP
-          # for login/audit logging. The matching Dovecot listener
-          # (imap_haproxy on port 10143, see auth.js) has haproxy enabled.
-          proxy_protocol on;
-        }
-      }
-    '';
+    # Mail proxy removed: clients now connect directly to nixmail (Dovecot/
+    # Postfix) via host-level port forwarding. The nginx mail proxy could not
+    # pass XOAUTH2 through to Dovecot (it converts all auth to IMAP LOGIN /
+    # SMTP AUTH PLAIN when re-authenticating to the backend), which blocked
+    # OAuth2-based mail authentication. Dovecot and Postfix now handle TLS
+    # and all auth mechanisms (XOAUTH2 + PLAIN) directly.
   };
 
   # 4. Roundcube Webmail Service Configuration

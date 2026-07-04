@@ -398,6 +398,34 @@
             };
           };
         };
+
+        # Mail XOAUTH2 client. This is a public (PKCE) client used by IMAP
+        # and SMTP clients that support the XOAUTH2 / OAUTHBEARER SASL
+        # mechanism (Thunderbird, K-9 Mail, Apple Mail, etc.). The client
+        # authenticates to Kanidm via a browser-based authorisation code
+        # flow — using their full Kanidm credentials (including MFA) — and
+        # receives an access token that Dovecot then validates via the
+        # /oauth2/openid/mail/userinfo endpoint. This eliminates the need
+        # for a separate POSIX password for mail access.
+        #
+        # enableLocalhostRedirects: RFC 8252 loopback redirect with any port
+        # — mail clients spin up a local HTTP server on an ephemeral port to
+        # receive the authorisation code redirect. Without this Kanidm
+        # requires an exact originUrl match, which is impossible for
+        # desktop/mobile clients that pick a random port each time.
+        #
+        # The scope map gates access: only members of `mail_users` receive
+        # the `openid email profile` scopes. Dovecot extracts the `email`
+        # field from the userinfo response as the IMAP/SMTP username, so the
+        # mail attribute on the person entry must be set.
+        mail = {
+          public = true;
+          enableLocalhostRedirects = true;
+          displayName = "Mail Server (XOAUTH2)";
+          originUrl = "http://localhost";
+          originLanding = "https://mail.minnecker.com/";
+          scopeMaps = { mail_users = [ "openid" "email" "profile" ]; };
+        };
       };
     };
   };

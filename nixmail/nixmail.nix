@@ -134,12 +134,6 @@
         compatibility_level = "3.10";
         recipient_delimiter = "+.";
         smtpd_banner = "$myhostname ESMTP";
-        # Authorize the nginx mail proxy (nixnginx, 10.20.20.14 on the LXC
-        # mgmt LAN) to issue XCLIENT so Postfix learns the real client IP/port
-        # for logging, Received headers and policy checks instead of the proxy
-        # address. Without this the XCLIENT command is rejected and Postfix
-        # sees only nginx's IP.
-        smtpd_authorized_xclient_hosts = "10.20.20.14";
 
         local_destination_concurrency_limit = "10";
         default_destination_concurrency_limit = "20";
@@ -170,6 +164,13 @@
         non_smtpd_milters = "inet:127.0.0.1:11332";
 
         smtp_tls_security_level = "may";
+
+        # TLS certificates for direct client connections (previously
+        # terminated by the nginx mail proxy on ports 465/993/587/143).
+        # The same cert/key pair used by nginx and Kanidm.
+        smtpd_tls_cert_file = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        smtpd_tls_key_file = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+        smtpd_tls_security_level = "may";
       };
 
       master = {
@@ -199,6 +200,23 @@
             "-o" "milter_macro_daemon_name=ORIGINATING"
           ];
         };
+        # Implicit-TLS SMTPS (port 465). Previously terminated by the nginx
+        # mail proxy; now exposed directly via host port forwarding. Wrapper
+        # mode enables implicit TLS (no STARTTLS negotiation).
+        submissions = {
+          type = "inet";
+          private = false;
+          chroot = false;
+          command = "smtpd";
+          args = [
+            "-o" "smtpd_tls_wrappermode=yes"
+            "-o" "smtpd_sasl_auth_enable=yes"
+            "-o" "smtpd_sasl_type=dovecot"
+            "-o" "smtpd_sasl_path=private/auth"
+            "-o" "smtpd_sasl_security_options=noanonymous"
+            "-o" "milter_macro_daemon_name=ORIGINATING"
+          ];
+        };
       };
     };
 
@@ -211,17 +229,24 @@
   services.dovecot2 = {
     enable = true;
 
+    # TLS certificates for direct client connections (previously terminated
+    # by the nginx mail proxy; now exposed directly via host port forwarding).
+    sslServerCert = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+    sslServerKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+
     settings = {
       dovecot_config_version = "2.4.4";
       dovecot_storage_version = "2.4.4";
 
       auth_allow_cleartext = true;
-      auth_mechanisms = [ "plain" "login" ];
+      # Advertise XOAUTH2 alongside PLAIN/LOGIN. The oauth2 passdb below
+      # validates OAuth2 access tokens issued by Kanidm; PLAIN falls through
+      # to the LDAP passdb (POSIX password) for legacy/webmail clients.
+      auth_mechanisms = [ "plain" "login" "xoauth2" ];
 
-      # nginx (nixnginx) reaches this server from 10.20.20.14 / fd01::14 on the
-      # LXC mgmt LAN (see auth.js backend host 10.20.20.13). Trust it for both
-      # HAProxy/PROXY-protocol (IMAP real client IP) and login-Trusted-Networks
-      # (used by some auth flows) so the real client IP is recorded.
+      # The nginx mail proxy is removed — clients connect directly. Keep
+      # PROXY protocol trust for any future HAProxy/TCP-proxy that may sit
+      # in front, but it is no longer required for the auth flow.
       haproxy_trusted_networks = [ "10.20.20.14/32" "fd01::14/128" ];
       login_trusted_networks = [ "10.20.20.14/32" "fd01::14/128" ];
 
@@ -245,6 +270,36 @@
       # disable cert verification for outbound LDAP connections (same as
       # Postfix's tls_require_cert=no).
       ssl_client_require_valid_cert = false;
+
+      # OAuth2 passdb for XOAUTH2 authentication. Mail clients (Thunderbird,
+      # K-9, Apple Mail, ...) that support OAuth2 obtain an access token via
+      # Kanidm's browser-based authorisation code flow (using the user's full
+      # Kanidm credentials, including MFA) and present it to Dovecot via the
+      # XOAUTH2 SASL mechanism. Dovecot validates the token by calling
+      # Kanidm's OIDC userinfo endpoint with the token as a Bearer header
+      # (introspection_mode = auth). Kanidm returns the user's claims (sub,
+      # email, ...); Dovecot extracts the `email` field as the IMAP/SMTP
+      # username and proceeds with the userdb lookup below.
+      #
+      # This eliminates the need for a separate POSIX password for mail —
+      # the user authenticates once via Kanidm SSO and the mail client
+      # caches/refreshes the token automatically.
+      "passdb oauth2" = {
+        driver = "oauth2";
+        # Kanidm's per-client OIDC userinfo endpoint. The short name `nixidm`
+        # resolves via hosts.nix (10.20.20.15). TLS cert verification is
+        # disabled globally (ssl_client_require_valid_cert = false) because
+        # the cert is for minnecker.com, not the short hostname.
+        introspection_url = "https://nixidm:8443/oauth2/openid/mail/userinfo";
+        # Send the token as Authorization: Bearer (GET). Kanidm's userinfo
+        # endpoint expects this — not ?access_token= (which is the default
+        # tokeninfo_url mode) or POST body (RFC 7662 introspection).
+        introspection_mode = "auth";
+        # Extract the user's email from the userinfo response as the
+        # Dovecot username. The `email` scope is granted via the scope map
+        # on the `mail` OAuth2 client in kanidm.nix.
+        username_attribute = "email";
+      };
 
       "passdb ldap" = {
         driver = "ldap";

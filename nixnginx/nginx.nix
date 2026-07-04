@@ -548,7 +548,7 @@ in
       $config['oauth_provider']      = 'generic';
       $config['oauth_provider_name'] = 'Kanidm';
       $config['oauth_client_id']     = 'mail';
-      $config['oauth_client_secret'] = '';
+      $config['oauth_client_secret'] = null;
       // OIDC discovery — Kanidm serves a per-client .well-known document
       // that supplies auth/token/userinfo/jwks endpoints.
       $config['oauth_config_uri']    = 'https://idm.minnecker.com/oauth2/openid/mail/.well-known/openid-configuration';

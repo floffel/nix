@@ -32,6 +32,20 @@
       fd01::16 nixunbound.hosts.local.minnecker.com nixunbound
       10.20.20.17 nixpostgresql.hosts.local.minnecker.com nixpostgresql nixpostgres
       fd01::17 nixpostgresql.hosts.local.minnecker.com nixpostgresql nixpostgres
+      10.20.20.18 nixforgejo-runner.hosts.local.minnecker.com nixforgejo-runner
+      fd01::18 nixforgejo-runner.hosts.local.minnecker.com nixforgejo-runner
+      10.20.20.19 nixmatrix.hosts.local.minnecker.com nixmatrix
+      fd01::19 nixmatrix.hosts.local.minnecker.com nixmatrix
+      10.20.20.20 nixvaultwarden.hosts.local.minnecker.com nixvaultwarden
+      fd01::20 nixvaultwarden.hosts.local.minnecker.com nixvaultwarden
+      10.20.20.21 nixwikijs.hosts.local.minnecker.com nixwikijs
+      fd01::21 nixwikijs.hosts.local.minnecker.com nixwikijs
+      10.20.20.22 nixjitsi.hosts.local.minnecker.com nixjitsi
+      fd01::22 nixjitsi.hosts.local.minnecker.com nixjitsi
+      10.20.20.23 nixmonitoring.hosts.local.minnecker.com nixmonitoring
+      fd01::23 nixmonitoring.hosts.local.minnecker.com nixmonitoring
+      10.20.20.24 nixopenwebui.hosts.local.minnecker.com nixopenwebui
+      fd01::24 nixopenwebui.hosts.local.minnecker.com nixopenwebui
     '';
   };
 }

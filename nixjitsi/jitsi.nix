@@ -36,13 +36,13 @@
   services.nginx.virtualHosts."meet.minnecker.com" = {
     enableACME = false;
     forceSSL = false;
-    # The nixnginx front proxy (172.16.16.3 on the service LAN) already
+    # The nixnginx front proxy (10.20.20.14 on the service LAN) already
     # terminates TLS and forwards X-Forwarded-For. Rewrite $remote_addr to the
     # real client IP here so Prosody/Jicofo and the Jitsi web app see it
     # directly instead of the proxy address.
     extraConfig = ''
-      set_real_ip_from 172.16.16.3;
-      set_real_ip_from fd0c:dead:beef::16:3;
+      set_real_ip_from 10.20.20.14;
+      set_real_ip_from fd01::14;
       real_ip_header X-Forwarded-For;
       real_ip_recursive on;
     '';
@@ -52,7 +52,7 @@
     enable = true;
     # Configure NAT settings to allow WebRTC connections from outside
     nat = {
-      localAddress = "172.16.16.20";
+      localAddress = "10.20.20.22";
       # Public address of the server (domain name or WAN IP)
       publicAddress = "meet.minnecker.com";
     };

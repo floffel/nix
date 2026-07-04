@@ -96,11 +96,11 @@
         http_port = 3000;
         domain = "monitoring.minnecker.com";
         root_url = "https://monitoring.minnecker.com/";
-        # Grafana runs behind the nixnginx reverse proxy, reached over
-        # loopback. Trust the forwarded client-IP headers it sends so Grafana
-        # logs and rate-limits by the real client IP instead of 127.0.0.1.
+        # Grafana runs behind the nixnginx reverse proxy, reached over the
+        # service LAN. Trust the forwarded client-IP headers it sends so Grafana
+        # logs and rate-limits by the real client IP instead of the proxy address.
         # Without trusted_proxies Grafana ignores X-Real-IP/X-Forwarded-For.
-        trusted_proxies = [ "127.0.0.1" "::1" ];
+        trusted_proxies = [ "10.20.20.14" "fd01::14" ];
       };
       # Load Grafana admin credentials and secrets dynamically from secure files at runtime
       security = {

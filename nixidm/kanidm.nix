@@ -353,7 +353,7 @@
 
         grafana = {
           displayName = "Grafana Monitoring";
-          originUrl = "https://monitoring.minnecker.com/generic_oauth/callback";
+          originUrl = "https://monitoring.minnecker.com/login/generic_oauth";
           originLanding = "https://monitoring.minnecker.com/";
           basicSecretFile = "/var/lib/secrets/oauth2/grafana/secret";
           # Grafana's role_attribute_path = contains(groups, 'admin') && 'Admin'

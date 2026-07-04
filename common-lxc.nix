@@ -19,6 +19,14 @@
   # Disable sandboxing inside the container since LXC profiles usually restrict the system calls Nix sandbox uses
   nix.settings.sandbox = false;
 
+  # Garbage-collect old generations weekly to keep the container rootfs from growing.
+  # Deletes store paths not reachable from any current generation older than 7 days.
+  nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options = "--delete-older-than 7d";
+  };
+
   # Suppress systemd units that are incompatible with LXC containers to avoid boot and rebuild failures
   systemd.suppressedSystemUnits = [
     "dev-mqueue.mount"

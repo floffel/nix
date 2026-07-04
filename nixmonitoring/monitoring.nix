@@ -170,6 +170,13 @@
         auth_url = "https://idm.minnecker.com/ui/oauth2";
         token_url = "https://idm.minnecker.com/oauth2/token";
         api_url = "https://idm.minnecker.com/oauth2/openid/grafana/userinfo";
+        # Grafana's generic_oauth plugin appends "/emails" to api_url by
+        # default to fetch the user's address (GitHub-style). Kanidm's
+        # userinfo endpoint already returns the email claim directly (the
+        # `email` scope is granted), so the extra request 404s ("Route not
+        # found") and login fails with "Error getting email address". Disabling
+        # the separate email fetch makes Grafana use the email from userinfo.
+        fetch_email = false;
         role_attribute_path = "contains(groups, 'admin') && 'Admin' || 'Viewer'";
         # Kanidm enforces PKCE on all OAuth2 clients; Grafana's generic_oauth
         # plugin supports it, so send a code_challenge with the authorise

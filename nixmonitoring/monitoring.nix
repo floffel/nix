@@ -140,6 +140,17 @@
         admin_user = "admin";
         admin_password = "$__file{/var/lib/secrets/grafana/admin-password}";
         secret_key = "$__file{/var/lib/secrets/grafana/secret-key}";
+        # Disallow account creation via the built-in form and hide the
+        # username/password box on the login page. SSO via Kanidm is the
+        # only way in. (admin_password above still exists as an escape
+        # hatch for emergency/break-glass access, but the form is hidden.)
+        disable_gravatar = true;
+      };
+      "auth" = {
+        disable_login_form = true;
+      };
+      "auth.basic" = {
+        enabled = false;
       };
       "auth.generic_oauth" = {
         enabled = true;
@@ -152,6 +163,9 @@
         token_url = "https://idm.minnecker.com/oauth2/token";
         api_url = "https://idm.minnecker.com/oauth2/openid/grafana/userinfo";
         role_attribute_path = "contains(groups, 'admin') && 'Admin' || 'Viewer'";
+        # Send unauthenticated users straight to Kanidm instead of showing
+        # a login screen with a (now hidden) form.
+        oauth_auto_login = true;
       };
     };
 

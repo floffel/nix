@@ -31,6 +31,11 @@ let
 in
 {
   virtualisation.docker.enable = true;
+  virtualisation.docker.autoPrune = {
+    enable = true;
+    dates = "weekly";
+    flags = [ "--all" "--filter" "until=168h" ];
+  };
 
   services.gitea-actions-runner = {
     package = forgejoRunner;
@@ -56,23 +61,3 @@ in
     ExecStart = lib.mkForce "${forgejoRunner}/bin/forgejo-runner daemon --config /var/lib/gitea-runner/default/config.yaml";
     WorkingDirectory = lib.mkForce "/var/lib/gitea-runner";
   };
-
-  systemd.services.docker-weekly-prune = {
-    description = "Weekly Docker system prune";
-    after = [ "docker.service" ];
-    wants = [ "docker.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${pkgs.docker}/bin/docker system prune -af --filter until=168h";
-    };
-  };
-
-  systemd.timers.docker-weekly-prune = {
-    description = "Weekly Docker system prune timer";
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnCalendar = "weekly";
-      Persistent = true;
-    };
-  };
-}

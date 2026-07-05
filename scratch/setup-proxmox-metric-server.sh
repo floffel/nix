@@ -80,11 +80,12 @@ echo "3/3  Configure Proxmox External Metric Server"
 # Remove existing entry if it exists (idempotent).
 pvesh delete "/cluster/metrics/server/${METRIC_SERVER_ID}" 2>/dev/null || true
 
-# Create the metric server entry on the collection endpoint. Proxmox's API
-# path is /cluster/metrics/server (note the plural "metrics"). POST to the
-# collection with -id as a parameter creates the entry.
-pvesh create /cluster/metrics/server \
-  -id "${METRIC_SERVER_ID}" \
+# Create the metric server entry. Proxmox's API for metric servers is
+# unusual: create (POST) goes to the INDIVIDUAL resource path with the id
+# embedded in the URL (/cluster/metrics/server/<id>), not the collection
+# endpoint. This matches how the PVE web UI submits (see MetricServerBaseEdit
+# submitUrl: isCreate ? `${url}/${values.id}` : url).
+pvesh create "/cluster/metrics/server/${METRIC_SERVER_ID}" \
   -type influxdb \
   -server "${INFLUX_HOST}" \
   -port "${INFLUX_PORT}" \

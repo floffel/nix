@@ -61,3 +61,4 @@ in
     ExecStart = lib.mkForce "${forgejoRunner}/bin/forgejo-runner daemon --config /var/lib/gitea-runner/default/config.yaml";
     WorkingDirectory = lib.mkForce "/var/lib/gitea-runner";
   };
+}

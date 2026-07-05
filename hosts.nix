@@ -16,6 +16,8 @@
 
     # Hosts entries (static resolution fallback)
     extraHosts = ''
+      10.20.20.1 proxmox.hosts.local.minnecker.com proxmox
+      fd01::1 proxmox.hosts.local.minnecker.com proxmox
       10.10.10.5 nixwireguard.hosts.local.minnecker.com nixwireguard
       fd00::5 nixwireguard.hosts.local.minnecker.com nixwireguard
       10.20.20.11 nixnsd.hosts.local.minnecker.com nixnsd

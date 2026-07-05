@@ -41,18 +41,21 @@
     port = 9090;
     
     scrapeConfigs = [
-      # Scraping node_exporter on all containers for system resource metrics
+      # Scraping node_exporter on all containers for system resource metrics.
+      # Hostnames must match the aliases declared in hosts.nix (the LXC
+      # /etc/hosts map) — Prometheus resolves them via the container's DNS,
+      # so a wrong name silently drops the target with a scrape error.
       {
         job_name = "node";
         static_configs = [
           {
             targets = [
-              "idm:9100"
+              "nixidm:9100"
               "nixmail:9100"
-              "nixvpn:9100"
+              "nixwireguard:9100"
               "nixpostgres:9100"
-              "forgejo:9100"
-              "forgejo-runner:9100"
+              "nixforgejo:9100"
+              "nixforgejo-runner:9100"
               "nixnginx:9100"
               "nixmonitoring:9100"
               "nixopenwebui:9100"
@@ -62,6 +65,7 @@
               "nixjitsi:9100"
               "nixnsd:9100"
               "nixunbound:9100"
+              "proxmox:9100"
             ];
           }
         ];

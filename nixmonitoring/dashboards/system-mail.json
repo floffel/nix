@@ -265,7 +265,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({systemd_unit=\"dovecot.service\"} |= \"Login:\" [$__interval]))",
+          "expr": "sum(count_over_time({systemd_unit=\"dovecot2.service\"} |= \"Login:\" [$__interval]))",
           "queryType": "range",
           "refId": "A"
         }
@@ -325,7 +325,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum by (systemd_unit) (count_over_time({systemd_unit=\"dovecot.service\"} |= \"Login:\" [$__interval]))",
+          "expr": "sum by (systemd_unit) (count_over_time({systemd_unit=\"dovecot2.service\"} |= \"Login:\" [$__interval]))",
           "legendFormat": "Dovecot Logins",
           "queryType": "range",
           "refId": "C"
@@ -374,7 +374,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "{systemd_unit=\"dovecot.service\"} |= \"Login: user=\" | regexp \"Login: user=<(?P<user>[^>]+)>, method=(?P<method>[^,]+), rip=(?P<rip>[^,]+)\"",
+          "expr": "{systemd_unit=\"dovecot2.service\"} |= \"Login: user=\" | regexp \"Login: user=<(?P<user>[^>]+)>, method=(?P<method>[^,]+), rip=(?P<rip>[^,]+)\"",
           "queryType": "range",
           "refId": "A"
         }
@@ -413,7 +413,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum by (user) (count_over_time({systemd_unit=\"dovecot.service\"} |= \"Login: user=\" | regexp \"Login: user=<(?P<user>[^>]+)>\" [$__range]))",
+          "expr": "sum by (user) (count_over_time({systemd_unit=\"dovecot2.service\"} |= \"Login: user=\" | regexp \"Login: user=<(?P<user>[^>]+)>\" [$__range]))",
           "queryType": "range",
           "refId": "A"
         }
@@ -592,7 +592,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(pg_stat_database_xact_commit[$__rate_interval]))",
+          "expr": "sum(rate(pg_stat_database_xact_commit_total[$__rate_interval])) or sum(rate(pg_stat_database_xact_commit[$__rate_interval]))",
           "legendFormat": "Commits",
           "range": true,
           "refId": "A"
@@ -603,7 +603,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(pg_stat_database_xact_rollback[$__rate_interval]))",
+          "expr": "sum(rate(pg_stat_database_xact_rollback_total[$__rate_interval])) or sum(rate(pg_stat_database_xact_rollback[$__rate_interval]))",
           "legendFormat": "Rollbacks",
           "range": true,
           "refId": "B"
@@ -693,7 +693,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[$__rate_interval])) * 100)",
+          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\",instance=~\"$instance\"}[$__rate_interval])) * 100)",
           "legendFormat": "{{instance}}",
           "range": true,
           "refId": "A"
@@ -732,13 +732,114 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100",
+          "expr": "(node_memory_MemTotal_bytes{instance=~\"$instance\"} - node_memory_MemAvailable_bytes{instance=~\"$instance\"}) / node_memory_MemTotal_bytes{instance=~\"$instance\"} * 100",
           "legendFormat": "{{instance}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Memory Usage per Container (%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 44
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (instance) (rate(node_network_receive_bytes_total{device!~\"lo|veth.*|br-.*|docker.*\",instance=~\"$instance\"}[$__rate_interval])) * 8",
+          "legendFormat": "RX {{instance}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (instance) (rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|br-.*|docker.*\",instance=~\"$instance\"}[$__rate_interval])) * 8",
+          "legendFormat": "TX {{instance}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps"
+        }
+      },
+      "title": "Network Traffic per Container (bits/sec)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 44
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "100 - (node_filesystem_avail_bytes{mountpoint=\"/\",fstype!~\"tmpfs|overlay\",instance=~\"$instance\"} / node_filesystem_size_bytes{mountpoint=\"/\",fstype!~\"tmpfs|overlay\",instance=~\"$instance\"} * 100)",
+          "legendFormat": "{{instance}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "min": 0
+        }
+      },
+      "title": "Disk Usage per Container (%)",
       "type": "timeseries"
     },
     {
@@ -778,7 +879,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{job=\"systemd-journal\"}",
+          "expr": "{job=\"systemd-journal\",host=~\"$host\"}",
           "refId": "A"
         }
       ],
@@ -795,7 +896,44 @@
     "nixos"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "host",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "query": "label_values({job=\"systemd-journal\"}, host)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "instance",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(node_cpu_seconds_total, instance)",
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
   },
   "time": {
     "from": "now-6h",

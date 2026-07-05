@@ -40,7 +40,8 @@ ns2			 IN AAAA    2a01:4f8:c0c:2ea9::2
 www			 IN CNAME  riese
 
 local		0        IN A 127.0.0.1
-vault		0	 IN A 172.16.16.3
+vault		0	 IN A 10.20.20.14
+vault		0	 IN AAAA fd01::14
 
 backendmail		 IN CNAME  riese
 _acme-challenge          IN A       127.0.0.1

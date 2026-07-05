@@ -78,13 +78,12 @@ echo
 echo "3/3  Configure Proxmox External Metric Server"
 
 # Remove existing entry if it exists (idempotent).
-pvesh delete "/cluster/metricserver/${METRIC_SERVER_ID}" 2>/dev/null || true
+pvesh delete "/cluster/metrics/server/${METRIC_SERVER_ID}" 2>/dev/null || true
 
 # Create the metric server entry on the collection endpoint. Proxmox's API
-# requires POST to /cluster/metricserver (the collection) with `id` as a
-# parameter — NOT to /cluster/metricserver/{id} (the individual resource, which
-# only has a `set` handler, not `create`).
-pvesh create /cluster/metricserver \
+# path is /cluster/metrics/server (note the plural "metrics"). POST to the
+# collection with -id as a parameter creates the entry.
+pvesh create /cluster/metrics/server \
   -id "${METRIC_SERVER_ID}" \
   -type influxdb \
   -server "${INFLUX_HOST}" \
@@ -100,7 +99,7 @@ echo
 echo "Done. Proxmox will now push metrics to InfluxDB every ~10 seconds."
 echo
 echo "Verify in the Proxmox web UI: Datacenter → Metric Server"
-echo "Or check:  pvesh get /cluster/metricserver/${METRIC_SERVER_ID}"
+echo "Or check:  pvesh get /cluster/metrics/server/${METRIC_SERVER_ID}"
 echo
 echo "Verify data in InfluxDB (on nixmonitoring):"
 echo "  curl -H 'Authorization: Token \$(cat ${TOKEN_FILE})' \\"

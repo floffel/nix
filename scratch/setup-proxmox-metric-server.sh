@@ -23,7 +23,6 @@ INFLUX_PORT="8086"
 INFLUX_ORG="minnecker"
 INFLUX_BUCKET="proxmox"
 METRIC_SERVER_ID="influxdb-minnecker"
-TOKEN_FILE="/var/lib/secrets/influxdb/token"  # on nixmonitoring, not here
 
 echo "=== Proxmox External Metric Server Setup ==="
 echo
@@ -78,8 +77,12 @@ echo "3/3  Configure Proxmox External Metric Server"
 # Remove existing entry if it exists (idempotent).
 pvesh delete "/cluster/metricserver/${METRIC_SERVER_ID}" 2>/dev/null || true
 
-# Create the metric server entry. Proxmox pushes via HTTP v2 API.
-pvesh create /cluster/metricserver/${METRIC_SERVER_ID} \
+# Create the metric server entry on the collection endpoint. Proxmox's API
+# requires POST to /cluster/metricserver (the collection) with `id` as a
+# parameter — NOT to /cluster/metricserver/{id} (the individual resource, which
+# only has a `set` handler, not `create`).
+pvesh create /cluster/metricserver \
+  -id "${METRIC_SERVER_ID}" \
   -type influxdb \
   -server "${INFLUX_HOST}" \
   -port "${INFLUX_PORT}" \

@@ -18,7 +18,7 @@ mkdir -p "$DEST_DIR"
 chmod 700 "$DEST_DIR"
 
 # Write token
-echo -n "$RUNNER_TOKEN" > "$DEST_DIR/runner-token"
+echo "TOKEN=$RUNNER_TOKEN" > "$DEST_DIR/runner-token"
 chmod 600 "$DEST_DIR/runner-token"
 
 # Resolve gitea-runner user/group dynamically (fallback to root if not created yet)

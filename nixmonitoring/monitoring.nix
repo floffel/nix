@@ -65,8 +65,20 @@
               "nixjitsi:9100"
               "nixnsd:9100"
               "nixunbound:9100"
-              "proxmox:9100"
             ];
+          }
+        ];
+      }
+      # Proxmox hypervisor: pull-based pve_exporter. It queries the PVE API
+      # and exposes hypervisor-accurate per-guest (LXC/QEMU) AND per-node
+      # resource accounting (cgroup-based) that node_exporter inside an
+      # unprivileged LXC cannot provide correctly. Deploy with
+      # scratch/setup-proxmox-pve-exporter.sh on the Proxmox host.
+      {
+        job_name = "pve";
+        static_configs = [
+          {
+            targets = [ "proxmox:9221" ];
           }
         ];
       }

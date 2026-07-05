@@ -693,13 +693,20 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\",instance=~\"$instance\"}[$__rate_interval])) * 100)",
-          "legendFormat": "{{instance}}",
+          "expr": "pve_cpu_usage_ratio{id=~\"lxc/.*\"} * on(id) group_left(name) pve_guest_info{name=~\"$guest\"} * 100",
+          "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "CPU Usage per Container (%)",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "min": 0
+        }
+      },
+      "title": "CPU Usage per Container (%) — PVE hypervisor",
       "type": "timeseries"
     },
     {
@@ -732,13 +739,20 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(node_memory_MemTotal_bytes{instance=~\"$instance\"} - node_memory_MemAvailable_bytes{instance=~\"$instance\"}) / node_memory_MemTotal_bytes{instance=~\"$instance\"} * 100",
-          "legendFormat": "{{instance}}",
+          "expr": "(pve_memory_usage_bytes{id=~\"lxc/.*\"} / on(id) pve_memory_size_bytes{id=~\"lxc/.*\"}) * on(id) group_left(name) pve_guest_info{name=~\"$guest\"} * 100",
+          "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Memory Usage per Container (%)",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "min": 0
+        }
+      },
+      "title": "Memory Usage per Container (%) — PVE hypervisor",
       "type": "timeseries"
     },
     {
@@ -771,8 +785,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (instance) (rate(node_network_receive_bytes_total{device!~\"lo|veth.*|br-.*|docker.*\",instance=~\"$instance\"}[$__rate_interval])) * 8",
-          "legendFormat": "RX {{instance}}",
+          "expr": "rate(pve_network_receive_bytes_total{id=~\"lxc/.*\"}[$__rate_interval]) * on(id) group_left(name) pve_guest_info{name=~\"$guest\"} * 8",
+          "legendFormat": "RX {{name}}",
           "range": true,
           "refId": "A"
         },
@@ -782,8 +796,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (instance) (rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|br-.*|docker.*\",instance=~\"$instance\"}[$__rate_interval])) * 8",
-          "legendFormat": "TX {{instance}}",
+          "expr": "rate(pve_network_transmit_bytes_total{id=~\"lxc/.*\"}[$__rate_interval]) * on(id) group_left(name) pve_guest_info{name=~\"$guest\"} * 8",
+          "legendFormat": "TX {{name}}",
           "range": true,
           "refId": "B"
         }
@@ -793,7 +807,7 @@
           "unit": "bps"
         }
       },
-      "title": "Network Traffic per Container (bits/sec)",
+      "title": "Network Traffic per Container (bits/sec) — PVE hypervisor",
       "type": "timeseries"
     },
     {
@@ -826,8 +840,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 - (node_filesystem_avail_bytes{mountpoint=\"/\",fstype!~\"tmpfs|overlay\",instance=~\"$instance\"} / node_filesystem_size_bytes{mountpoint=\"/\",fstype!~\"tmpfs|overlay\",instance=~\"$instance\"} * 100)",
-          "legendFormat": "{{instance}}",
+          "expr": "(pve_disk_usage_bytes{id=~\"lxc/.*\"} / on(id) pve_disk_size_bytes) * on(id) group_left(name) pve_guest_info{name=~\"$guest\"} * 100",
+          "legendFormat": "{{name}}",
           "range": true,
           "refId": "A"
         }
@@ -839,8 +853,152 @@
           "min": 0
         }
       },
-      "title": "Disk Usage per Container (%)",
+      "title": "Disk Usage per Container (%) — PVE hypervisor",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 51
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "pve_cpu_usage_ratio{id=~\"node/.*\"} * 100",
+          "legendFormat": "{{id}} CPU",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "min": 0
+        }
+      },
+      "title": "Proxmox Host CPU (%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 51
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "pve_memory_usage_bytes{id=~\"node/.*\"} / on(id) pve_memory_size_bytes * 100",
+          "legendFormat": "{{id}} RAM",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "min": 0
+        }
+      },
+      "title": "Proxmox Host Memory (%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 51
+      },
+      "id": 17,
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 80 },
+              { "color": "red", "value": 90 }
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(pve_disk_usage_bytes{id=~\"node/.*\"} / on(id) pve_disk_size_bytes) * 100",
+          "legendFormat": "{{id}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Proxmox Host Disk Usage (%)",
+      "type": "gauge"
     },
     {
       "collapsed": false,
@@ -916,13 +1074,13 @@
         }
       },
       {
-        "name": "instance",
+        "name": "guest",
         "type": "query",
         "datasource": {
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "query": "label_values(node_cpu_seconds_total, instance)",
+        "query": "label_values(pve_guest_info{id=~\"lxc/.*\"}, name)",
         "refresh": 1,
         "sort": 1,
         "multi": true,

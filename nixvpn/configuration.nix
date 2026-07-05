@@ -59,17 +59,19 @@
       
       # Peer definitions (VPN Clients)
       peers = [
-        # Example Client: Mobile Phone (uses floating IP)
-        {
-          # Mobile Phone's Public Key (generated on the phone)
-          # TODO: Replace with the actual public key from the client phone/device
-          publicKey = "95PVMFZPTZ2URni05eiwxq88ImEjYpi9lfOVFTQ48TQ=";
-          
-          # Assign a static IP inside the tunnel to the phone
-          allowedIPs = [ "10.100.0.2/32" ];
-
-          # Send a keepalive packet every 25 seconds to keep the NAT mappings alive
-          # on mobile networks and speed up endpoint dynamic updates
+	{ # home
+          publicKey = "CLpdpnOTGlcFZLTIp3sSd7NSJfifjNeqM1kVjD4041k=";
+	  allowedIPs = [ "10.100.0.2/32" "192.168.1.0/24" ];
+          persistentKeepalive = 25;
+	}
+	{ # small pc
+          publicKey = "sqxfw2rgh/qDFmws79rJOaoWsRnWwb7GXdDDPpSNnk0=";
+	  allowedIPs = [ "10.100.0.4/32" ];
+          persistentKeepalive = 25;
+	}
+        { # mobile
+          publicKey = "j9zkTS61Os59Faz5pRscSYGTUwSgedTMOZszgzxfiQ0=";
+          allowedIPs = [ "10.100.0.5/32" ];
           persistentKeepalive = 25;
         }
       ];

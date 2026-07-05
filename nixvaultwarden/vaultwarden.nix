@@ -5,6 +5,11 @@
   services.vaultwarden = {
     enable = true;
 
+    # Build the vaultwarden binary with the postgres backend enabled. The
+    # default dbBackend is "sqlite" — without this, Vaultwarden refuses a
+    # PostgreSQL DATABASE_URL ("the 'postgresql' feature is not enabled").
+    dbBackend = "postgresql";
+
     # Configure non-sensitive settings declaratively
     config = {
       ROCKET_ADDRESS = "::";

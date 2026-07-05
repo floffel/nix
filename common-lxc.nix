@@ -78,11 +78,11 @@
       }
 
       loki.relabel "journal" {
-        # Do NOT put forward_to here — this component only defines relabel
-        # rules. The journal source applies them via relabel_rules below.
-        # Alloy drops __journal_* internal labels BEFORE forwarding to
-        # forward_to receivers, so relabeling must happen at the source
-        # level via relabel_rules, not in the pipeline.
+        // Do NOT put forward_to here — this component only defines relabel
+        // rules. The journal source applies them via relabel_rules below.
+        // Alloy drops __journal_* internal labels BEFORE forwarding to
+        // forward_to receivers, so relabeling must happen at the source
+        // level via relabel_rules, not in the pipeline.
         forward_to = []
         rule {
           source_labels = ["__journal__systemd_unit"]

@@ -275,42 +275,58 @@
       # Postfix's tls_require_cert=no).
       ssl_client_require_valid_cert = false;
 
-      # OAuth2 passdb for XOAUTH2 authentication. Mail clients (Thunderbird,
-      # K-9, Apple Mail, ...) that support OAuth2 obtain an access token via
-      # Kanidm's browser-based authorisation code flow (using the user's full
-      # Kanidm credentials, including MFA) and present it to Dovecot via the
-      # XOAUTH2 SASL mechanism. Dovecot validates the token by calling
-      # Kanidm's OIDC userinfo endpoint with the token as a Bearer header
-      # (introspection_mode = auth). Kanidm returns the user's claims (sub,
-      # email, ...); Dovecot extracts the `email` field as the IMAP/SMTP
-      # username and proceeds with the userdb lookup below.
+      # OAuth2 token validation for XOAUTH2 authentication. Mail clients
+      # (Thunderbird, K-9, Apple Mail, ...) that support OAuth2 obtain an
+      # access token via Kanidm's browser-based authorisation code flow
+      # (using the user's full Kanidm credentials, including MFA) and
+      # present it to Dovecot via the XOAUTH2 SASL mechanism.
+      #
+      # Dovecot 2.4 changed the OAuth2 model: the XOAUTH2/OAUTHBEARER
+      # mechanisms no longer use a passdb for token validation. Instead,
+      # auth_sasl_oauth2_initialize() calls db_oauth2_init() against the
+      # *global* auth event, reading the top-level `oauth2 { }` named
+      # filter. If that filter is absent (or only nested inside a passdb),
+      # introspection_mode stays empty and the auth process fatals with
+      # "Cannot initialize oauth2: Missing oauth2_introspection_mode
+      # setting" on startup — which surfaces as "Auth process broken" and
+      # the master service throttling login attempts.
+      #
+      # Dovecot validates the token by calling Kanidm's OIDC userinfo
+      # endpoint with the token as a Bearer header (introspection_mode =
+      # auth). Kanidm returns the user's claims (sub, email, ...); Dovecot
+      # extracts the `email` field as the IMAP/SMTP username and proceeds
+      # with the userdb lookup below.
       #
       # This eliminates the need for a separate POSIX password for mail —
       # the user authenticates once via Kanidm SSO and the mail client
       # caches/refreshes the token automatically.
+      oauth2 = {
+        # Kanidm's per-client OIDC userinfo endpoint. The short name
+        # `nixidm` resolves via hosts.nix (10.20.20.15). TLS cert
+        # verification is disabled globally (ssl_client_require_valid_cert
+        # = false) because the cert is for minnecker.com, not the short
+        # hostname.
+        introspection_url = "https://nixidm:8443/oauth2/openid/mail/userinfo";
+        # Send the token as Authorization: Bearer (GET). Kanidm's userinfo
+        # endpoint expects this — not ?access_token= (which is the default
+        # tokeninfo_url mode) or POST body (RFC 7662 introspection).
+        introspection_mode = "auth";
+        # Extract the user's email from the userinfo response as the
+        # Dovecot username. The `email` scope is granted via the scope
+        # map on the `mail` OAuth2 client in kanidm.nix.
+        username_attribute = "email";
+      };
+
+      # The XOAUTH2 mechanism reads the global `oauth2 { }` filter above.
+      # This passdb exists only so that the post-token credential lookup
+      # (auth_request_lookup_credentials, run after a successful XOAUTH2
+      # token validation) hits a passdb that re-validates the token and
+      # returns OK, instead of falling through to the LDAP passdb (which
+      # would try to LDAP-bind with the OAuth2 token as a password and
+      # fail). It inherits the introspection_* settings from the global
+      # filter, so no nested `oauth2 { }` block is needed here.
       "passdb oauth2" = {
         driver = "oauth2";
-        # In Dovecot 2.4, oauth2 settings live in a nested filter block
-        # (SET_FILTER_NAME "oauth2"), not as flat oauth2_* keys in the
-        # passdb section. Without the nested block, the settings parser
-        # sees the introspection_url but introspection_mode stays empty,
-        # producing "Missing oauth2_introspection_mode".
-        oauth2 = {
-          # Kanidm's per-client OIDC userinfo endpoint. The short name
-          # `nixidm` resolves via hosts.nix (10.20.20.15). TLS cert
-          # verification is disabled globally (ssl_client_require_valid_cert
-          # = false) because the cert is for minnecker.com, not the short
-          # hostname.
-          introspection_url = "https://nixidm:8443/oauth2/openid/mail/userinfo";
-          # Send the token as Authorization: Bearer (GET). Kanidm's userinfo
-          # endpoint expects this — not ?access_token= (which is the default
-          # tokeninfo_url mode) or POST body (RFC 7662 introspection).
-          introspection_mode = "auth";
-          # Extract the user's email from the userinfo response as the
-          # Dovecot username. The `email` scope is granted via the scope
-          # map on the `mail` OAuth2 client in kanidm.nix.
-          username_attribute = "email";
-        };
       };
 
       "passdb ldap" = {

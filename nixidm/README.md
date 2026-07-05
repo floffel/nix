@@ -218,8 +218,8 @@ and expires after its TTL (default 1h, max 24h).
 ```bash
 # Prints a QR code plus a redeem URL like:
 #   https://idm.minnecker.com/ui/reset?token=XXXX-XXXX-XXXX-XXXX
-kanidm -D idm_admin person credential create-reset-token username        # 1h
-kanidm -D idm_admin person credential create-reset-token username 86400  # 24h
+kanidm -D idm_admin person credential create-reset-token username --ttl=3600        # 1h
+kanidm -D idm_admin person credential create-reset-token username --ttl=86400  # 24h
 ```
 Send the printed link to the user. They visit it once to set their credential.
 This is the intended non-interactive/admin-driven onboarding path; the script's

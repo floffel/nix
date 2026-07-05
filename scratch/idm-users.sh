@@ -202,7 +202,7 @@ cmd_user_new() {
   done
   echo
   echo "Issuing credential reset token (user sets own password / MFA):"
-  k person credential create-reset-token "$username" "$RESET_TTL_DEFAULT" || true
+  k person credential create-reset-token "$username" --ttl="$RESET_TTL_DEFAULT" || true
   echo
   echo "Done. User '$username' is ready."
 }
@@ -240,7 +240,7 @@ cmd_user() {
       local username="${1:-}"; local ttl="${2:-$RESET_TTL_DEFAULT}"
       [ -n "$username" ] || die "usage: user reset-token <username> [ttl_seconds]"
       [ "$ttl" -le 86400 ] 2>/dev/null || die "ttl must be <= 86400 (24h)"
-      k person credential create-reset-token "$username" "$ttl"
+      k person credential create-reset-token "$username" --ttl="$ttl"
       ;;
     lock)
       local username="${1:-}"; [ -n "$username" ] || die "usage: user lock <username>"

@@ -406,7 +406,8 @@ in
           allow 192.168.1.1/16;
           deny all;
           charset utf-8;
-          client_max_body_size 5M;
+          # Bitwarden's default max attachment/send size is 625 MB.
+          client_max_body_size 625M;
         '';
       };
 

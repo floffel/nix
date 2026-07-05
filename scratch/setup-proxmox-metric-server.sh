@@ -23,6 +23,9 @@ INFLUX_PORT="8086"
 INFLUX_ORG="minnecker"
 INFLUX_BUCKET="proxmox"
 METRIC_SERVER_ID="influxdb-minnecker"
+# Path on the nixmonitoring container where InfluxDB-init writes the token.
+# Shown to the operator in the prompt below; not read locally.
+TOKEN_FILE="/var/lib/secrets/influxdb/token"
 
 echo "=== Proxmox External Metric Server Setup ==="
 echo

@@ -206,7 +206,8 @@
       fi
 
       printf '%s' "$TOKEN" > "$d/token"
-      chmod 600 "$d/token"
+      chmod 640 "$d/token"
+      chown root:grafana "$d/token"
       # Also store the initial admin token for future token management.
       if [ ! -s "$d/admin-token" ]; then
         printf '%s' "$TOKEN" > "$d/admin-token"

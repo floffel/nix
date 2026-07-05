@@ -45,12 +45,26 @@
   # 1. Enable Prometheus Node Exporter globally for system metrics scraping
   services.prometheus.exporters.node = {
     enable = true;
-    enabledCollectors = [ "systemd" ]; # Scrapes systemd services status in addition to default collectors
+    enabledCollectors = [ "systemd" "textfile" ]; # systemd: service status; textfile: custom metrics (e.g. wireguard)
     # Bind on "[::]" so Prometheus (which scrapes by short name, resolving
     # IPv6 first) reaches the exporter. "[::]" dual-stacks on Linux
     # (net.ipv6.bindv6only=0), covering both IPv4 and IPv6. The module
     # concatenates listenAddress:port, so "[::]" yields "[::]:9100".
     listenAddress = "[::]";
+    # Textfile collector reads *.prom files from this directory. Services
+    # that produce custom metrics (wireguard peer stats, etc.) write here.
+    extraFlags = [ "--collector.textfile.directory=/var/lib/node-exporter-textfile" ];
+  };
+
+  # Ensure the textfile directory exists and is writable by node-exporter
+  # (runs as the "node-exporter" user). Services writing metrics should drop
+  # files here; node-exporter picks them up on the next scrape.
+  systemd.tmpfiles.settings."10-node-exporter-textfile" = {
+    "/var/lib/node-exporter-textfile".d = {
+      mode = "0755";
+      user = "node-exporter";
+      group = "node-exporter";
+    };
   };
 
   # 2. Enable Grafana Alloy globally to aggregate and forward journal logs to Loki

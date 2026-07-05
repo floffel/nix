@@ -69,25 +69,15 @@
           }
         ];
       }
-      # Proxmox hypervisor: pull-based pve_exporter. It queries the PVE API
-      # and exposes hypervisor-accurate per-guest (LXC/QEMU) AND per-node
-      # resource accounting (cgroup-based) that node_exporter inside an
-      # unprivileged LXC cannot provide correctly. Deploy with
-      # scratch/setup-proxmox-pve-exporter.sh on the Proxmox host.
-      {
-        job_name = "pve";
-        static_configs = [
-          {
-            targets = [ "proxmox:9221" ];
-          }
-        ];
-      }
-      # Scraping Forgejo native Prometheus metrics
+    ];
+  };
+
+  # 2. Loki Log Aggregation
       {
         job_name = "forgejo";
         static_configs = [
           {
-            targets = [ "forgejo:3000" ];
+            targets = [ "nixforgejo:3000" ];
           }
         ];
       }
@@ -133,6 +123,99 @@
       limits_config:
         reject_old_samples: true
         reject_old_samples_max_age: 168h
+    '';
+  };
+
+  # 2b. InfluxDB v2 — receives pushed metrics from Proxmox's built-in External
+  # Metric Server (Datacenter → Metric Server → InfluxDB HTTP v2 API). Proxmox
+  # pushes per-node and per-guest (LXC/QEMU) resource metrics natively, keeping
+  # the Proxmox host untouched (no third-party exporters, API tokens, or venvs).
+  # Configure the Proxmox side with scratch/setup-proxmox-metric-server.sh.
+  services.influxdb2 = {
+    enable = true;
+    settings = {
+      "http-bind-address" = ":8086";
+    };
+  };
+
+  # Initialize InfluxDB on first boot: create org "minnecker", bucket
+  # "proxmox", and a token with full read/write on that bucket. The token
+  # is stored at /var/lib/secrets/influxdb/token and consumed by both the
+  # Grafana datasource (read) and the Proxmox metric-server setup script
+  # (write). Idempotent: if InfluxDB is already set up, the oneshot exits 0.
+  systemd.services.influxdb-init = {
+    description = "Initialize InfluxDB v2 org, bucket, and token";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "influxdb2.service" ];
+    bindsTo = [ "influxdb2.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    path = [ pkgs.influxdb2 pkgs.curl pkgs.coreutils pkgs.jq pkgs.openssl ];
+    script = ''
+      set -euo pipefail
+      d=/var/lib/secrets/influxdb
+      mkdir -p "$d"
+
+      # Wait for InfluxDB HTTP API to accept connections.
+      for i in {1..30}; do
+        if curl -sf http://127.0.0.1:8086/health >/dev/null 2>&1; then break; fi
+        sleep 1
+      done
+      curl -sf http://127.0.0.1:8086/health >/dev/null 2>&1 || {
+        echo "InfluxDB not ready after 30s" >&2; exit 1; }
+
+      # If the token file already exists, InfluxDB was initialized before.
+      if [ -s "$d/token" ]; then
+        echo "InfluxDB already initialized (token file exists)."
+        # Verify the token still works; if not, fall through to re-init.
+        if curl -sf -H "Authorization: Token $(cat "$d/token")" \
+             "http://127.0.0.1:8086/api/v2/buckets?name=proxmox" >/dev/null 2>&1; then
+          exit 0
+        fi
+        echo "Token invalid, re-initializing..."
+      fi
+
+      # Generate a deterministic token so the Proxmox setup script (run
+      # separately on the Proxmox host) can read it from the same file.
+      TOKEN="$(head -c 48 /dev/urandom | base64 | tr -d '\n=' | tr '+/' '-_')"
+
+      # influx setup is idempotent-safe with --force (skips if already set up,
+      # but the --token flag sets the initial admin token on first run).
+      influx setup \
+        --host http://127.0.0.1:8086 \
+        --org minnecker \
+        --bucket proxmox \
+        --username admin \
+        --password "$(openssl rand -base64 24)" \
+        --token "$TOKEN" \
+        --force 2>/dev/null || true
+
+      # If setup above didn't work (already set up), create a new token via
+      # the admin token if one was stored from a previous run.
+      if [ -s "$d/admin-token" ]; then
+        ADMIN_TOKEN="$(cat "$d/admin-token")"
+        # Create an all-access token on the proxmox bucket.
+        NEW_TOKEN=$(curl -sf -X POST \
+          "http://127.0.0.1:8086/api/v2/authorizations" \
+          -H "Authorization: Token $ADMIN_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d "{\"orgID\":\"$(curl -sf -H "Authorization: Token $ADMIN_TOKEN" http://127.0.0.1:8086/api/v2/orgs?org=minnecker | ${pkgs.jq}/bin/jq -r .orgs[0].id)\",\"description\":\"proxmox-rw\",\"permissions\":[{\"action\":\"read\",\"resource\":{\"type\":\"buckets\",\"id\":\"$(curl -sf -H "Authorization: Token $ADMIN_TOKEN" http://127.0.0.1:8086/api/v2/buckets?name=proxmox | ${pkgs.jq}/bin/jq -r .buckets[0].id)\"}},{\"action\":\"write\",\"resource\":{\"type\":\"buckets\",\"id\":\"$(curl -sf -H "Authorization: Token $ADMIN_TOKEN" http://127.0.0.1:8086/api/v2/buckets?name=proxmox | ${pkgs.jq}/bin/jq -r .buckets[0].id)\"}}]}" \
+          | ${pkgs.jq}/bin/jq -r .token) || true
+        if [ -n "$NEW_TOKEN" ]; then
+          TOKEN="$NEW_TOKEN"
+        fi
+      fi
+
+      printf '%s' "$TOKEN" > "$d/token"
+      chmod 600 "$d/token"
+      # Also store the initial admin token for future token management.
+      if [ ! -s "$d/admin-token" ]; then
+        printf '%s' "$TOKEN" > "$d/admin-token"
+        chmod 600 "$d/admin-token"
+      fi
+      echo "InfluxDB initialized: org=minnecker bucket=proxmox token=$d/token"
     '';
   };
 
@@ -221,6 +304,25 @@
           access = "proxy";
           url = "http://127.0.0.1:3100";
           uid = "loki";
+        }
+        {
+          # InfluxDB v2 — stores Proxmox-pushed hypervisor metrics. Grafana
+          # queries it with Flux. The token is the same file InfluxDB-init
+          # writes, granting read access to the proxmox bucket.
+          name = "InfluxDB";
+          type = "influxdb";
+          access = "proxy";
+          url = "http://127.0.0.1:8086";
+          uid = "influxdb";
+          jsonData = {
+            version = "Flux";
+            organization = "minnecker";
+            defaultBucket = "proxmox";
+            tlsSkipVerify = true;
+          };
+          secureJsonData = {
+            token = "$__file{/var/lib/secrets/influxdb/token}";
+          };
         }
       ];
       dashboards.settings.providers = [

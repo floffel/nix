@@ -81,4 +81,73 @@
     wireguard-tools # provides wg, wg-quick
     iptables
   ];
+
+  # WireGuard peer metrics for Prometheus via node_exporter's textfile
+  # collector. A systemd timer runs `wg show all dump` every 30s and writes
+  # Prometheus-format metrics to /var/lib/node-exporter-textfile/wireguard.prom.
+  # Exposes per-peer: last handshake timestamp, rx/tx bytes, endpoint, and
+  # connection status (handshake within last 3 minutes = "connected").
+  systemd.services.wireguard-metrics = {
+    description = "Export WireGuard peer stats for Prometheus textfile collector";
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      User = "root";
+    };
+    path = [ pkgs.wireguard-tools pkgs.coreutils pkgs.gawk ];
+    script = ''
+      OUT=/var/lib/node-exporter-textfile/wireguard.prom
+      mkdir -p "$(dirname "$OUT")"
+      TMP=$(mktemp)
+      echo "# HELP wireguard_peer_last_handshake_seconds Unix timestamp of last handshake" > "$TMP"
+      echo "# TYPE wireguard_peer_last_handshake_seconds gauge" >> "$TMP"
+      echo "# HELP wireguard_peer_rx_bytes Bytes received from peer" >> "$TMP"
+      echo "# TYPE wireguard_peer_rx_bytes counter" >> "$TMP"
+      echo "# HELP wireguard_peer_tx_bytes Bytes sent to peer" >> "$TMP"
+      echo "# TYPE wireguard_peer_tx_bytes counter" >> "$TMP"
+      echo "# HELP wireguard_peer_connected 1 if peer handshake within last 3 min, 0 otherwise" >> "$TMP"
+      echo "# TYPE wireguard_peer_connected gauge" >> "$TMP"
+      echo "# HELP wireguard_peer_info Static peer info (endpoint, allowed IPs)" >> "$TMP"
+      echo "# TYPE wireguard_peer_info gauge" >> "$TMP"
+
+      NOW=$(date +%s)
+
+      # wg show all dump output format (tab-separated):
+      # interface  peer-key  endpoint  allowed-ips  latest-handshake  transfer-rx  transfer-tx  persistent-keepalive
+      wg show all dump 2>/dev/null | while IFS=$'\t' read -r iface pubkey endpoint allowed_ips handshake rx tx keepalive; do
+        [ -z "$pubkey" ] && continue
+        # Sanitize for Prometheus label values
+        ep_clean=$(printf '%s' "$endpoint" | tr -d ' ' | sed 's/:/\\:/g')
+        ai_clean=$(printf '%s' "$allowed_ips" | tr ',' ' ' | sed 's/:/\\:/g')
+        # Connection status: handshake within last 180s
+        if [ -n "$handshake" ] && [ "$handshake" -gt 0 ]; then
+          AGE=$((NOW - handshake))
+          if [ "$AGE" -lt 180 ]; then
+            CONNECTED=1
+          else
+            CONNECTED=0
+          fi
+        else
+          CONNECTED=0
+          handshake=0
+        fi
+        echo "wireguard_peer_last_handshake_seconds{interface=\"$iface\",peer=\"$pubkey\"} $handshake" >> "$TMP"
+        echo "wireguard_peer_rx_bytes{interface=\"$iface\",peer=\"$pubkey\"} $rx" >> "$TMP"
+        echo "wireguard_peer_tx_bytes{interface=\"$iface\",peer=\"$pubkey\"} $tx" >> "$TMP"
+        echo "wireguard_peer_connected{interface=\"$iface\",peer=\"$pubkey\"} $CONNECTED" >> "$TMP"
+        echo "wireguard_peer_info{interface=\"$iface\",peer=\"$pubkey\",endpoint=\"$ep_clean\",allowed_ips=\"$ai_clean\"} 1" >> "$TMP"
+      done
+
+      mv "$TMP" "$OUT"
+      chmod 644 "$OUT"
+    '';
+  };
+
+  systemd.timers.wireguard-metrics = {
+    wantedBy = [ "multi-user.target" ];
+    timerConfig = {
+      OnBootSec = "10s";
+      OnUnitActiveSec = "30s";
+    };
+  };
 }

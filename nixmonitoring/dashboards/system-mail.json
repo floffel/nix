@@ -689,13 +689,10 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "influxdb",
+            "uid": "influxdb"
           },
-          "editorMode": "code",
-          "expr": "pve_cpu_usage_ratio{id=~\"lxc/.*\"} * on(id) group_left(name) pve_guest_info{name=~\"$guest\"} * 100",
-          "legendFormat": "{{name}}",
-          "range": true,
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"lxc\" and r._field == \"cpu\" and r.id =~ /$guest/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean)\n  |> map(fn: (r) => ({ r with _value: r._value * 100.0 }))\n  |> group(columns: [\"id\"])",
           "refId": "A"
         }
       ],
@@ -706,7 +703,7 @@
           "min": 0
         }
       },
-      "title": "CPU Usage per Container (%) — PVE hypervisor",
+      "title": "CPU Usage per Container (%) — PVE push",
       "type": "timeseries"
     },
     {
@@ -735,13 +732,10 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "influxdb",
+            "uid": "influxdb"
           },
-          "editorMode": "code",
-          "expr": "(pve_memory_usage_bytes{id=~\"lxc/.*\"} / on(id) pve_memory_size_bytes{id=~\"lxc/.*\"}) * on(id) group_left(name) pve_guest_info{name=~\"$guest\"} * 100",
-          "legendFormat": "{{name}}",
-          "range": true,
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"lxc\" and (r._field == \"mem\" or r._field == \"maxmem\") and r.id =~ /$guest/)\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"id\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.maxmem and r.maxmem > 0 then r.mem / r.maxmem * 100.0 else 0.0 }))\n  |> group(columns: [\"id\"])",
           "refId": "A"
         }
       ],
@@ -752,7 +746,7 @@
           "min": 0
         }
       },
-      "title": "Memory Usage per Container (%) — PVE hypervisor",
+      "title": "Memory Usage per Container (%) — PVE push",
       "type": "timeseries"
     },
     {
@@ -781,24 +775,18 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "influxdb",
+            "uid": "influxdb"
           },
-          "editorMode": "code",
-          "expr": "rate(pve_network_receive_bytes_total{id=~\"lxc/.*\"}[$__rate_interval]) * on(id) group_left(name) pve_guest_info{name=~\"$guest\"} * 8",
-          "legendFormat": "RX {{name}}",
-          "range": true,
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"lxc\" and r._field == \"netin\" and r.id =~ /$guest/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last)\n  |> difference(nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0 }))\n  |> group(columns: [\"id\"])",
           "refId": "A"
         },
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "influxdb",
+            "uid": "influxdb"
           },
-          "editorMode": "code",
-          "expr": "rate(pve_network_transmit_bytes_total{id=~\"lxc/.*\"}[$__rate_interval]) * on(id) group_left(name) pve_guest_info{name=~\"$guest\"} * 8",
-          "legendFormat": "TX {{name}}",
-          "range": true,
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"lxc\" and r._field == \"netout\" and r.id =~ /$guest/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last)\n  |> difference(nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0 }))\n  |> group(columns: [\"id\"])",
           "refId": "B"
         }
       ],
@@ -807,7 +795,7 @@
           "unit": "bps"
         }
       },
-      "title": "Network Traffic per Container (bits/sec) — PVE hypervisor",
+      "title": "Network Traffic per Container (bits/sec) — PVE push",
       "type": "timeseries"
     },
     {
@@ -836,13 +824,10 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "influxdb",
+            "uid": "influxdb"
           },
-          "editorMode": "code",
-          "expr": "(pve_disk_usage_bytes{id=~\"lxc/.*\"} / on(id) pve_disk_size_bytes) * on(id) group_left(name) pve_guest_info{name=~\"$guest\"} * 100",
-          "legendFormat": "{{name}}",
-          "range": true,
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"lxc\" and (r._field == \"disk\" or r._field == \"maxdisk\") and r.id =~ /$guest/)\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"id\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.maxdisk and r.maxdisk > 0 then r.disk / r.maxdisk * 100.0 else 0.0 }))\n  |> group(columns: [\"id\"])",
           "refId": "A"
         }
       ],
@@ -853,7 +838,7 @@
           "min": 0
         }
       },
-      "title": "Disk Usage per Container (%) — PVE hypervisor",
+      "title": "Disk Usage per Container (%) — PVE push",
       "type": "timeseries"
     },
     {
@@ -882,13 +867,10 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "influxdb",
+            "uid": "influxdb"
           },
-          "editorMode": "code",
-          "expr": "pve_cpu_usage_ratio{id=~\"node/.*\"} * 100",
-          "legendFormat": "{{id}} CPU",
-          "range": true,
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"nodes\" and r._field == \"cpuload\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean)\n  |> map(fn: (r) => ({ r with _value: r._value * 100.0 }))\n  |> group(columns: [\"host\"])",
           "refId": "A"
         }
       ],
@@ -928,13 +910,10 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "influxdb",
+            "uid": "influxdb"
           },
-          "editorMode": "code",
-          "expr": "pve_memory_usage_bytes{id=~\"node/.*\"} / on(id) pve_memory_size_bytes * 100",
-          "legendFormat": "{{id}} RAM",
-          "range": true,
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"nodes\" and (r._field == \"memused\" or r._field == \"memtotal\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"host\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.memtotal and r.memtotal > 0 then r.memused / r.memtotal * 100.0 else 0.0 }))\n  |> group(columns: [\"host\"])",
           "refId": "A"
         }
       ],
@@ -987,18 +966,106 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "influxdb",
+            "uid": "influxdb"
           },
-          "editorMode": "code",
-          "expr": "(pve_disk_usage_bytes{id=~\"node/.*\"} / on(id) pve_disk_size_bytes) * 100",
-          "legendFormat": "{{id}}",
-          "range": true,
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"nodes\" and (r._field == \"rootused\" or r._field == \"roottotal\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"host\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.roottotal and r.roottotal > 0 then r.rootused / r.roottotal * 100.0 else 0.0 }))\n  |> group(columns: [\"host\"])",
           "refId": "A"
         }
       ],
       "title": "Proxmox Host Disk Usage (%)",
       "type": "gauge"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 58
+      },
+      "id": 700,
+      "title": "🔒 WireGuard VPN (Prometheus — nixwireguard)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 59 },
+      "id": 18,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(wireguard_peer_connected)",
+          "refId": "A"
+        }
+      ],
+      "title": "Connected Peers",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 59 },
+      "id": 19,
+      "options": {
+        "showTypeIcons": true,
+        "sortBy": [{ "descending": true, "displayName": "Last Handshake" }]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "wireguard_peer_info",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "time() - wireguard_peer_last_handshake_seconds",
+          "format": "table",
+          "instant": true,
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "wireguard_peer_rx_bytes",
+          "format": "table",
+          "instant": true,
+          "refId": "C"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "wireguard_peer_tx_bytes",
+          "format": "table",
+          "instant": true,
+          "refId": "D"
+        }
+      ],
+      "title": "WireGuard Peer Status",
+      "type": "table"
     },
     {
       "collapsed": false,
@@ -1077,10 +1144,10 @@
         "name": "guest",
         "type": "query",
         "datasource": {
-          "type": "prometheus",
-          "uid": "prometheus"
+          "type": "influxdb",
+          "uid": "influxdb"
         },
-        "query": "label_values(pve_guest_info{id=~\"lxc/.*\"}, name)",
+        "query": "from(bucket: \"proxmox\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"lxc\")\n  |> keep(columns: [\"id\"])\n  |> distinct(column: \"id\")\n  |> sort(columns: [\"_value\"])",
         "refresh": 1,
         "sort": 1,
         "multi": true,

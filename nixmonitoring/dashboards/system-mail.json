@@ -30,7 +30,7 @@
         "y": 0
       },
       "id": 100,
-      "title": "📬 Mail Server Observability (Loki LogQL)",
+      "title": "\ud83d\udcec Mail Server Observability (Loki LogQL)",
       "type": "row"
     },
     {
@@ -343,7 +343,7 @@
         "y": 12
       },
       "id": 400,
-      "title": "👥 User Session & Login Audit (Loki)",
+      "title": "\ud83d\udc65 User Session & Login Audit (Loki)",
       "type": "row"
     },
     {
@@ -430,7 +430,7 @@
         "y": 20
       },
       "id": 500,
-      "title": "🌐 Web Server Metrics & HTTP Request Traffic (Loki & Nginx)",
+      "title": "\ud83c\udf10 Web Server Metrics & HTTP Request Traffic (Loki & Nginx)",
       "type": "row"
     },
     {
@@ -520,7 +520,7 @@
         "y": 28
       },
       "id": 600,
-      "title": "🗄️ Database Server Performance (Prometheus & PostgreSQL)",
+      "title": "\ud83d\uddc4\ufe0f Proxmox Host Metrics (InfluxDB \u2014 PVE push)",
       "type": "row"
     },
     {
@@ -660,13 +660,13 @@
         "y": 36
       },
       "id": 200,
-      "title": "🖥️ Container System Resource Metrics (Prometheus)",
+      "title": "\ud83d\udda5\ufe0f Container System Resource Metrics (InfluxDB \u2014 PVE push)",
       "type": "row"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "influxdb",
+        "uid": "influxdb"
       },
       "gridPos": {
         "h": 7,
@@ -692,7 +692,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"lxc\" and r._field == \"cpu\" and r.id =~ /$guest/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean)\n  |> map(fn: (r) => ({ r with _value: r._value * 100.0 }))\n  |> group(columns: [\"id\"])",
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"lxc\" and r._field == \"cpu\" and r.host =~ /$guest/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean)\n  |> map(fn: (r) => ({ r with _value: r._value * 100.0 }))\n  |> group(columns: [\"host\"])",
           "refId": "A"
         }
       ],
@@ -703,13 +703,13 @@
           "min": 0
         }
       },
-      "title": "CPU Usage per Container (%) — PVE push",
+      "title": "CPU Usage per Container (%) \u2014 PVE push",
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "influxdb",
+        "uid": "influxdb"
       },
       "gridPos": {
         "h": 7,
@@ -735,7 +735,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"lxc\" and (r._field == \"mem\" or r._field == \"maxmem\") and r.id =~ /$guest/)\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"id\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.maxmem and r.maxmem > 0 then r.mem / r.maxmem * 100.0 else 0.0 }))\n  |> group(columns: [\"id\"])",
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"lxc\" and (r._field == \"mem\" or r._field == \"maxmem\") and r.host =~ /$guest/)\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"host\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.maxmem and r.maxmem > 0 then r.mem / r.maxmem * 100.0 else 0.0 }))\n  |> group(columns: [\"host\"])",
           "refId": "A"
         }
       ],
@@ -746,13 +746,13 @@
           "min": 0
         }
       },
-      "title": "Memory Usage per Container (%) — PVE push",
+      "title": "Memory Usage per Container (%) \u2014 PVE push",
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "influxdb",
+        "uid": "influxdb"
       },
       "gridPos": {
         "h": 7,
@@ -778,7 +778,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"lxc\" and r._field == \"netin\" and r.id =~ /$guest/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last)\n  |> difference(nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0 }))\n  |> group(columns: [\"id\"])",
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"lxc\" and r._field == \"netin\" and r.host =~ /$guest/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last)\n  |> difference(nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0 }))\n  |> group(columns: [\"host\"])",
           "refId": "A"
         },
         {
@@ -786,7 +786,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"lxc\" and r._field == \"netout\" and r.id =~ /$guest/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last)\n  |> difference(nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0 }))\n  |> group(columns: [\"id\"])",
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"lxc\" and r._field == \"netout\" and r.host =~ /$guest/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last)\n  |> difference(nonNegative: true)\n  |> map(fn: (r) => ({ r with _value: r._value * 8.0 }))\n  |> group(columns: [\"host\"])",
           "refId": "B"
         }
       ],
@@ -795,13 +795,13 @@
           "unit": "bps"
         }
       },
-      "title": "Network Traffic per Container (bits/sec) — PVE push",
+      "title": "Network Traffic per Container (bits/sec) \u2014 PVE push",
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "influxdb",
+        "uid": "influxdb"
       },
       "gridPos": {
         "h": 7,
@@ -827,7 +827,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"lxc\" and (r._field == \"disk\" or r._field == \"maxdisk\") and r.id =~ /$guest/)\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"id\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.maxdisk and r.maxdisk > 0 then r.disk / r.maxdisk * 100.0 else 0.0 }))\n  |> group(columns: [\"id\"])",
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"lxc\" and (r._field == \"disk\" or r._field == \"maxdisk\") and r.host =~ /$guest/)\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"host\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.maxdisk and r.maxdisk > 0 then r.disk / r.maxdisk * 100.0 else 0.0 }))\n  |> group(columns: [\"host\"])",
           "refId": "A"
         }
       ],
@@ -838,13 +838,13 @@
           "min": 0
         }
       },
-      "title": "Disk Usage per Container (%) — PVE push",
+      "title": "Disk Usage per Container (%) \u2014 PVE push",
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "influxdb",
+        "uid": "influxdb"
       },
       "gridPos": {
         "h": 7,
@@ -870,7 +870,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"nodes\" and r._field == \"cpuload\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean)\n  |> map(fn: (r) => ({ r with _value: r._value * 100.0 }))\n  |> group(columns: [\"host\"])",
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"nodes\" and r._field == \"cpu\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean)\n  |> map(fn: (r) => ({ r with _value: r._value * 100.0 }))\n  |> group(columns: [\"host\"])",
           "refId": "A"
         }
       ],
@@ -886,8 +886,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "influxdb",
+        "uid": "influxdb"
       },
       "gridPos": {
         "h": 7,
@@ -913,7 +913,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"nodes\" and (r._field == \"memused\" or r._field == \"memtotal\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"host\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.memtotal and r.memtotal > 0 then r.memused / r.memtotal * 100.0 else 0.0 }))\n  |> group(columns: [\"host\"])",
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"memory\" and r.object == \"nodes\" and (r._field == \"used\" or r._field == \"total\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"host\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.total and r.total > 0 then r.used / r.total * 100.0 else 0.0 }))\n  |> group(columns: [\"host\"])",
           "refId": "A"
         }
       ],
@@ -929,8 +929,8 @@
     },
     {
       "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
+        "type": "influxdb",
+        "uid": "influxdb"
       },
       "gridPos": {
         "h": 7,
@@ -945,9 +945,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 80 },
-              { "color": "red", "value": 90 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 90
+              }
             ]
           },
           "unit": "percent"
@@ -956,7 +965,9 @@
       "options": {
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -969,7 +980,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"nodes\" and (r._field == \"rootused\" or r._field == \"roottotal\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"host\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.roottotal and r.roottotal > 0 then r.rootused / r.roottotal * 100.0 else 0.0 }))\n  |> group(columns: [\"host\"])",
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"rootfs\" and r.object == \"nodes\" and (r._field == \"used\" or r._field == \"total\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"host\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.total and r.total > 0 then r.used / r.total * 100.0 else 0.0 }))\n  |> group(columns: [\"host\"])",
           "refId": "A"
         }
       ],
@@ -985,7 +996,7 @@
         "y": 58
       },
       "id": 700,
-      "title": "🔒 WireGuard VPN (Prometheus — nixwireguard)",
+      "title": "\ud83d\udd12 WireGuard VPN (Prometheus \u2014 nixwireguard)",
       "type": "row"
     },
     {
@@ -995,27 +1006,49 @@
       },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           }
         }
       },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 59 },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 59
+      },
       "id": 18,
       "options": {
         "colorMode": "value",
         "graphMode": "none",
-        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "sum(wireguard_peer_connected)",
           "refId": "A"
         }
@@ -1028,36 +1061,58 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 59 },
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 6,
+        "y": 59
+      },
       "id": 19,
       "options": {
         "showTypeIcons": true,
-        "sortBy": [{ "descending": true, "displayName": "Last Handshake" }]
+        "sortBy": [
+          {
+            "descending": true,
+            "displayName": "Last Handshake"
+          }
+        ]
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "wireguard_peer_info",
           "format": "table",
           "instant": true,
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "time() - wireguard_peer_last_handshake_seconds",
           "format": "table",
           "instant": true,
           "refId": "B"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "wireguard_peer_rx_bytes",
           "format": "table",
           "instant": true,
           "refId": "C"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "expr": "wireguard_peer_tx_bytes",
           "format": "table",
           "instant": true,
@@ -1076,7 +1131,7 @@
         "y": 44
       },
       "id": 300,
-      "title": "📋 Unified Log Stream (Loki)",
+      "title": "\ud83d\udccb Unified Log Stream (Loki)",
       "type": "row"
     },
     {
@@ -1147,7 +1202,7 @@
           "type": "influxdb",
           "uid": "influxdb"
         },
-        "query": "from(bucket: \"proxmox\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"lxc\")\n  |> keep(columns: [\"id\"])\n  |> distinct(column: \"id\")\n  |> sort(columns: [\"_value\"])",
+        "query": "from(bucket: \"proxmox\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"lxc\")\n  |> keep(columns: [\"host\"])\n  |> distinct(column: \"host\")\n  |> sort(columns: [\"_value\"])",
         "refresh": 1,
         "sort": 1,
         "multi": true,

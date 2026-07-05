@@ -28,11 +28,14 @@
 
       # SSO (OpenID Connect) via Kanidm. SSO_CLIENT_SECRET is also injected at
       # runtime from the shared OAuth2 secrets mount (see vaultwarden-secrets
-      # below) so the secret never enters the Nix store.
+      # below) so the secret never enters the Nix store. Kanidm's OIDC
+      # discovery is per-client: the issuer URL is the client-specific base
+      # (.../oauth2/openid/<client_id>), to which Vaultwarden appends
+      # /.well-known/openid-configuration (via openidconnect's discover_async).
       DOMAIN = "https://vault.minnecker.com";
       SSO_ENABLED = true;
       SSO_ONLY = true;
-      SSO_AUTHORITY = "https://idm.minnecker.com";
+      SSO_AUTHORITY = "https://idm.minnecker.com/oauth2/openid/vaultwarden";
       SSO_CLIENT_ID = "vaultwarden";
       SSO_SCOPES = "openid email profile";
       SSO_PKCE = true;

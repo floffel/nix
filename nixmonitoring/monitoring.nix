@@ -69,10 +69,7 @@
           }
         ];
       }
-    ];
-  };
-
-  # 2. Loki Log Aggregation
+      # Scraping Forgejo native Prometheus metrics
       {
         job_name = "forgejo";
         static_configs = [

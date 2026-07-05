@@ -403,7 +403,9 @@ in
           '';
         };
         extraConfig = ''
+          # LAN + WireGuard clients (10.100.0.0/24, nixvpn tunnel subnet).
           allow 192.168.1.1/16;
+          allow 10.100.0.0/24;
           deny all;
           charset utf-8;
           # Bitwarden's default max attachment/send size is 625 MB.

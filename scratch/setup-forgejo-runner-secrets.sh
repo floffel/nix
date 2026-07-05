@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 # Helper script to set up Forgejo Actions Runner secrets
 # Run this script on the nixforgejo-runner container as root.
-# Usage: ./setup-forgejo-runner-secrets.sh <RUNNER_REGISTRATION_TOKEN>
+# Usage: ./setup-forgejo-runner-secrets.sh <RUNNER_UUID> <RUNNER_TOKEN>
 
 set -e
 
-RUNNER_TOKEN="$1"
+RUNNER_UUID="$1"
+RUNNER_TOKEN="$2"
 
-if [ -z "$RUNNER_TOKEN" ]; then
-  echo "Error: RUNNER_REGISTRATION_TOKEN is required."
-  echo "Usage: $0 <RUNNER_REGISTRATION_TOKEN>"
+if [ -z "$RUNNER_UUID" ] || [ -z "$RUNNER_TOKEN" ]; then
+  echo "Error: RUNNER_UUID and RUNNER_TOKEN are required."
+  echo "Usage: $0 <RUNNER_UUID> <RUNNER_TOKEN>"
+  echo ""
+  echo "Get these from the Forgejo web UI:"
+  echo "  Site Admin -> Actions -> Runners -> Create new Runner"
+  echo "  The UI will display both the UUID and Token after creation."
   exit 1
 fi
 
@@ -17,9 +22,11 @@ DEST_DIR="/var/lib/secrets/forgejo"
 mkdir -p "$DEST_DIR"
 chmod 700 "$DEST_DIR"
 
-# Write token
-echo "TOKEN=$RUNNER_TOKEN" > "$DEST_DIR/runner-token"
-chmod 600 "$DEST_DIR/runner-token"
+cat > "$DEST_DIR/runner-secrets" <<EOF
+RUNNER_UUID=$RUNNER_UUID
+RUNNER_TOKEN=$RUNNER_TOKEN
+EOF
+chmod 600 "$DEST_DIR/runner-secrets"
 
 # Resolve gitea-runner user/group dynamically (fallback to root if not created yet)
 RUNNER_USER="root"
@@ -31,7 +38,7 @@ fi
 
 chown -R "$RUNNER_USER:$RUNNER_GROUP" "$DEST_DIR"
 
-echo "Success: Forgejo Actions Runner secrets written to $DEST_DIR"
+echo "Success: Forgejo Actions Runner secrets written to $DEST_DIR/runner-secrets"
 if [ "$RUNNER_USER" = "root" ]; then
   echo "Warning: User 'gitea-runner' was not found on this system."
   echo "Please run this script again after building/switching the NixOS configuration to apply the correct ownership."

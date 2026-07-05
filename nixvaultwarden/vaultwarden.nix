@@ -37,7 +37,7 @@
       SSO_ONLY = true;
       SSO_AUTHORITY = "https://idm.minnecker.com/oauth2/openid/vaultwarden";
       SSO_CLIENT_ID = "vaultwarden";
-      SSO_SCOPES = "openid email profile";
+      SSO_SCOPES = "email profile";
       SSO_PKCE = true;
     };
 

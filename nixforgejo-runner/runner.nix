@@ -57,8 +57,8 @@ in
     WorkingDirectory = lib.mkForce "/var/lib/gitea-runner";
   };
 
-  systemd.services.docker-prune = {
-    description = "Prune unused Docker images, containers, networks, and build cache";
+  systemd.services.docker-weekly-prune = {
+    description = "Weekly Docker system prune";
     after = [ "docker.service" ];
     wants = [ "docker.service" ];
     serviceConfig = {
@@ -67,8 +67,8 @@ in
     };
   };
 
-  systemd.timers.docker-prune = {
-    description = "Weekly Docker system prune";
+  systemd.timers.docker-weekly-prune = {
+    description = "Weekly Docker system prune timer";
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = "weekly";

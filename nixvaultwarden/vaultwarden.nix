@@ -46,7 +46,39 @@
   # Per-container secret template holding only non-DB secrets (admin token).
   # The DB password is injected from the shared mount at runtime, so this file
   # never contains a DATABASE_URL with an embedded password.
-  # Populate it once with: printf 'ADMIN_TOKEN=...\n' > /var/lib/secrets/vaultwarden/env-template
+
+  # Auto-provision the admin token on first boot. The token is a per-container
+  # secret (not shared with the IdP like the OAuth2 client secret), so it is
+  # generated locally with openssl if the template is missing rather than
+  # shipped from a shared mount. Runs before vaultwarden-secrets so the
+  # template exists before assembly; idempotent (no-op if already populated).
+  systemd.services.vaultwarden-admin-token = {
+    description = "Provision Vaultwarden ADMIN_TOKEN if missing";
+    wantedBy = [ "vaultwarden.service" ];
+    before = [ "vaultwarden-secrets.service" "vaultwarden.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    path = [ pkgs.openssl pkgs.coreutils ];
+    script = ''
+      set -euo pipefail
+      install -d -m 700 -o vaultwarden -g vaultwarden /var/lib/secrets/vaultwarden
+      tpl=/var/lib/secrets/vaultwarden/env-template
+      if [ ! -s "$tpl" ]; then
+        echo "Generating new ADMIN_TOKEN..."
+        token=$(openssl rand -base64 48)
+        ( umask 077
+          printf 'ADMIN_TOKEN=%s\n' "$token" > "$tpl"
+        )
+        chmod 600 "$tpl"
+        chown vaultwarden:vaultwarden "$tpl"
+        echo "ADMIN_TOKEN written to $tpl (value not logged)."
+      else
+        echo "ADMIN_TOKEN template already present — keeping it."
+      fi
+    '';
+  };
 
   # Assemble the runtime env file on every start of vaultwarden from the
   # template (ADMIN_TOKEN), the DB password pulled from the shared Postgres

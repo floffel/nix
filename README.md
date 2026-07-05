@@ -366,10 +366,7 @@ Below are the key files and credentials required per container:
   * The `client_secret` line is **rewritten on every Synapse start** from the shared OAuth2 secret mount at `/var/lib/secrets/oauth2/matrix/secret` (provisioned on `nixidm`), so the value above is only the initial placeholder — it stays in sync with Kanidm automatically.
 
 #### 🔑 nixvaultwarden (Vaultwarden)
-* **Admin Token**: Write `/var/lib/secrets/vaultwarden/env-template` (owned by `vaultwarden:vaultwarden`, `chmod 600`) containing only the admin token:
-  ```env
-  ADMIN_TOKEN="your_secure_admin_token_or_hash" # Generate hash with: vaultwarden hash
-  ```
+* **Admin Token**: Auto-provisioned on first boot by the `vaultwarden-admin-token` service into `/var/lib/secrets/vaultwarden/env-template` (a random `ADMIN_TOKEN` generated with `openssl rand -base64 48`). The file is created with `0600` / `vaultwarden:vaultwarden` ownership and left untouched on subsequent starts. To retrieve the generated value (or rotate it), inspect/replace the file directly.
   The database password is **not** in this file. On every start, the `vaultwarden-secrets` unit assembles `/run/vaultwarden/env` from this template plus the DB password read from the shared Postgres secrets mount at `/var/lib/secrets/postgres/vaultwarden/db-password` (provisioned on `nixpostgres`, read-only here), producing the final `DATABASE_URL=postgresql://vaultwarden:<password>@nixpostgres/vaultwarden`. The same unit also injects `SSO_CLIENT_SECRET` from the shared OAuth2 secrets mount at `/var/lib/secrets/oauth2/vaultwarden/secret` (provisioned on `nixidm`, read-only here) — no manual copy to the consumer is needed.
 
 #### 📝 nixwikijs (Wiki.js)

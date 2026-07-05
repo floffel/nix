@@ -20,6 +20,17 @@
       # topology into the Nix store and be dead config anyway). It is assembled
       # at runtime by the vaultwarden-secrets unit from the shared Postgres
       # secrets mount and written to /run/vaultwarden/env (see below).
+
+      # SSO (OpenID Connect) via Kanidm. SSO_CLIENT_SECRET is also injected at
+      # runtime from the shared OAuth2 secrets mount (see vaultwarden-secrets
+      # below) so the secret never enters the Nix store.
+      DOMAIN = "https://vault.minnecker.com";
+      SSO_ENABLED = true;
+      SSO_ONLY = true;
+      SSO_AUTHORITY = "https://idm.minnecker.com";
+      SSO_CLIENT_ID = "vaultwarden";
+      SSO_SCOPES = "openid email profile";
+      SSO_PKCE = true;
     };
 
     # The runtime environment file is assembled by the vaultwarden-secrets
@@ -38,10 +49,13 @@
   # Populate it once with: printf 'ADMIN_TOKEN=...\n' > /var/lib/secrets/vaultwarden/env-template
 
   # Assemble the runtime env file on every start of vaultwarden from the
-  # template + the DB password pulled from the shared Postgres secrets mount.
-  # partOf + bindsTo couple this oneshot to vaultwarden.service so it re-runs
-  # on every (re)start of the service (not just at boot), keeping the tmpfs
-  # env file fresh; RemainAfterExit is omitted so each restart re-assembles it.
+  # template (ADMIN_TOKEN), the DB password pulled from the shared Postgres
+  # secrets mount, and the OIDC client secret pulled from the shared OAuth2
+  # secrets mount (/var/lib/secrets/oauth2/vaultwarden/secret, provisioned on
+  # nixidm and bind-mounted read-only here). partOf + bindsTo couple this
+  # oneshot to vaultwarden.service so it re-runs on every (re)start of the
+  # service (not just at boot), keeping the tmpfs env file fresh;
+  # RemainAfterExit is omitted so each restart re-assembles it.
   systemd.services.vaultwarden-secrets = {
     description = "Assemble Vaultwarden runtime env from template + shared DB password";
     wantedBy = [ "vaultwarden.service" ];
@@ -56,6 +70,7 @@
       set -euo pipefail
       template=/var/lib/secrets/vaultwarden/env-template
       dbpw_file=/var/lib/secrets/postgres/vaultwarden/db-password
+      sso_secret_file=/var/lib/secrets/oauth2/vaultwarden/secret
       out=/run/vaultwarden/env
       install -d -m 700 -o vaultwarden -g vaultwarden /run/vaultwarden
       if [ ! -s "$template" ]; then
@@ -66,7 +81,12 @@
         echo "Error: $dbpw_file missing or empty (is the shared Postgres mount attached?)" >&2
         exit 1
       fi
+      if [ ! -s "$sso_secret_file" ]; then
+        echo "Error: $sso_secret_file missing or empty (is the shared OAuth2 mount attached?)" >&2
+        exit 1
+      fi
       dbpw="$(cat "$dbpw_file")"
+      sso_secret="$(cat "$sso_secret_file")"
       # Write with a restrictive umask so the file is never world/group-readable,
       # even momentarily, before the chmod below.
       ( umask 077
@@ -74,6 +94,10 @@
         # DATABASE_URL uses the password from the shared mount; postgres is the
         # sole writer so this never drifts from the role's actual password.
         printf 'DATABASE_URL=postgresql://vaultwarden:%s@nixpostgres/vaultwarden\n' "$dbpw" >> "$out"
+        # SSO_CLIENT_SECRET from the shared OAuth2 secrets mount (provisioned on
+        # nixidm). Kanidm's provisioning hook re-applies it on every restart,
+        # so this is authoritative and never drifts from the IdP's value.
+        printf 'SSO_CLIENT_SECRET=%s\n' "$sso_secret" >> "$out"
       )
       chmod 600 "$out"
       chown vaultwarden:vaultwarden "$out"

@@ -377,6 +377,7 @@ declare -A SVC_GROUPS=(
   [grafana]="grafana_users:Grafana Monitoring"
   [grafana-admin]="grafana_admins:Grafana Admin"
   [matrix]="matrix_users:Matrix Synapse"
+  [vaultwarden]="vaultwarden_users:Vaultwarden (Password Manager)"
   [openwebui]="open_webui_users:Open WebUI"
   [open-webui]="open_webui_users:Open WebUI"
   [openwebui-admin]="open_webui_admins:Open WebUI Admin"

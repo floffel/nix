@@ -131,6 +131,8 @@ bind-mounted into **multiple** containers from the same NAS path.
 | `nixnginx` | `/mnt/pve/nas/shared/secrets/oauth2/nextcloud` | `var/lib/secrets/oauth2/nextcloud` | `ro` | Nextcloud OIDC client secret |
 | `nixmonitoring` | `/mnt/pve/nas/shared/secrets/oauth2/grafana` | `var/lib/secrets/oauth2/grafana` | `ro` | Grafana OIDC client secret |
 | `nixmatrix` | `/mnt/pve/nas/shared/secrets/oauth2/matrix` | `var/lib/secrets/oauth2/matrix` | `ro` | Matrix Synapse OIDC client secret |
+
+| `nixvaultwarden` | `/mnt/pve/nas/shared/secrets/oauth2/vaultwarden` | `var/lib/secrets/oauth2/vaultwarden` | `ro` | Vaultwarden OIDC client secret |
 | `nixpostgres` | `/mnt/pve/nas/shared/secrets/postgres` | `var/lib/secrets/postgres` | `rw` | Provisions **all** DB role passwords (sole writer) |
 | `nixforgejo` | `/mnt/pve/nas/shared/secrets/postgres/forgejo` | `var/lib/secrets/postgres/forgejo` | `ro` | Forgejo DB password |
 | `nixnginx` | `/mnt/pve/nas/shared/secrets/postgres/roundcube` | `var/lib/secrets/postgres/roundcube` | `ro` | Roundcube DB password |
@@ -155,6 +157,7 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/ssl var/lib/secrets/ssl none bind,r
 # Shared OAuth2 client secrets — nixidm gets the parent (rw), consumers get their own subdir (ro)
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2 var/lib/secrets/oauth2 none bind,rw 0 0
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2/forgejo var/lib/secrets/oauth2/forgejo none bind,ro 0 0
+lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2/vaultwarden var/lib/secrets/oauth2/vaultwarden none bind,ro 0 0
 # Shared Postgres DB passwords — nixpostgres gets the parent (rw), consumers get their own subdir (ro)
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/postgres var/lib/secrets/postgres none bind,rw 0 0
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/postgres/forgejo var/lib/secrets/postgres/forgejo none bind,ro 0 0
@@ -367,7 +370,7 @@ Below are the key files and credentials required per container:
   ```env
   ADMIN_TOKEN="your_secure_admin_token_or_hash" # Generate hash with: vaultwarden hash
   ```
-  The database password is **not** in this file. On every start, the `vaultwarden-secrets` unit assembles `/run/vaultwarden/env` from this template plus the DB password read from the shared Postgres secrets mount at `/var/lib/secrets/postgres/vaultwarden/db-password` (provisioned on `nixpostgres`, read-only here), producing the final `DATABASE_URL=postgresql://vaultwarden:<password>@nixpostgres/vaultwarden`.
+  The database password is **not** in this file. On every start, the `vaultwarden-secrets` unit assembles `/run/vaultwarden/env` from this template plus the DB password read from the shared Postgres secrets mount at `/var/lib/secrets/postgres/vaultwarden/db-password` (provisioned on `nixpostgres`, read-only here), producing the final `DATABASE_URL=postgresql://vaultwarden:<password>@nixpostgres/vaultwarden`. The same unit also injects `SSO_CLIENT_SECRET` from the shared OAuth2 secrets mount at `/var/lib/secrets/oauth2/vaultwarden/secret` (provisioned on `nixidm`, read-only here) — no manual copy to the consumer is needed.
 
 #### 📝 nixwikijs (Wiki.js)
 * **Database Password**: No local secret file is needed. On every start, the `wikijs-secrets` unit assembles `/run/wikijs/env` from the DB password read from the shared Postgres secrets mount at `/var/lib/secrets/postgres/wikijs/db-password` (provisioned on `nixpostgres`, read-only here), producing `WIKI_DB_PASS=<password>`.

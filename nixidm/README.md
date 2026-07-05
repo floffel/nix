@@ -48,7 +48,7 @@ create ...` / `group create ...` commands by hand.**
 ### Provisioned groups
 Access-control groups (membership managed via CLI/Web UI, see §3):
 `mail_users`, `forgejo_users`, `nextcloud_users`, `grafana_users`,
-`matrix_users`, `open_webui_users`.
+`matrix_users`, `vaultwarden_users`, `open_webui_users`.
 
 Per-service admin groups (only for services that support OIDC-driven admin):
 `nextcloud_admins`, `grafana_admins`, `open_webui_admins`. Plus the built-in
@@ -64,23 +64,25 @@ no admin group is declared for them — promote admins manually in those apps.
 | `nextcloud` | `nextcloud_users` | `nextcloud_admins` + `idm_admins` → `groups` claim value `admin` | `https://cloud.minnecker.com/index.php/apps/user_oidc/code` | basic secret file |
 | `grafana` | `grafana_users` | `grafana_admins` + `idm_admins` → `groups` claim value `admin` | `https://monitoring.minnecker.com/generic_oauth/callback` | basic secret file |
 | `matrix` | `matrix_users` | *(none — promote manually)* | `https://matrix.minnecker.com/_synapse/client/oauth2/callback` | basic secret file |
+| `vaultwarden` | `vaultwarden_users` | *(none — admin via ADMIN_TOKEN)* | `https://vault.minnecker.com/identity/connect/oidc-signin` | basic secret file |
 | `open-webui` | `open_webui_users` | `open_webui_admins` + `idm_admins` → `roles` claim value `admin` | `https://ai.minnecker.com/oauth/oidc/callback` | public (PKCE, no secret) |
 
 > [!NOTE]
-> Forgejo and Matrix Synapse have **no upstream OIDC admin mapping** — admins
-> must be promoted manually in the app (Forgejo admin panel; Synapse Admin
-> API). Nextcloud (`user_oidc` `groups` claim), Grafana (`groups` claim with
+> Forgejo, Matrix Synapse and Vaultwarden have **no upstream OIDC admin
+> mapping** — admins must be promoted manually in the app (Forgejo admin
+> panel; Synapse Admin API; Vaultwarden admin panel via `ADMIN_TOKEN`).
+> Nextcloud (`user_oidc` `groups` claim), Grafana (`groups` claim with
 > `admin` value) and Open WebUI (`roles` claim with `admin` value) are granted
 > admin automatically when a user is in the corresponding admin group (or
 > `idm_admins`).
 
 ### One-time secrets for non-public clients
-Each non-public OAuth2 client (`forgejo`, `nextcloud`, `grafana`, `matrix`)
-reads a basic client secret from a **per-client directory on the shared OAuth2
-secrets mount** (`/var/lib/secrets/oauth2/<client>/secret`). The provisioning
-hook **sets** the client's secret to the contents of that file on every run, so
-the file must exist and be populated with your chosen secret before the first
-`nixos-rebuild switch`.
+Each non-public OAuth2 client (`forgejo`, `nextcloud`, `grafana`, `matrix`,
+`vaultwarden`) reads a basic client secret from a **per-client directory on the
+shared OAuth2 secrets mount** (`/var/lib/secrets/oauth2/<client>/secret`). The
+provisioning hook **sets** the client's secret to the contents of that file on
+every run, so the file must exist and be populated with your chosen secret
+before the first `nixos-rebuild switch`.
 
 The same file is bind-mounted **read-only** into the consuming container at the
 identical path, so both Kanidm and the consumer always read the same secret —
@@ -90,8 +92,8 @@ identical path, so both Kanidm and the consumer always read the same secret —
 ```bash
 # On nixidm, pre-populate the basic secrets (one per non-public client).
 # The /var/lib/secrets/oauth2 mount is read-write here.
-mkdir -p /var/lib/secrets/oauth2/{forgejo,nextcloud,grafana,matrix}
-for c in forgejo nextcloud grafana matrix; do
+mkdir -p /var/lib/secrets/oauth2/{forgejo,nextcloud,grafana,matrix,vaultwarden}
+for c in forgejo nextcloud grafana matrix vaultwarden; do
   printf '%s' "$(openssl rand -hex 32)" > /var/lib/secrets/oauth2/$c/secret
   chmod 600 /var/lib/secrets/oauth2/$c/secret
 done

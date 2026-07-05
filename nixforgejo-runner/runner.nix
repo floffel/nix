@@ -56,4 +56,23 @@ in
     ExecStart = lib.mkForce "${forgejoRunner}/bin/forgejo-runner daemon --config /var/lib/gitea-runner/default/config.yaml";
     WorkingDirectory = lib.mkForce "/var/lib/gitea-runner";
   };
+
+  systemd.services.docker-prune = {
+    description = "Prune unused Docker images, containers, networks, and build cache";
+    after = [ "docker.service" ];
+    wants = [ "docker.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.docker}/bin/docker system prune -af --filter until=168h";
+    };
+  };
+
+  systemd.timers.docker-prune = {
+    description = "Weekly Docker system prune";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "weekly";
+      Persistent = true;
+    };
+  };
 }

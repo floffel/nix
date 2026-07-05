@@ -882,7 +882,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"nodes\" and r._field == \"cpu\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean)\n  |> map(fn: (r) => ({ r with _value: r._value * 100.0 }))\n  |> group(columns: [\"host\"])",
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"cpustat\" and r.object == \"nodes\" and r._field == \"cpu\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean)\n  |> map(fn: (r) => ({ r with _value: r._value * 100.0 }))\n  |> group(columns: [\"host\"])",
           "refId": "A"
         }
       ],
@@ -953,29 +953,12 @@
       "id": 17,
       "fieldConfig": {
         "defaults": {
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 80
-              },
-              {
-                "color": "red",
-                "value": 90
-              }
-            ]
-          },
-          "unit": "percent"
+          "unit": "s"
         }
       },
       "options": {
-        "orientation": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -983,8 +966,7 @@
           "fields": "",
           "values": false
         },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
+        "textMode": "auto"
       },
       "targets": [
         {
@@ -992,12 +974,12 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"rootfs\" and r.object == \"nodes\" and (r._field == \"used\" or r._field == \"total\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"host\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.total and r.total > 0 then r.used / r.total * 100.0 else 0.0 }))\n  |> group(columns: [\"host\"])",
+          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"nodes\" and r._field == \"uptime\")\n  |> last()",
           "refId": "A"
         }
       ],
-      "title": "Proxmox Host Disk Usage (%)",
-      "type": "gauge"
+      "title": "Proxmox Host Uptime",
+      "type": "stat"
     },
     {
       "collapsed": false,

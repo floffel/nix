@@ -201,8 +201,8 @@ VALUES (
     'pictureClaim', 'picture',
     'mapGroups', false,
     'groupsClaim', 'groups',
-    'logoutURL', '',
-    'acrValues', ''
+    'logoutURL', ''',
+    'acrValues', '''
   ),
   false,
   jsonb_build_object('v', '[]'::jsonb),

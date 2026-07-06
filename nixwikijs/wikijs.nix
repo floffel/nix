@@ -102,16 +102,23 @@
   #      the last run: restart wiki-js.service so activateStrategies()
   #      re-reads the updated row.
   #
-  # wantedBy + after (NOT partOf/bindsTo) couple this to wiki-js.service: it
-  # is pulled in whenever wiki-js starts (so it re-syncs the OIDC row on every
-  # restart), but the wiki-js stop phase does NOT tear it down — important
-  # because step 4 restarts wiki-js from within this unit, and a bindsTo stop
-  # would race the running script. RemainAfterExit is omitted so each start
-  # re-runs the oneshot.
+  # wantedBy multi-user.target (NOT wiki-js.service) so the unit runs at every
+  # boot regardless of whether wiki-js was (re)started during the rebuild —
+  # `wantedBy = wiki-js.service` only fires when wiki-js starts, and if wiki-js
+  # was already active when nixos-rebuild applied the new unit, the wants never
+  # triggered and the oneshot sat inactive forever (matching the
+  # nextcloud-setup-oidc pattern). Readiness is handled by the polling loops
+  # below, not by an `after` dependency on wiki-js.service — this avoids the
+  # unit being blocked if wiki-js fails to start. No partOf/bindsTo: step 4
+  # restarts wiki-js from within this script, and a partOf stop would race it.
+  # RemainAfterExit is omitted so each boot re-runs the oneshot.
   systemd.services.wikijs-provision = {
     description = "Finalize Wiki.js setup and seed Kanidm OIDC strategy";
-    wantedBy = [ "wiki-js.service" ];
-    after = [ "wiki-js.service" ];
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    startLimitBurst = 10;
+    startLimitIntervalSec = 300;
     serviceConfig = {
       Type = "oneshot";
       # Let the oneshot retry on failure during early boot (DB/IdP not yet
@@ -183,6 +190,12 @@
       # clientSecret from it directly — no encryption). callbackURL is
       # injected at activation time as <host>/login/<key>/callback, so it
       # is correct once /finalize has set host=$site_url in the settings.
+      #
+      # Capture whether the row already existed (and its old secret) BEFORE
+      # the upsert, so step 4 can decide whether wiki-js needs a restart to
+      # re-activate strategies. A newly-inserted row (row_existed=0) always
+      # requires a restart; an existing row only if the secret changed.
+      row_existed="$(psql $psql_flags -c "SELECT count(*) FROM authentication WHERE key='oidc'" 2>/dev/null || echo 0)"
       old_secret="$(psql $psql_flags -c "SELECT config->>'clientSecret' FROM authentication WHERE key='oidc'" 2>/dev/null || true)"
       psql $psql_flags -v secret="$client_secret" <<'SQL' >/dev/null
 INSERT INTO authentication (key, "strategyKey", "displayName", "order", "isEnabled", config, "selfRegistration", "domainWhitelist", "autoEnrollGroups")
@@ -241,13 +254,15 @@ SQL
         exit 0
       fi
 
-      # --- (4) subsequent boots: re-activate only if the secret rotated ---
-      if [ -n "$old_secret" ] && [ "$old_secret" != "$client_secret" ]; then
-        echo "OIDC client secret rotated — restarting wiki-js to re-activate strategies."
-        # Restart is the last action: the unit has no partOf/bindsTo, so the
-        # wiki-js stop phase does not tear this script down. wiki-js' start
-        # phase then pulls this unit again via wantedBy — the re-run finds
-        # the secret now in sync and exits cleanly (no loop).
+      # --- (4) subsequent boots: restart wiki-js if the OIDC row was newly
+      # created or the client secret rotated, so activateStrategies() re-reads
+      # it. On first boot (step 3 above), /finalize's master reboot handles
+      # activation so we never reach here.
+      if [ "$row_existed" != "1" ] || { [ -n "$old_secret" ] && [ "$old_secret" != "$client_secret" ]; }; then
+        echo "OIDC strategy row changed (newly inserted or secret rotated) — restarting wiki-js to activate."
+        # No partOf/bindsTo on this unit, so the wiki-js stop phase does not
+        # tear this script down. The unit is wantedBy multi-user.target only,
+        # so wiki-js' restart does NOT re-trigger it (no loop).
         systemctl restart wiki-js.service
       else
         echo "Wiki.js already provisioned; OIDC strategy in sync. Nothing to do."

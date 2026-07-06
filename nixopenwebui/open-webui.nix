@@ -14,11 +14,24 @@
     environment = {
       WEBUI_URL = "https://ai.minnecker.com";
       OPENID_PROVIDER_URL = "https://idm.minnecker.com/oauth2/openid/open-webui/.well-known/openid-configuration";
+      OPENID_REDIRECT_URI = "https://ai.minnecker.com/oauth/oidc/callback";
       OAUTH_CLIENT_ID = "open-webui";
       OAUTH_PROVIDER_NAME = "Kanidm SSO";
       ENABLE_OAUTH_SIGNUP = "True";
       OAUTH_AUTO_REDIRECT = "True";
       ENABLE_SIGNUP = "False"; # Disables open public registration for security hardening
+      ENABLE_LOGIN_FORM = "False"; # Hide local username/password login — Kanidm SSO is the only auth path
+
+      # Role mapping from the Kanidm `roles` claim (see nixidm/kanidm.nix
+      # claimMaps.roles: open_webui_users -> "user", open_webui_admins /
+      # idm_admins -> "admin"). OAUTH_ALLOWED_ROLES gates who may sign in;
+      # OAUTH_ADMIN_ROLES grants the Open WebUI admin role. With these set,
+      # the first-run "create admin account" prompt is bypassed because the
+      # first SSO login auto-provisions the user from the claim rather than
+      # from a local signup form.
+      OAUTH_ROLES_CLAIM = "roles";
+      OAUTH_ALLOWED_ROLES = "user,admin";
+      OAUTH_ADMIN_ROLES = "admin";
 
       # Default connection settings for the local LLM server
       OPENAI_API_BASE_URL = "http://192.168.1.196:52415/v1";

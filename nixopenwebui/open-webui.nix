@@ -16,6 +16,12 @@
       OPENID_PROVIDER_URL = "https://idm.minnecker.com/oauth2/openid/open-webui/.well-known/openid-configuration";
       OPENID_REDIRECT_URI = "https://ai.minnecker.com/oauth/oidc/callback";
       OAUTH_CLIENT_ID = "open-webui";
+      # open-webui is a public PKCE client (no basic secret, see
+      # nixidm/kanidm.nix). Open WebUI only registers the OIDC provider when
+      # OAUTH_CLIENT_SECRET *or* OAUTH_CODE_CHALLENGE_METHOD is set, so we
+      # must set the latter to S256 — otherwise the provider is never
+      # registered and the callback 500s.
+      OAUTH_CODE_CHALLENGE_METHOD = "S256";
       OAUTH_PROVIDER_NAME = "Kanidm SSO";
       ENABLE_OAUTH_SIGNUP = "True";
       OAUTH_AUTO_REDIRECT = "True";

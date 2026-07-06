@@ -197,6 +197,9 @@
       # requires a restart; an existing row only if the secret changed.
       row_existed="$(psql $psql_flags -c "SELECT count(*) FROM authentication WHERE key='oidc'" 2>/dev/null || echo 0)"
       old_secret="$(psql $psql_flags -c "SELECT config->>'clientSecret' FROM authentication WHERE key='oidc'" 2>/dev/null || true)"
+      # Also capture whether local auth was already disabled, so step 4 can
+      # restart wiki-js if it was still enabled (hiding local login).
+      local_was_enabled="$(psql $psql_flags -c "SELECT \"isEnabled\" FROM authentication WHERE key='local'" 2>/dev/null || echo "")"
       psql $psql_flags -v secret="$client_secret" <<'SQL' >/dev/null
 INSERT INTO authentication (key, "strategyKey", "displayName", "order", "isEnabled", config, "selfRegistration", "domainWhitelist", "autoEnrollGroups")
 VALUES (
@@ -228,6 +231,13 @@ ON CONFLICT (key) DO UPDATE SET
   config = EXCLUDED.config;
 SQL
 
+      # --- (2b) disable the local auth strategy ---
+      # The setup wizard creates a `local` strategy (admin email/password).
+      # Hide it from the login page so only "Kanidm SSO" is offered. The
+      # local admin account still exists in the DB for emergency access —
+      # re-enable the row manually if OIDC is ever unavailable.
+      psql $psql_flags -c "UPDATE authentication SET \"isEnabled\" = false WHERE key = 'local'" >/dev/null
+
       # --- (3) first boot: drive the setup wizard via POST /finalize ---
       settings_count="$(psql $psql_flags -c "SELECT count(*) FROM settings")"
       if [ "$settings_count" = "0" ]; then
@@ -254,12 +264,14 @@ SQL
         exit 0
       fi
 
-      # --- (4) subsequent boots: restart wiki-js if the OIDC row was newly
-      # created or the client secret rotated, so activateStrategies() re-reads
-      # it. On first boot (step 3 above), /finalize's master reboot handles
+      # --- (4) restart wiki-js if the OIDC row was newly created, the
+      # client secret rotated, or local auth was still enabled (now disabled).
+      # On first boot (step 3 above), /finalize's master reboot handles
       # activation so we never reach here.
-      if [ "$row_existed" != "1" ] || { [ -n "$old_secret" ] && [ "$old_secret" != "$client_secret" ]; }; then
-        echo "OIDC strategy row changed (newly inserted or secret rotated) — restarting wiki-js to activate."
+      if [ "$row_existed" != "1" ] \
+         || { [ -n "$old_secret" ] && [ "$old_secret" != "$client_secret" ]; } \
+         || [ "$local_was_enabled" = "t" ]; then
+        echo "Auth strategies changed (OIDC row inserted/rotated or local disabled) — restarting wiki-js to activate."
         # No partOf/bindsTo on this unit, so the wiki-js stop phase does not
         # tear this script down. The unit is wantedBy multi-user.target only,
         # so wiki-js' restart does NOT re-trigger it (no loop).

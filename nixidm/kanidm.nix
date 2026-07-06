@@ -416,6 +416,12 @@
           originUrl = "https://wiki.minnecker.com/login/oidc/callback";
           originLanding = "https://wiki.minnecker.com/";
           basicSecretFile = "/var/lib/secrets/oauth2/wikijs/secret";
+          # Wiki.js uses passport-openidconnect, which does not send a PKCE
+          # code_challenge in the authorise request. Kanidm enforces PKCE by
+          # default on confidential clients, so without this the authorise
+          # request fails with HTTP 400. This is the documented "legacy client"
+          # escape hatch (kanidm system oauth2 warning-insecure-client-disable-pkce).
+          allowInsecureClientDisablePkce = true;
           scopeMaps = { wikijs_users = [ "openid" "email" "profile" ]; };
         };
 

@@ -334,13 +334,7 @@ Below are the key files and credentials required per container:
   * The oauth2 shared file is owned on the NAS; the two generated files are owned by `grafana:grafana` with `chmod 600` (set by the oneshot).
 
 #### 🤖 nixopenwebui (Open WebUI)
-* **SSO & LLM Configuration**: Write the environment file `/var/lib/secrets/open-webui/env` (owned by user `994:994`, `chmod 600`) containing OIDC client secrets and LLM backend URLs:
-  ```env
-  OAUTH_CLIENT_SECRET="your_kanidm_openwebui_oauth_secret"
-  OLLAMA_API_BASE_URL="http://your_ollama_ip:11434"
-  OPENAI_API_BASE_URL="http://your_llm_server_ip:8000/v1"
-  OPENAI_API_KEY="your_llm_api_key_if_needed"
-  ```
+* **SSO & LLM Configuration**: Fully declarative — no manual secret step. Open WebUI is a public PKCE OAuth2 client against Kanidm (provisioned on `nixidm`, no shared basic secret — only the client id `open-webui` is needed, set in the module). The LLM endpoint (`OPENAI_API_BASE_URL` / `OPENAI_API_KEY`, Ollama API disabled) is declared in `nixopenwebui/open-webui.nix`. The `open-webui-secrets` systemd oneshot provisions an empty, idempotent `/var/lib/secrets/open-webui/env` (owned by `open-webui:open-webui`, `chmod 600`) on every service start so the `EnvironmentFile` directive always has a target. To override the LLM endpoint at runtime (e.g. point at a different model server), drop lines into that file; otherwise leave it empty.
 
 #### 💬 nixmatrix (Matrix Synapse)
 * **Synapse Configuration**: `/var/lib/secrets/matrix/secrets.yaml` (owned by `matrix-synapse:matrix-synapse`, `chmod 600`) is **provisioned automatically on first boot** by the `matrix-synapse-secrets` systemd oneshot (idempotent — existing files are kept). It contains the **OIDC client config** with placeholder values only; the database password and OIDC client secret are both rewritten on every Synapse start from their shared mounts, so no manual secret material is needed here. The generated template is:

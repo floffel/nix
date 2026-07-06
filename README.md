@@ -343,7 +343,7 @@ Below are the key files and credentials required per container:
   ```
 
 #### 💬 nixmatrix (Matrix Synapse)
-* **Synapse Configuration**: Write the YAML configuration `/var/lib/secrets/matrix/secrets.yaml` (owned by `matrix-synapse:matrix-synapse`, `chmod 600`) containing the **OIDC client config** only. The database password and OIDC client secret are both rewritten on every Synapse start from their shared mounts, so only placeholder values are needed here:
+* **Synapse Configuration**: `/var/lib/secrets/matrix/secrets.yaml` (owned by `matrix-synapse:matrix-synapse`, `chmod 600`) is **provisioned automatically on first boot** by the `matrix-synapse-secrets` systemd oneshot (idempotent — existing files are kept). It contains the **OIDC client config** with placeholder values only; the database password and OIDC client secret are both rewritten on every Synapse start from their shared mounts, so no manual secret material is needed here. The generated template is:
   ```yaml
   database:
     args:

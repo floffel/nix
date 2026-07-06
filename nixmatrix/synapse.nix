@@ -63,6 +63,51 @@
     ];
   };
 
+  # Provision the secrets.yaml file idempotently on first boot, mirroring the
+  # grafana-secrets / vaultwarden-secrets pattern. The file only contains
+  # placeholders for the OIDC client config (no real secret material); the
+  # matrix-synapse.preStart hook below rewrites the two placeholder lines from
+  # the shared NAS mounts on every start so they can never drift. Existing
+  # files are never overwritten, so manual edits survive rebuilds.
+  systemd.services.matrix-synapse-secrets = {
+    description = "Provision Matrix Synapse secrets.yaml";
+    wantedBy = [ "matrix-synapse.service" ];
+    before = [ "matrix-synapse.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    path = [ pkgs.coreutils ];
+    script = ''
+      d=/var/lib/secrets/matrix
+      f="$d/secrets.yaml"
+      mkdir -p "$d"
+      if [ ! -s "$f" ]; then
+        echo "Writing $f with placeholder secrets"
+        cat > "$f" <<'EOF'
+      database:
+        args:
+          password: "PLACEHOLDER_REWRITTEN_FROM_SHARED_MOUNT"
+      oidc_providers:
+        - idp_id: "kanidm"
+          idp_name: "Kanidm SSO"
+          issuer: "https://idm.minnecker.com/oauth2/openid/matrix"
+          client_id: "matrix"
+          client_secret: "PLACEHOLDER_REWRITTEN_FROM_SHARED_MOUNT"
+          scopes: ["openid", "profile", "email"]
+          user_mapping_provider:
+            config:
+              subject_claim: "sub"
+              localpart_claim: "preferred_username"
+              display_name_claim: "name"
+              email_claim: "email"
+      EOF
+      fi
+      chown matrix-synapse:matrix-synapse "$f"
+      chmod 600 "$f"
+    '';
+  };
+
   # Keep secrets.yaml in sync with the shared secrets mounts on every start:
   #   * the OIDC client_secret is rewritten from the shared OAuth2 secret file
   #     that Kanidm provisions (/var/lib/secrets/oauth2/matrix/secret, the same
@@ -77,18 +122,18 @@
     SECRET_FILE="/var/lib/secrets/oauth2/matrix/secret"
     if [ -r "$SECRET_FILE" ] && [ -f "$YAML_FILE" ]; then
       SECRET=$(cat "$SECRET_FILE")
-      grep -q '^      client_secret:' "$YAML_FILE" || { echo "Error: client_secret: line not found in $YAML_FILE" >&2; exit 1; }
-      ${pkgs.gnused}/bin/sed -i \
-        "s#^      client_secret:.*#      client_secret: \"$SECRET\"#" \
+      grep -q '^[[:space:]]*client_secret:' "$YAML_FILE" || { echo "Error: client_secret: line not found in $YAML_FILE" >&2; exit 1; }
+      ${pkgs.gnused}/bin/sed -i -E \
+        "s#^([[:space:]]*)client_secret:.*#\1client_secret: \"$SECRET\"#" \
         "$YAML_FILE"
     fi
 
     DBPW_FILE="/var/lib/secrets/postgres/matrix/db-password"
     if [ -r "$DBPW_FILE" ] && [ -f "$YAML_FILE" ]; then
       DBPW=$(cat "$DBPW_FILE")
-      grep -q '^      password:' "$YAML_FILE" || { echo "Error: password: line not found in $YAML_FILE" >&2; exit 1; }
-      ${pkgs.gnused}/bin/sed -i \
-        "s#^      password:.*#      password: \"$DBPW\"#" \
+      grep -q '^[[:space:]]*password:' "$YAML_FILE" || { echo "Error: password: line not found in $YAML_FILE" >&2; exit 1; }
+      ${pkgs.gnused}/bin/sed -i -E \
+        "s#^([[:space:]]*)password:.*#\1password: \"$DBPW\"#" \
         "$YAML_FILE"
     fi
   '';

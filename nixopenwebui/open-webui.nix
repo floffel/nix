@@ -46,6 +46,13 @@
   # API key) without a rebuild. partOf + bindsTo couple this oneshot to
   # open-webui.service so it re-runs on every (re)start; RemainAfterExit is
   # omitted so each restart re-asserts ownership/permissions.
+  #
+  # NOTE: services.open-webui uses DynamicUser=true, so there is no persistent
+  # "open-webui" system user to chown to (the UID is random per start). This
+  # is fine because systemd's EnvironmentFile= is read by the manager (PID 1,
+  # root) before exec'ing the service, not by the dynamic user — so a
+  # root:root 0600 file is readable by the manager and never exposed to the
+  # service's random UID.
   systemd.services.open-webui-secrets = {
     description = "Provision Open WebUI runtime env file (idempotent)";
     wantedBy = [ "open-webui.service" ];
@@ -60,14 +67,14 @@
       set -euo pipefail
       d=/var/lib/secrets/open-webui
       f="$d/env"
-      install -d -m 700 "$d"
+      install -d -m 700 -o root -g root "$d"
       # Create the file if it doesn't exist; never overwrite so manual
       # overrides survive restarts.
       if [ ! -e "$f" ]; then
         : > "$f"
       fi
+      chown root:root "$f"
       chmod 600 "$f"
-      chown open-webui:open-webui "$f"
     '';
   };
 }

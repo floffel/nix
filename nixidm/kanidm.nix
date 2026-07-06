@@ -18,7 +18,7 @@
     };
     path = [ pkgs.openssl ];
     script = ''
-      for c in forgejo nextcloud grafana matrix vaultwarden; do
+      for c in forgejo nextcloud grafana matrix vaultwarden wikijs; do
         d=/var/lib/secrets/oauth2/$c
         mkdir -p "$d"
         if [ ! -s "$d/secret" ]; then
@@ -296,6 +296,8 @@
         matrix_users.overwriteMembers = false;
         vaultwarden_users.present = true;
         vaultwarden_users.overwriteMembers = false;
+        wikijs_users.present = true;
+        wikijs_users.overwriteMembers = false;
         open_webui_users.present = true;
         open_webui_users.overwriteMembers = false;
         open_webui_admins.present = true;
@@ -401,6 +403,20 @@
           originLanding = "https://vault.minnecker.com/";
           basicSecretFile = "/var/lib/secrets/oauth2/vaultwarden/secret";
           scopeMaps = { vaultwarden_users = [ "openid" "email" "profile" ]; };
+        };
+
+        # Wiki.js OIDC. Confidential client; the consumer (nixwikijs) reads
+        # its client secret from the shared OAuth2 secrets mount, and the
+        # OIDC strategy is seeded into Wiki.js' authentication table by the
+        # wikijs-provision oneshot (see nixwikijs/wikijs.nix). Wiki.js has no
+        # OIDC-driven admin mapping — admins must be promoted manually in
+        # the app (like forgejo/matrix), so no *_admins group is declared.
+        wikijs = {
+          displayName = "Wiki.js";
+          originUrl = "https://wiki.minnecker.com/login/oidc/callback";
+          originLanding = "https://wiki.minnecker.com/";
+          basicSecretFile = "/var/lib/secrets/oauth2/wikijs/secret";
+          scopeMaps = { wikijs_users = [ "openid" "email" "profile" ]; };
         };
 
         # Open WebUI uses PKCE (no shared basic secret); the client is public

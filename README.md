@@ -133,6 +133,7 @@ bind-mounted into **multiple** containers from the same NAS path.
 | `nixmatrix` | `/mnt/pve/nas/shared/secrets/oauth2/matrix` | `var/lib/secrets/oauth2/matrix` | `ro` | Matrix Synapse OIDC client secret |
 
 | `nixvaultwarden` | `/mnt/pve/nas/shared/secrets/oauth2/vaultwarden` | `var/lib/secrets/oauth2/vaultwarden` | `ro` | Vaultwarden OIDC client secret |
+| `nixwikijs` | `/mnt/pve/nas/shared/secrets/oauth2/wikijs` | `var/lib/secrets/oauth2/wikijs` | `ro` | Wiki.js OIDC client secret (seeded into the `authentication` table by `wikijs-provision`) |
 | `nixpostgres` | `/mnt/pve/nas/shared/secrets/postgres` | `var/lib/secrets/postgres` | `rw` | Provisions **all** DB role passwords (sole writer) |
 | `nixforgejo` | `/mnt/pve/nas/shared/secrets/postgres/forgejo` | `var/lib/secrets/postgres/forgejo` | `ro` | Forgejo DB password |
 | `nixnginx` | `/mnt/pve/nas/shared/secrets/postgres/roundcube` | `var/lib/secrets/postgres/roundcube` | `ro` | Roundcube DB password |
@@ -144,7 +145,7 @@ bind-mounted into **multiple** containers from the same NAS path.
 | `nixopenwebui` | `/mnt/pve/nas/shared/secrets/open-webui` | `var/lib/secrets/open-webui` | `rw` | Open WebUI env (LLM URLs, PKCE client) |
 | `nixmatrix` | `/mnt/pve/nas/shared/secrets/matrix` | `var/lib/secrets/matrix` | `rw` | Synapse `secrets.yaml` (DB pw, OIDC config) |
 | `nixvaultwarden` | `/mnt/pve/nas/shared/secrets/vaultwarden` | `var/lib/secrets/vaultwarden` | `rw` | Vaultwarden env (DB url, admin token) |
-| `nixwikijs` | `/mnt/pve/nas/shared/secrets/wikijs` | `var/lib/secrets/wikijs` | `rw` | Wiki.js env (DB password) |
+| `nixwikijs` | `/mnt/pve/nas/shared/secrets/wikijs` | `var/lib/secrets/wikijs` | `rw` | Wiki.js admin password (generated locally by `wikijs-provision`) |
 | `nixnsd` | `/mnt/pve/nas/shared/secrets/nsd` | `var/lib/secrets/nsd` | `rw` | NSD TSIG sync key |
 | `nixnginx` | `/mnt/pve/nas/shared/secrets/nginx` | `var/lib/secrets/nginx` | `ro` | Nextcloud/Roundcube DB pws, Roundcube DES key |
 
@@ -158,6 +159,7 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/ssl var/lib/secrets/ssl none bind,r
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2 var/lib/secrets/oauth2 none bind,rw 0 0
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2/forgejo var/lib/secrets/oauth2/forgejo none bind,ro 0 0
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2/vaultwarden var/lib/secrets/oauth2/vaultwarden none bind,ro 0 0
+lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2/wikijs var/lib/secrets/oauth2/wikijs none bind,ro 0 0
 # Shared Postgres DB passwords — nixpostgres gets the parent (rw), consumers get their own subdir (ro)
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/postgres var/lib/secrets/postgres none bind,rw 0 0
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/postgres/forgejo var/lib/secrets/postgres/forgejo none bind,ro 0 0
@@ -182,7 +184,9 @@ copy/sync step is required.
 ├── forgejo/secret
 ├── nextcloud/secret
 ├── grafana/secret
-└── matrix/secret
+├── matrix/secret
+├── vaultwarden/secret
+└── wikijs/secret
 ```
 
 #### Shared Postgres DB passwords
@@ -365,6 +369,8 @@ Below are the key files and credentials required per container:
 
 #### 📝 nixwikijs (Wiki.js)
 * **Database Password**: No local secret file is needed. On every start, the `wikijs-secrets` unit assembles `/run/wikijs/env` from the DB password read from the shared Postgres secrets mount at `/var/lib/secrets/postgres/wikijs/db-password` (provisioned on `nixpostgres`, read-only here), producing `WIKI_DB_PASS=<password>`.
+* **Admin Password**: Auto-provisioned on first boot into `/var/lib/secrets/wikijs/admin-password` (a random value generated with `openssl rand -base64 32`, owned root `0600`). Used only by the `wikijs-provision` unit to drive the one-time setup wizard; retrieve it to log in as the local `admin@minnecker.com` account (OIDC users are the primary logins).
+* **OIDC (Kanidm)**: Fully declarative — no manual setup-wizard or admin-UI step. On every start, the `wikijs-provision` oneshot: (1) upserts the Kanidm OIDC strategy row into Wiki.js' `authentication` table, reading the client secret from the shared OAuth2 secrets mount at `/var/lib/secrets/oauth2/wikijs/secret` (provisioned on `nixidm`, read-only here); (2) on first boot, drives the setup wizard via `POST /finalize` (admin email/password + `siteUrl=https://wiki.minnecker.com`), after which Wiki.js self-boots into master mode and activates the pre-seeded OIDC strategy; (3) on later boots, restarts Wiki.js only if the Kanidm client secret has rotated. Note: Wiki.js has no OIDC→admin role mapping, so promoting an OIDC user to the `Administrators` group is a one-time manual click in the admin UI (like forgejo/matrix).
 
 #### 📹 nixjitsi (Jitsi Meet)
 * **Port Forwarding**: Forward external **UDP port 10000** on your router to the `nixjitsi` container IP (`172.16.16.20`) to allow group video bridge audio/video data.

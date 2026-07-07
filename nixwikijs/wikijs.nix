@@ -231,12 +231,29 @@ ON CONFLICT (key) DO UPDATE SET
   config = EXCLUDED.config;
 SQL
 
-      # --- (2b) disable the local auth strategy ---
+      # --- (2b) disable the local auth strategy + enable auto-login ---
       # The setup wizard creates a `local` strategy (admin email/password).
-      # Hide it from the login page so only "Kanidm SSO" is offered. The
-      # local admin account still exists in the DB for emergency access —
-      # re-enable the row manually if OIDC is ever unavailable.
+      # Disable it so only "Kanidm SSO" is offered. The local admin account
+      # still exists in the DB for emergency access — re-enable the row
+      # manually if OIDC is ever unavailable.
       psql $psql_flags -c "UPDATE authentication SET \"isEnabled\" = false WHERE key = 'local'" >/dev/null
+
+      # Wiki.js' SPA login page (client/components/login.vue) renders blank
+      # with a single non-form strategy: the provider list needs >1 strategy,
+      # the form needs useForm=true, and the auto-redirect watcher is gated on
+      # useForm. The server-side /login route (server/controllers/auth.js)
+      # avoids this entirely when auth.autoLogin is true — it redirects /login
+      # to the first non-form strategy before the SPA ever loads. Set it (plus
+      # hideLocal, which is the documented companion) declaratively in the
+      # settings table so the login page always bounces straight to Kanidm.
+      # Rows use the {v: <value>} wrapper that saveToDb writes.
+      old_autologin="$(psql $psql_flags -c "SELECT value->>'v' FROM settings WHERE key='auth'" 2>/dev/null | grep -o '"autoLogin":[a-z]*' || true)"
+      psql $psql_flags <<'SQL' >/dev/null
+INSERT INTO settings (key, value, "updatedAt") VALUES
+  ('auth', '{"v":{"autoLogin":true,"hideLocal":true,"loginBgUrl":"","tokenExpiration":"30m","tokenRenewal":"14d"}}'::jsonb, now())
+ON CONFLICT (key) DO UPDATE SET
+  value = jsonb_set(jsonb_set(COALESCE(settings.value, '{}'::jsonb), '{v,autoLogin}', 'true'::jsonb), '{v,hideLocal}', 'true'::jsonb);
+SQL
 
       # --- (3) first boot: drive the setup wizard via POST /finalize ---
       settings_count="$(psql $psql_flags -c "SELECT count(*) FROM settings")"
@@ -265,13 +282,15 @@ SQL
       fi
 
       # --- (4) restart wiki-js if the OIDC row was newly created, the
-      # client secret rotated, or local auth was still enabled (now disabled).
-      # On first boot (step 3 above), /finalize's master reboot handles
-      # activation so we never reach here.
+      # client secret rotated, local auth was still enabled (now disabled),
+      # or autoLogin was not yet set. On first boot (step 3 above),
+      # /finalize's master reboot handles activation so we never reach here.
+      new_autologin="$(psql $psql_flags -c "SELECT value->>'v' FROM settings WHERE key='auth'" 2>/dev/null | grep -o '"autoLogin":[a-z]*' || true)"
       if [ "$row_existed" != "1" ] \
          || { [ -n "$old_secret" ] && [ "$old_secret" != "$client_secret" ]; } \
-         || [ "$local_was_enabled" = "t" ]; then
-        echo "Auth strategies changed (OIDC row inserted/rotated or local disabled) — restarting wiki-js to activate."
+         || [ "$local_was_enabled" = "t" ] \
+         || [ "$old_autologin" != '"autoLogin":true' ]; then
+        echo "Auth config changed (OIDC row/secret, local disabled, or autoLogin set) — restarting wiki-js to activate."
         # No partOf/bindsTo on this unit, so the wiki-js stop phase does not
         # tear this script down. The unit is wantedBy multi-user.target only,
         # so wiki-js' restart does NOT re-trigger it (no loop).

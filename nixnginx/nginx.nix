@@ -472,20 +472,6 @@ in
         forceSSL = true;
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
         sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
-
-        # Wiki.js' SPA login page (client/components/login.vue) has a bug:
-        # with a single non-form strategy (OIDC, useForm=false), the provider
-        # list is hidden (strategies.length > 1 is false), the login form is
-        # hidden (useForm is false), and the auto-redirect watcher is gated
-        # on useForm so it never fires — the page renders blank. Redirect
-        # /login straight to /login/oidc, which initiates the OIDC flow and
-        # sends the user to Kanidm (which enforces 2FA). The OIDC callback
-        # (/login/oidc/callback) is unaffected by this exact-match redirect.
-        locations."/login" = {
-          extraConfig = ''
-            return 302 /login/oidc;
-          '';
-        };
         locations."/" = {
           proxyPass = "http://wikijs";
           extraConfig = ''

@@ -248,11 +248,13 @@ SQL
       # settings table so the login page always bounces straight to Kanidm.
       # Rows use the {v: <value>} wrapper that saveToDb writes.
       old_autologin="$(psql $psql_flags -c "SELECT value->>'v' FROM settings WHERE key='auth'" 2>/dev/null | grep -o '"autoLogin":[a-z]*' || true)"
+      # The settings.value column is `json` (not jsonb), so cast to jsonb for
+      # jsonb_set, then cast the result back to json for assignment.
       psql $psql_flags <<'SQL' >/dev/null
 INSERT INTO settings (key, value, "updatedAt") VALUES
-  ('auth', '{"v":{"autoLogin":true,"hideLocal":true,"loginBgUrl":"","tokenExpiration":"30m","tokenRenewal":"14d"}}'::jsonb, now())
+  ('auth', '{"v":{"autoLogin":true,"hideLocal":true,"loginBgUrl":"","tokenExpiration":"30m","tokenRenewal":"14d"}}'::json, now())
 ON CONFLICT (key) DO UPDATE SET
-  value = jsonb_set(jsonb_set(COALESCE(settings.value, '{}'::jsonb), '{v,autoLogin}', 'true'::jsonb), '{v,hideLocal}', 'true'::jsonb);
+  value = jsonb_set(jsonb_set(COALESCE(settings.value::jsonb, '{}'::jsonb), '{v,autoLogin}', 'true'::jsonb), '{v,hideLocal}', 'true'::jsonb)::json;
 SQL
 
       # --- (3) first boot: drive the setup wizard via POST /finalize ---

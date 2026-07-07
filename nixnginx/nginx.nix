@@ -60,6 +60,10 @@ in
 
       # Include LDAP configurations from the isolated mail/ldap secrets mount
       include /var/lib/secrets/mail/ldap/nginx-ldap.conf;
+
+      # Include the bearer-token map for kie.minnecker.com (generated at
+      # runtime by the kie-proxy-token oneshot from /var/lib/kie-proxy/token).
+      include /var/lib/kie-proxy/nginx-map.conf;
     '';
 
     # 2. Upstream Definitions
@@ -283,31 +287,26 @@ in
       #
       # Public, bearer-token-gated reverse proxy to the OpenAI-compatible LLM
       # endpoint (192.168.1.196:52415, same backend Open WebUI uses). Clients
-      # authenticate with `Authorization: Bearer <token>`; the token is
-      # validated by the njs subrequest at /kie_auth against
+      # authenticate with `Authorization: Bearer <token>`; the token is checked
+      # via a map directive ($kie_token_ok) generated at runtime from
       # /var/lib/kie-proxy/token. The client's Authorization header is then
-      # OVERWRITTEN with the upstream's fixed key ("Bearer x") before
-      # proxying, so the proxy token is never forwarded to the LLM backend.
+      # OVERWRITTEN with the upstream's fixed key ("Bearer x") before proxying,
+      # so the proxy token is never forwarded to the LLM backend.
       "kie.minnecker.com" = {
         forceSSL = true;
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
         sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         extraConfig = ''
-          js_import kieauth from ${./kie-auth.js};
           charset utf-8;
           client_max_body_size 100M;
         '';
-        locations."= /kie_auth" = {
-          extraConfig = ''
-            internal;
-            js_content kieauth.auth;
-          '';
-        };
         locations."/" = {
           proxyPass = "http://kiellm";
           proxyWebsockets = true;
           extraConfig = ''
-            auth_request /kie_auth;
+            if ($kie_token_ok = 0) {
+              return 401;
+            }
 
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -316,7 +315,6 @@ in
             # Replace the client's bearer token with the upstream LLM's fixed
             # key — the proxy gate token must not reach the backend.
             proxy_set_header Authorization "Bearer x";
-            proxy_http_version 1.1;
             proxy_buffering off;
             chunked_transfer_encoding off;
             proxy_read_timeout 600;
@@ -776,13 +774,15 @@ in
   # Auto-provision the bearer token for the kie.minnecker.com LLM proxy gate.
   #
   # /var/lib/secrets/nginx is a read-only bind mount on this container, so the
-  # token lives in a writable state dir (/var/lib/kie-proxy) owned by the
-  # nginx user so the njs worker can read it. Generated once with openssl on
-  # first boot and persisted across restarts; idempotent thereafter. Coupled
-  # to nginx.service (partOf + bindsTo) so it re-asserts ownership/permissions
-  # on every (re)start.
+  # token lives in a writable state dir (/var/lib/kie-proxy). Generated once
+  # with openssl on first boot and persisted across restarts. The oneshot also
+  # (re)generates an nginx map snippet (nginx-map.conf) that maps the
+  # client's Authorization header to $kie_token_ok (1 = match, 0 = deny);
+  # this is included from commonHttpConfig. Both files are root:root 0600
+  # since the nginx master (root) reads them at config parse time. Coupled
+  # to nginx.service (partOf + bindsTo) so it re-runs on every (re)start.
   systemd.services.kie-proxy-token = {
-    description = "Provision kie.minnecker.com proxy token if missing";
+    description = "Provision kie.minnecker.com proxy token + nginx map snippet";
     wantedBy = [ "nginx.service" ];
     before = [ "nginx.service" ];
     partOf = [ "nginx.service" ];
@@ -792,19 +792,35 @@ in
     script = ''
       set -euo pipefail
       d=/var/lib/kie-proxy
-      install -d -m 750 -o nginx -g nginx "$d"
+      install -d -m 750 -o root -g root "$d"
       f="$d/token"
+      mapf="$d/nginx-map.conf"
+
       if [ ! -s "$f" ]; then
         echo "Generating new kie proxy token..."
         token=$(openssl rand -hex 32)
-        ( umask 077
-          printf '%s\n' "$token" > "$f"
-        )
       else
         echo "kie proxy token already present — keeping it."
+        token=$(cat "$f")
       fi
-      chown nginx:nginx "$f"
+
+      # Write the token file (idempotent — never overwrite an existing one).
+      ( umask 077
+        printf '%s\n' "$token" > "$f"
+      )
       chmod 600 "$f"
+      chown root:root "$f"
+
+      # Always (re)generate the map snippet from the current token so it
+      # stays in sync if the token file was manually rotated.
+      cat > "$mapf" <<EOF
+      map \$http_authorization \$kie_token_ok {
+          default 0;
+          "Bearer $token" 1;
+      }
+      EOF
+      chmod 600 "$mapf"
+      chown root:root "$mapf"
     '';
   };
 

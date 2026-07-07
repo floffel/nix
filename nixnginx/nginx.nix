@@ -46,6 +46,10 @@ in
       proxy_headers_hash_max_size 1024;
       proxy_headers_hash_bucket_size 128;
 
+      # Bearer-token key in the kie map (~/71 chars) exceeds the default
+      # 64-byte map_hash_bucket_size, so bump it.
+      map_hash_bucket_size 128;
+
       brotli on;
       auth_ldap_cache_enabled on;
       auth_ldap_cache_expiration_time 10000;

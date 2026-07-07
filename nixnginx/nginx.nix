@@ -792,7 +792,7 @@ in
     script = ''
       set -euo pipefail
       d=/var/lib/kie-proxy
-      install -d -m 750 -o root -g root "$d"
+      install -d -m 750 -o root -g nginx "$d"
       f="$d/token"
       mapf="$d/nginx-map.conf"
 
@@ -805,22 +805,24 @@ in
       fi
 
       # Write the token file (idempotent — never overwrite an existing one).
-      ( umask 077
+      # root:nginx 640 so the nginx master can read it but no other user.
+      ( umask 027
         printf '%s\n' "$token" > "$f"
       )
-      chmod 600 "$f"
-      chown root:root "$f"
+      chmod 640 "$f"
+      chown root:nginx "$f"
 
       # Always (re)generate the map snippet from the current token so it
-      # stays in sync if the token file was manually rotated.
+      # stays in sync if the token file was manually rotated. root:nginx 640
+      # so the nginx master (and pre-start config test) can read it.
       cat > "$mapf" <<EOF
       map \$http_authorization \$kie_token_ok {
           default 0;
           "Bearer $token" 1;
       }
       EOF
-      chmod 600 "$mapf"
-      chown root:root "$mapf"
+      chmod 640 "$mapf"
+      chown root:nginx "$mapf"
     '';
   };
 

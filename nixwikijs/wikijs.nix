@@ -203,7 +203,7 @@
       psql $psql_flags -v secret="$client_secret" <<'SQL' >/dev/null
 INSERT INTO authentication (key, "strategyKey", "displayName", "order", "isEnabled", config, "selfRegistration", "domainWhitelist", "autoEnrollGroups")
 VALUES (
-  'oidc', 'oidc', 'Kanidm SSO', 1, true,
+  'oidc', 'oidc', 'Kanidm SSO', 0, true,
   jsonb_build_object(
     'clientId', 'wikijs',
     'clientSecret', :'secret',
@@ -236,7 +236,12 @@ SQL
       # Disable it so only "Kanidm SSO" is offered. The local admin account
       # still exists in the DB for emergency access — re-enable the row
       # manually if OIDC is ever unavailable.
-      psql $psql_flags -c "UPDATE authentication SET \"isEnabled\" = false WHERE key = 'local'" >/dev/null
+      #
+      # Also bump local's order above OIDC (order 0): autoLogin's redirect
+      # (server/controllers/auth.js) picks `.orderBy('order').first()` without
+      # filtering isEnabled, so a disabled local at order 0 would still be
+      # selected and (useForm=true) block the auto-redirect to OIDC.
+      psql $psql_flags -c "UPDATE authentication SET \"isEnabled\" = false, \"order\" = 1 WHERE key = 'local'" >/dev/null
 
       # Wiki.js' SPA login page (client/components/login.vue) renders blank
       # with a single non-form strategy: the provider list needs >1 strategy,

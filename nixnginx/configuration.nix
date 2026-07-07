@@ -46,6 +46,8 @@
       fd01::14 matrix.minnecker.com
       10.20.20.14 ai.minnecker.com
       fd01::14 ai.minnecker.com
+      10.20.20.14 kie.minnecker.com
+      fd01::14 kie.minnecker.com
       10.20.20.14 mail.minnecker.com
       fd01::14 mail.minnecker.com
       10.20.20.14 vault.minnecker.com

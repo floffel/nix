@@ -71,6 +71,10 @@ in
       wikijs.servers = { "nixwikijs:3000" = {}; };
       vaultwarden.servers = { "nixvaultwarden:8080" = {}; };
       ki.servers = { "192.168.1.196:8080" = {}; };
+      # OpenAI-compatible LLM endpoint on the same host as `ki` but on the
+      # LLM API port (matches Open WebUI's OPENAI_API_BASE_URL). Gated by the
+      # kie.minnecker.com vhost's bearer-token check (see kie-auth.js).
+      kiellm.servers = { "192.168.1.196:52415" = {}; };
       openwebui.servers = { "nixopenwebui:8080" = {}; };
       nixmonitoring.servers = { "nixmonitoring:3000" = {}; };
       idm.servers = { "nixidm:8443" = {}; };
@@ -273,6 +277,50 @@ in
           charset utf-8;
           client_max_body_size 5M;
         '';
+      };
+
+      # kie.minnecker.com (Token-Gated OpenAI LLM Proxy)
+      #
+      # Public, bearer-token-gated reverse proxy to the OpenAI-compatible LLM
+      # endpoint (192.168.1.196:52415, same backend Open WebUI uses). Clients
+      # authenticate with `Authorization: Bearer <token>`; the token is
+      # validated by the njs subrequest at /kie_auth against
+      # /var/lib/kie-proxy/token. The client's Authorization header is then
+      # OVERWRITTEN with the upstream's fixed key ("Bearer x") before
+      # proxying, so the proxy token is never forwarded to the LLM backend.
+      "kie.minnecker.com" = {
+        forceSSL = true;
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+        extraConfig = ''
+          js_import kieauth from ${./kie-auth.js};
+          charset utf-8;
+          client_max_body_size 100M;
+        '';
+        locations."= /kie_auth" = {
+          internal = true;
+          extraConfig = "js_content kieauth.auth;";
+        };
+        locations."/" = {
+          proxyPass = "http://kiellm";
+          proxyWebsockets = true;
+          extraConfig = ''
+            auth_request /kie_auth;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            # Replace the client's bearer token with the upstream LLM's fixed
+            # key — the proxy gate token must not reach the backend.
+            proxy_set_header Authorization "Bearer x";
+            proxy_http_version 1.1;
+            proxy_buffering off;
+            chunked_transfer_encoding off;
+            proxy_read_timeout 600;
+            proxy_send_timeout 600;
+          '';
+        };
       };
 
       # localhost (Nginx Javascript Mail Auth Helper)
@@ -720,6 +768,41 @@ in
         --discoveryuri="$discovery" \
         --group-provisioning=1
       echo "Kanidm OIDC provider registered successfully."
+    '';
+  };
+
+  # Auto-provision the bearer token for the kie.minnecker.com LLM proxy gate.
+  #
+  # /var/lib/secrets/nginx is a read-only bind mount on this container, so the
+  # token lives in a writable state dir (/var/lib/kie-proxy) owned by the
+  # nginx user so the njs worker can read it. Generated once with openssl on
+  # first boot and persisted across restarts; idempotent thereafter. Coupled
+  # to nginx.service (partOf + bindsTo) so it re-asserts ownership/permissions
+  # on every (re)start.
+  systemd.services.kie-proxy-token = {
+    description = "Provision kie.minnecker.com proxy token if missing";
+    wantedBy = [ "nginx.service" ];
+    before = [ "nginx.service" ];
+    partOf = [ "nginx.service" ];
+    bindsTo = [ "nginx.service" ];
+    serviceConfig.Type = "oneshot";
+    path = [ pkgs.openssl pkgs.coreutils ];
+    script = ''
+      set -euo pipefail
+      d=/var/lib/kie-proxy
+      install -d -m 750 -o nginx -g nginx "$d"
+      f="$d/token"
+      if [ ! -s "$f" ]; then
+        echo "Generating new kie proxy token..."
+        token=$(openssl rand -hex 32)
+        ( umask 077
+          printf '%s\n' "$token" > "$f"
+        )
+      else
+        echo "kie proxy token already present — keeping it."
+      fi
+      chown nginx:nginx "$f"
+      chmod 600 "$f"
     '';
   };
 

@@ -298,8 +298,10 @@ in
           client_max_body_size 100M;
         '';
         locations."= /kie_auth" = {
-          internal = true;
-          extraConfig = "js_content kieauth.auth;";
+          extraConfig = ''
+            internal;
+            js_content kieauth.auth;
+          '';
         };
         locations."/" = {
           proxyPass = "http://kiellm";

@@ -191,12 +191,13 @@
       # injected at activation time as <host>/login/<key>/callback, so it
       # is correct once /finalize has set host=$site_url in the settings.
       #
-      # Capture whether the row already existed (and its old secret) BEFORE
-      # the upsert, so step 4 can decide whether wiki-js needs a restart to
-      # re-activate strategies. A newly-inserted row (row_existed=0) always
-      # requires a restart; an existing row only if the secret changed.
+      # Capture whether the row already existed (and its old secret + authz URL)
+      # BEFORE the upsert, so step 4 can decide whether wiki-js needs a restart
+      # to re-activate strategies. A newly-inserted row (row_existed=0) always
+      # requires a restart; an existing row only if the secret or authz URL changed.
       row_existed="$(psql $psql_flags -c "SELECT count(*) FROM authentication WHERE key='oidc'" 2>/dev/null || echo 0)"
       old_secret="$(psql $psql_flags -c "SELECT config->>'clientSecret' FROM authentication WHERE key='oidc'" 2>/dev/null || true)"
+      old_authz_url="$(psql $psql_flags -c "SELECT config->>'authorizationURL' FROM authentication WHERE key='oidc'" 2>/dev/null || true)"
       # Also capture whether local auth was already disabled, so step 4 can
       # restart wiki-js if it was still enabled (hiding local login).
       local_was_enabled="$(psql $psql_flags -c "SELECT \"isEnabled\" FROM authentication WHERE key='local'" 2>/dev/null || echo "")"
@@ -207,7 +208,7 @@ VALUES (
   jsonb_build_object(
     'clientId', 'wikijs',
     'clientSecret', :'secret',
-    'authorizationURL', 'https://idm.minnecker.com/oauth2/authorise',
+    'authorizationURL', 'https://idm.minnecker.com/ui/oauth2',
     'tokenURL', 'https://idm.minnecker.com/oauth2/token',
     'userInfoURL', 'https://idm.minnecker.com/oauth2/openid/wikijs/userinfo',
     'skipUserProfile', false,
@@ -298,7 +299,8 @@ SQL
       if [ "$row_existed" != "1" ] \
          || { [ -n "$old_secret" ] && [ "$old_secret" != "$client_secret" ]; } \
          || [ "$local_was_enabled" = "t" ] \
-         || [ "$old_autologin" != "t" ]; then
+         || [ "$old_autologin" != "t" ] \
+         || [ "$old_authz_url" != "https://idm.minnecker.com/ui/oauth2" ]; then
         echo "Auth config changed (OIDC row/secret, local disabled, or autoLogin set) — restarting wiki-js to activate."
         # No partOf/bindsTo on this unit, so the wiki-js stop phase does not
         # tear this script down. The unit is wantedBy multi-user.target only,

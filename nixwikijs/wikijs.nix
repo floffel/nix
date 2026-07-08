@@ -228,6 +228,7 @@ ON CONFLICT (key) DO UPDATE SET
   "strategyKey" = EXCLUDED."strategyKey",
   "displayName" = EXCLUDED."displayName",
   "isEnabled" = EXCLUDED."isEnabled",
+  "order" = EXCLUDED."order",
   config = EXCLUDED.config;
 SQL
 
@@ -252,7 +253,9 @@ SQL
       # hideLocal, which is the documented companion) declaratively in the
       # settings table so the login page always bounces straight to Kanidm.
       # Rows use the {v: <value>} wrapper that saveToDb writes.
-      old_autologin="$(psql $psql_flags -c "SELECT value->>'v' FROM settings WHERE key='auth'" 2>/dev/null | grep -o '"autoLogin":[a-z]*' || true)"
+      # Use a proper SQL boolean query (not grep) to detect whether autoLogin
+      # is already set — jsonb text formatting makes grep fragile.
+      old_autologin="$(psql $psql_flags -c "SELECT (value->'v'->>'autoLogin') = 'true' FROM settings WHERE key='auth'" 2>/dev/null || echo "f")"
       # The settings.value column is `json` (not jsonb), so cast to jsonb for
       # jsonb_set, then cast the result back to json for assignment.
       psql $psql_flags <<'SQL' >/dev/null
@@ -292,11 +295,10 @@ SQL
       # client secret rotated, local auth was still enabled (now disabled),
       # or autoLogin was not yet set. On first boot (step 3 above),
       # /finalize's master reboot handles activation so we never reach here.
-      new_autologin="$(psql $psql_flags -c "SELECT value->>'v' FROM settings WHERE key='auth'" 2>/dev/null | grep -o '"autoLogin":[a-z]*' || true)"
       if [ "$row_existed" != "1" ] \
          || { [ -n "$old_secret" ] && [ "$old_secret" != "$client_secret" ]; } \
          || [ "$local_was_enabled" = "t" ] \
-         || [ "$old_autologin" != '"autoLogin":true' ]; then
+         || [ "$old_autologin" != "t" ]; then
         echo "Auth config changed (OIDC row/secret, local disabled, or autoLogin set) — restarting wiki-js to activate."
         # No partOf/bindsTo on this unit, so the wiki-js stop phase does not
         # tear this script down. The unit is wantedBy multi-user.target only,

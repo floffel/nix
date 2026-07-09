@@ -217,9 +217,7 @@ VALUES (
     'displayNameClaim', 'name',
     'pictureClaim', 'picture',
     'mapGroups', false,
-    'groupsClaim', 'groups',
-    'logoutURL', '''',
-    'acrValues', ''''
+    'groupsClaim', 'groups'
   ),
   true,
   jsonb_build_object('v', '[]'::jsonb),

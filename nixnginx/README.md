@@ -73,6 +73,9 @@ mp3: /mnt/pve/nas/shared/secrets/oauth2/nextcloud,mp=/var/lib/secrets/oauth2/nex
 mp4: /mnt/pve/nas/shared/secrets/postgres/roundcube,mp=/var/lib/secrets/postgres/roundcube,ro=1
 mp5: /mnt/pve/nas/shared/secrets/postgres/nextcloud,mp=/var/lib/secrets/postgres/nextcloud,ro=1
 
+# Mount point for Nextcloud user data directory (read-write, NFS backed)
+mp6: /mnt/pve/nas/shared/nextcloud-data,mp=/var/lib/nextcloud-data
+
 # Mount point for the static web applications
 mp2: /tank/webapps,mp=/usr/share/webapps,ro=1
 ```

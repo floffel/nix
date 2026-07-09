@@ -650,6 +650,8 @@ in
     hostName = "cloud.minnecker.com";
     package = pkgs.nextcloud33;
 
+    datadir = "/var/lib/nextcloud-data";
+
     maxUploadSize = "6G";
     
     # We do not run a local database, it resides on nixpostgres

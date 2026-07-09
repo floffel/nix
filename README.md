@@ -148,6 +148,7 @@ bind-mounted into **multiple** containers from the same NAS path.
 | `nixwikijs` | `/mnt/pve/nas/shared/secrets/wikijs` | `var/lib/secrets/wikijs` | `rw` | Wiki.js admin password (generated locally by `wikijs-provision`) |
 | `nixnsd` | `/mnt/pve/nas/shared/secrets/nsd` | `var/lib/secrets/nsd` | `rw` | NSD TSIG sync key |
 | `nixnginx` | `/mnt/pve/nas/shared/secrets/nginx` | `var/lib/secrets/nginx` | `ro` | Nextcloud/Roundcube DB pws, Roundcube DES key |
+| `nixnginx` | `/mnt/pve/nas/shared/nextcloud-data` | `var/lib/nextcloud-data` | `rw` | Nextcloud user data directory (NFS backed) |
 
 Example `lxc.mount.entry` lines (one per row above):
 ```ini
@@ -163,6 +164,8 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2/wikijs var/lib/secrets/oauth
 # Shared Postgres DB passwords — nixpostgres gets the parent (rw), consumers get their own subdir (ro)
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/postgres var/lib/secrets/postgres none bind,rw 0 0
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/postgres/forgejo var/lib/secrets/postgres/forgejo none bind,ro 0 0
+# Nextcloud user data (NFS backed, read-write)
+lxc.mount.entry: /mnt/pve/nas/shared/nextcloud-data var/lib/nextcloud-data none bind,rw 0 0
 ```
 
 #### Shared SSL Certificates

@@ -218,10 +218,10 @@ VALUES (
     'pictureClaim', 'picture',
     'mapGroups', false,
     'groupsClaim', 'groups',
-    'logoutURL', ''',
-    'acrValues', '''
+    'logoutURL', '',
+    'acrValues', ''
   ),
-  false,
+  true,
   jsonb_build_object('v', '[]'::jsonb),
   jsonb_build_object('v', '[]'::jsonb)
 )
@@ -230,6 +230,7 @@ ON CONFLICT (key) DO UPDATE SET
   "displayName" = EXCLUDED."displayName",
   "isEnabled" = EXCLUDED."isEnabled",
   "order" = EXCLUDED."order",
+  "selfRegistration" = EXCLUDED."selfRegistration",
   config = EXCLUDED.config;
 SQL
 

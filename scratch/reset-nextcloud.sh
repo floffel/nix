@@ -5,8 +5,19 @@
 # Run this on nixnginx as root.
 #
 # DB reset runs on nixpostgres via SSH. If SSH isn't available, run the
-# psql commands manually on nixpostgres (see --dry-run output).
+# psql commands manually on nixpostgres.
+#
+# Options:
+#   --skip-db   Skip the database reset step (e.g. after running it manually)
 set -euo pipefail
+
+SKIP_DB=false
+for arg in "$@"; do
+  case "$arg" in
+    --skip-db) SKIP_DB=true ;;
+    *) die "Unknown option: $arg" ;;
+  esac
+done
 
 echo "=== Nextcloud Clean-Slate Reset ==="
 echo ""
@@ -33,11 +44,22 @@ else
 fi
 
 # -- 3. Wipe data directory ------------------------------------------
-if [ -d "$DATA_DIR" ]; then
-  info "Wiping $DATA_DIR (keeping directory itself)..."
-  find "$DATA_DIR" -mindepth 1 -delete
+# Keep the config/ subdirectory (expected by systemd-tmpfiles with
+# nextcloud:nextcloud ownership). Only wipe user data.
+if [ -d "$DATA_DIR/data" ]; then
+  info "Wiping $DATA_DIR/data/* ..."
+  find "$DATA_DIR/data" -mindepth 1 -delete
 else
-  info "Data dir $DATA_DIR does not exist"
+  info "Data dir $DATA_DIR/data does not exist, creating..."
+  install -d -o nextcloud -g nextcloud "$DATA_DIR/data"
+fi
+
+# Ensure config/ exists with correct ownership (tmpfiles will fix it
+# on next rebuild, but pre-seeding avoids "not owned by nextcloud").
+if [ ! -d "$DATA_DIR/config" ]; then
+  install -d -o nextcloud -g nextcloud "$DATA_DIR/config"
+else
+  chown nextcloud:nextcloud "$DATA_DIR/config"
 fi
 
 # -- 4. Reset database on nixpostgres -------------------------------
@@ -45,7 +67,10 @@ DB_NAME=nextcloud
 DB_USER=nextcloud
 DB_HOST=nixpostgres
 
-info "Resetting PostgreSQL database '$DB_NAME' on $DB_HOST..."
+if $SKIP_DB; then
+  info "Skipping database reset (--skip-db)"
+else
+  info "Resetting PostgreSQL database '$DB_NAME' on $DB_HOST..."
 
 # Try SSH first, fall back to remote psql, last resort manual.
 if ssh -o ConnectTimeout=3 "$DB_HOST" true 2>/dev/null; then
@@ -85,6 +110,7 @@ else
     exit 1
   fi
 fi
+fi  # end of SKIP_DB / else block
 
 # -- 5. Done ---------------------------------------------------------
 echo ""

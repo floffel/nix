@@ -74,6 +74,11 @@
           allowedIPs = [ "10.100.0.5/32" ];
           persistentKeepalive = 25;
         }
+        { # macbook
+          publicKey = "gu/znY0wZFyzXVjIhYkhNfNcSqkikmbiRo+k+NtM5DA=";
+          allowedIPs = [ "10.100.0.3/32" ];
+          persistentKeepalive = 25;
+        }
       ];
     };
   };

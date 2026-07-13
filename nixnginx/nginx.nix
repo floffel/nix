@@ -652,6 +652,12 @@ in
 
     datadir = "/var/lib/nextcloud-data";
 
+    # Explicitly declare trusted domains — the NixOS Nextcloud module does
+    # not auto-populate this from hostName, and a manual config.php (e.g.
+    # after reset-nextcloud.sh) may lack it, causing
+    # "Trusted domain has not been set" errors.
+    trustedDomains = [ "cloud.minnecker.com" ];
+
     maxUploadSize = "6G";
     
     # We do not run a local database, it resides on nixpostgres

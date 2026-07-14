@@ -650,7 +650,6 @@ in
     };
     
     proxySupport = true;
-    http2ServerPush = true;
 
     reverseProxyProxies = [ "127.0.0.1" "::1" ];
 

@@ -164,24 +164,6 @@ in
         '';
       };
 
-      # cloud.minnecker.com (Nextcloud Server)
-      "cloud.minnecker.com" = {
-        forceSSL = true;
-        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
-        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
-        extraConfig = ''
-          charset utf-8;
-          expires 1m;
-
-          add_header Referrer-Policy "no-referrer" always;
-          add_header X-Content-Type-Options "nosniff" always;
-          add_header X-Download-Options "noopen" always;
-          add_header X-Frame-Options "allow-from https://col.flos.dev/" always;
-          add_header X-Permitted-Cross-Domain-Policies "none" always;
-          add_header X-Robots-Tag "none" always;
-          add_header X-XSS-Protection "1; mode=block" always;
-        '';
-      };
 
       # git.minnecker.com / git.flos.dev (Forgejo Proxy)
       "git.minnecker.com" = {
@@ -667,12 +649,12 @@ in
       adminuser = "admin";
     };
     
+    proxySupport = true;
+    http2ServerPush = true;
+
+    reverseProxyProxies = [ "127.0.0.1" "::1" ];
+
     settings = {
-      trusted_domains = [ "cloud.minnecker.com" ];
-
-      overwriteprotocol = "https";
-      overwrite.cli.url = "https://cloud.minnecker.com/";
-
       # nixnginx terminates TLS directly in front of php-fpm.
       # Declare the local proxy as trusted, and crucially set
       # forwarded_for_headers to an EMPTY array. Nextcloud otherwise defaults

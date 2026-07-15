@@ -173,6 +173,15 @@ in
         extraConfig = ''
           charset utf-8;
           client_max_body_size 6G;
+          expires 1m;
+
+          add_header Referrer-Policy "no-referrer" always;
+          add_header X-Content-Type-Options "nosniff" always;
+          add_header X-Download-Options "noopen" always;
+          add_header X-Frame-Options "allow-from https://col.flos.dev/" always;
+          add_header X-Permitted-Cross-Domain-Policies "none" always;
+          add_header X-Robots-Tag "none" always;
+          add_header X-XSS-Protection "1; mode=block" always;
         '';
         locations."/" = {
           index = "index.php";
@@ -189,18 +198,6 @@ in
             fastcgi_param PATH_INFO $fastcgi_path_info;
           '';
         };
-        extraConfig = ''
-          charset utf-8;
-          expires 1m;
-
-          add_header Referrer-Policy "no-referrer" always;
-          add_header X-Content-Type-Options "nosniff" always;
-          add_header X-Download-Options "noopen" always;
-          add_header X-Frame-Options "allow-from https://col.flos.dev/" always;
-          add_header X-Permitted-Cross-Domain-Policies "none" always;
-          add_header X-Robots-Tag "none" always;
-          add_header X-XSS-Protection "1; mode=block" always;
-        '';
       };
 
       # git.minnecker.com / git.flos.dev (Forgejo Proxy)

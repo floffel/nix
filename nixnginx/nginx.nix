@@ -732,7 +732,7 @@ in
       $OCC_BIN config:system:delete trusted_domains 2>/dev/null || true
       $OCC_BIN config:system:set trusted_domains 0 --value="cloud.minnecker.com"
       echo "Done."
-    '';
+    '');
   };
 
   # Auto-configure Nextcloud OIDC client registration on service start.

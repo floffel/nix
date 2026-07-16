@@ -15,6 +15,44 @@ let
       license = [ pkgs.lib.licenses.bsd2 ];
     };
   };
+
+  nextcloud-setup-script = pkgs.writeShellScript "nextcloud-setup-override" ''
+    source /etc/setup-variables
+    set -euo pipefail
+
+    export OCC_BIN="${config.services.nextcloud.occ}/bin/nextcloud-occ"
+    CRED_DIR="$CREDENTIALS_DIRECTORY"
+
+    if [ -z "$(<"$CRED_DIR/dbpass")" ]; then
+      echo "dbpass is empty!" >&2; exit 1
+    fi
+    if [ -z "$(<"$CRED_DIR/adminpass")" ]; then
+      echo "adminpass is empty!" >&2; exit 1
+    fi
+
+    if [[ ! -O "/var/lib/nextcloud-data/config" ]]; then
+      echo "/var/lib/nextcloud-data/config not owned by nextcloud!" >&2; exit 1
+    fi
+
+    if [[ ! -s /var/lib/nextcloud-data/config/config.php ]]; then
+      DBPASS="$(<"$CRED_DIR/dbpass")"
+      ADMINPASS="$(<"$CRED_DIR/adminpass")"
+      $OCC_BIN maintenance:install \
+        --admin-pass "$ADMINPASS" \
+        --admin-user "admin" \
+        --data-dir "/var/lib/nextcloud-data/data" \
+        --database "pgsql" \
+        --database-host "nixpostgres" \
+        --database-name "nextcloud" \
+        --database-pass "$DBPASS" \
+        --database-user "nextcloud"
+    fi
+
+    $OCC_BIN upgrade || true
+    $OCC_BIN config:system:delete trusted_domains 2>/dev/null || true
+    $OCC_BIN config:system:set trusted_domains 0 --value="cloud.minnecker.com"
+    echo "Done."
+  '';
 in
 {
   # 1. Custom Nginx Service Configuration
@@ -688,51 +726,13 @@ in
   #
   # We explicitly LoadCredential the same secrets so credential-passing works
   # exactly like the module-generated unit.
-  systemd.services.nextcloud-setup.unitConfig = { };
+systemd.services.nextcloud-setup.unitConfig = { };
   systemd.services.nextcloud-setup = {
-    # Re-add LoadCredential so secrets are available (module adds these but we
-    # are overriding ExecStart which resets the whole unit).
     serviceConfig.LoadCredential = [
       "dbpass:${config.services.nextcloud.config.dbpassFile}"
       "adminpass:${config.services.nextcloud.config.adminpassFile}"
     ];
-    serviceConfig.ExecStart = lib.mkForce (pkgs.writeShellScript "nextcloud-setup-override" '')
-      source /etc/setup-variables
-      set -euo pipefail
-
-      export OCC_BIN="${config.services.nextcloud.occ}/bin/nextcloud-occ"
-      CRED_DIR="$CREDENTIALS_DIRECTORY"
-
-      if [ -z "$(<"$CRED_DIR/dbpass")" ]; then
-        echo "dbpass is empty!" >&2; exit 1
-      fi
-      if [ -z "$(<"$CRED_DIR/adminpass")" ]; then
-        echo "adminpass is empty!" >&2; exit 1
-      fi
-
-      if [[ ! -O "/var/lib/nextcloud-data/config" ]]; then
-        echo "/var/lib/nextcloud-data/config not owned by nextcloud!" >&2; exit 1
-      fi
-
-      if [[ ! -s /var/lib/nextcloud-data/config/config.php ]]; then
-        DBPASS="$(<"$CRED_DIR/dbpass")"
-        ADMINPASS="$(<"$CRED_DIR/adminpass")"
-        $OCC_BIN maintenance:install \
-          --admin-pass "$ADMINPASS" \
-          --admin-user "admin" \
-          --data-dir "/var/lib/nextcloud-data/data" \
-          --database "pgsql" \
-          --database-host "nixpostgres" \
-          --database-name "nextcloud" \
-          --database-pass "$DBPASS" \
-          --database-user "nextcloud"
-      fi
-
-      $OCC_BIN upgrade || true
-      $OCC_BIN config:system:delete trusted_domains 2>/dev/null || true
-      $OCC_BIN config:system:set trusted_domains 0 --value="cloud.minnecker.com"
-      echo "Done."
-    '');
+    serviceConfig.ExecStart = lib.mkForce nextcloud-setup-script;
   };
 
   # Auto-configure Nextcloud OIDC client registration on service start.

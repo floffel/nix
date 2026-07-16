@@ -696,7 +696,7 @@ in
       "dbpass:${config.services.nextcloud.config.dbpassFile}"
       "adminpass:${config.services.nextcloud.config.adminpassFile}"
     ];
-    serviceConfig.ExecStart = pkgs.writeShellScript "nextcloud-setup-override" ''
+    serviceConfig.ExecStart = lib.mkForce (pkgs.writeShellScript "nextcloud-setup-override" '')
       source /etc/setup-variables
       set -euo pipefail
 

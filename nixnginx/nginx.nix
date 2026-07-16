@@ -632,6 +632,7 @@ in
     package = pkgs.nextcloud33;
 
     datadir = "/var/lib/nextcloud-data";
+    appsDir = "/var/www/nextcloud/apps";
 
     maxUploadSize = "6G";
     
@@ -680,6 +681,14 @@ in
       inherit (pkgs.nextcloud33Packages.apps) user_oidc;
     };
   };
+
+  # Create the writable apps directory for Nextcloud (NixOS stores the
+  # webroot in a read-only Nix store path; occ needs a writable apps dir
+  # to register/enable apps and write metadata).
+  systemd.tmpfiles.rules = [
+    "d /var/www/nextcloud       0755 nextcloud nextcloud - -"
+    "d /var/www/nextcloud/apps  0755 nextcloud nextcloud - -"
+  ];
 
   # Auto-configure Nextcloud OIDC client registration on service start.
   #

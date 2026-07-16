@@ -219,7 +219,7 @@ in
           add_header X-Frame-Options "allow-from https://col.flos.dev/" always;
           add_header X-Permitted-Cross-Domain-Policies "none" always;
           add_header X-Robots-Tag "none" always;
-          add_header X-XSS-Protection "1; mode:block";
+          add_header X-XSS-Protection "1; mode=block" always;
         '';
         locations."/" = {
           index = "index.php";
@@ -703,8 +703,7 @@ in
   services.nextcloud = {
     enable = true;
     hostName = "cloud.minnecker.com";
-    configureNginx = false;
-    cgi.enable = true;
+    nginx.enable = false;
     package = pkgs.nextcloud33;
 
     datadir = "/var/lib/nextcloud-data";

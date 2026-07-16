@@ -202,6 +202,42 @@ in
         '';
       };
 
+      # cloud.minnecker.com (Nextcloud Server)
+      "cloud.minnecker.com" = {
+        forceSSL = true;
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+        root = config.services.nextcloud.home;
+        extraConfig = ''
+          charset utf-8;
+          client_max_body_size 6G;
+          expires 1m;
+
+          add_header Referrer-Policy "no-referrer" always;
+          add_header X-Content-Type-Options "nosniff" always;
+          add_header X-Download-Options "noopen" always;
+          add_header X-Frame-Options "allow-from https://col.flos.dev/" always;
+          add_header X-Permitted-Cross-Domain-Policies "none" always;
+          add_header X-Robots-Tag "none" always;
+          add_header X-XSS-Protection "1; mode:block";
+        '';
+        locations."/" = {
+          index = "index.php";
+          extraConfig = "try_files $uri $uri/ /index.php?$args;";
+        };
+        locations."~ \\.php(/.*)?$" = {
+          extraConfig = ''
+            fastcgi_pass unix:${config.services.phpfpm.pools.nextcloud.socket};
+            fastcgi_index index.php;
+            include ${config.services.nginx.package}/conf/fastcgi.conf;
+
+            fastcgi_split_path_info ^(.+\.php)(/.*)$;
+            fastcgi_param SCRIPT_FILENAME $request_filename;
+            fastcgi_param PATH_INFO $fastcgi_path_info;
+          '';
+        };
+      };
+
       # git.minnecker.com / git.flos.dev (Forgejo Proxy)
       "git.minnecker.com" = {
         forceSSL = true;
@@ -667,6 +703,8 @@ in
   services.nextcloud = {
     enable = true;
     hostName = "cloud.minnecker.com";
+    configureNginx = false;
+    cgi.enable = true;
     package = pkgs.nextcloud33;
 
     datadir = "/var/lib/nextcloud-data";

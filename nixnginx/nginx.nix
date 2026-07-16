@@ -632,7 +632,6 @@ in
     package = pkgs.nextcloud33;
 
     datadir = "/var/lib/nextcloud-data";
-    appsDir = "/var/www/nextcloud/apps";
 
     maxUploadSize = "6G";
     
@@ -682,13 +681,59 @@ in
     };
   };
 
-  # Create the writable apps directory for Nextcloud (NixOS stores the
-  # webroot in a read-only Nix store path; occ needs a writable apps dir
-  # to register/enable apps and write metadata).
-  systemd.tmpfiles.rules = [
-    "d /var/www/nextcloud       0755 nextcloud nextcloud - -"
-    "d /var/www/nextcloud/apps  0755 nextcloud nextcloud - -"
-  ];
+  # The default nextcloud-setup runs "occ app:enable" which fails because
+  # the Nextcloud webroot lives in the read-only Nix store. Override with a
+  # minimal setup that skips app:enable — user_oidc is already installed via
+  # extraApps and is enabled by nextcloud-setup-oidc on first boot.
+  #
+  # We explicitly LoadCredential the same secrets so credential-passing works
+  # exactly like the module-generated unit.
+  systemd.services.nextcloud-setup.unitConfig = { };
+  systemd.services.nextcloud-setup = {
+    # Re-add LoadCredential so secrets are available (module adds these but we
+    # are overriding ExecStart which resets the whole unit).
+    serviceConfig.LoadCredential = [
+      "dbpass:${config.services.nextcloud.config.dbpassFile}"
+      "adminpass:${config.services.nextcloud.config.adminpassFile}"
+    ];
+    serviceConfig.ExecStart = pkgs.writeShellScript "nextcloud-setup-override" ''
+      source /etc/setup-variables
+      set -euo pipefail
+
+      export OCC_BIN="${config.services.nextcloud.occ}/bin/nextcloud-occ"
+      CRED_DIR="$CREDENTIALS_DIRECTORY"
+
+      if [ -z "$(<"$CRED_DIR/dbpass")" ]; then
+        echo "dbpass is empty!" >&2; exit 1
+      fi
+      if [ -z "$(<"$CRED_DIR/adminpass")" ]; then
+        echo "adminpass is empty!" >&2; exit 1
+      fi
+
+      if [[ ! -O "/var/lib/nextcloud-data/config" ]]; then
+        echo "/var/lib/nextcloud-data/config not owned by nextcloud!" >&2; exit 1
+      fi
+
+      if [[ ! -s /var/lib/nextcloud-data/config/config.php ]]; then
+        DBPASS="$(<"$CRED_DIR/dbpass")"
+        ADMINPASS="$(<"$CRED_DIR/adminpass")"
+        $OCC_BIN maintenance:install \
+          --admin-pass "$ADMINPASS" \
+          --admin-user "admin" \
+          --data-dir "/var/lib/nextcloud-data/data" \
+          --database "pgsql" \
+          --database-host "nixpostgres" \
+          --database-name "nextcloud" \
+          --database-pass "$DBPASS" \
+          --database-user "nextcloud"
+      fi
+
+      $OCC_BIN upgrade || true
+      $OCC_BIN config:system:delete trusted_domains 2>/dev/null || true
+      $OCC_BIN config:system:set trusted_domains 0 --value="cloud.minnecker.com"
+      echo "Done."
+    '';
+  };
 
   # Auto-configure Nextcloud OIDC client registration on service start.
   #

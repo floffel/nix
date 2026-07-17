@@ -719,7 +719,6 @@ in
   services.nextcloud = {
     enable = true;
     hostName = "cloud.minnecker.com";
-    nginx.enable = false;
     package = pkgs.nextcloud33;
 
     datadir = "/var/lib/nextcloud-data";

@@ -55,13 +55,13 @@
       "nginx-oauth2-brute-force" = {
         enabled = true;
         filter = "nginx-oauth2-brute-force";
-        logpath = "${config.services.nginx.logDir}/error.log";
-        # POST /oauth2/openid/*/token — bad_secret returns nginx map-deny 403
-        # or upstream error log lines matching the filter regex.
-        ports = "http,https";
-        maxretry = 10;
-        findtime = "600s";
-        bantime = "15m";
+        settings = {
+          logpath = "${config.services.nginx.logDir}/error.log";
+          port = "http,https";
+          maxretry = 10;
+          findtime = "600s";
+          bantime = "15m";
+        };
       };
 
       # General nginx auth failures — catches 401 from any location that
@@ -71,11 +71,13 @@
       "nginx-http-auth" = {
         enabled = true;
         filter = "nginx-http-auth";
-        logpath = "${config.services.nginx.logDir}/error.log";
-        ports = "http,https";
-        maxretry = 8;
-        findtime = "600s";
-        bantime = "15m";
+        settings = {
+          logpath = "${config.services.nginx.logDir}/error.log";
+          port = "http,https";
+          maxretry = 8;
+          findtime = "600s";
+          bantime = "15m";
+        };
       };
 
       # Common exploit probes — known bad paths and patterns (wp-login,
@@ -86,11 +88,13 @@
       "nginx-botsearch" = {
         enabled = true;
         filter = "nginx-botsearch";
-        logpath = "${config.services.nginx.logDir}/error.log";
-        ports = "http,https";
-        maxretry = 5;
-        findtime = "300s";
-        bantime = "30m";
+        settings = {
+          logpath = "${config.services.nginx.logDir}/error.log";
+          port = "http,https";
+          maxretry = 5;
+          findtime = "300s";
+          bantime = "30m";
+        };
       };
 
       # Overly aggressive bots — matches User-Agent-based patterns that are
@@ -98,11 +102,13 @@
       "nginx-overload" = {
         enabled = true;
         filter = "nginx-overload";
-        logpath = "${config.services.nginx.logDir}/error.log";
-        ports = "http,https";
-        maxretry = 3;
-        findtime = "120s";
-        bantime = "1h";
+        settings = {
+          logpath = "${config.services.nginx.logDir}/error.log";
+          port = "http,https";
+          maxretry = 3;
+          findtime = "120s";
+          bantime = "1h";
+        };
       };
     };
   };

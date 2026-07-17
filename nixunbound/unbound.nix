@@ -33,7 +33,7 @@
 
         # Use the system's root trust anchor store for DNSSEC validation.
         # Ensures Unbound can validate chains starting from the root.
-        auto-trust-anchor-file = "/var/unbound/root.key";
+        # auto-trust-anchor-file uses the NixOS module default.
 
         # Harden Unbound against specific vulnerabilities.
         harden-glue = "yes";

@@ -122,16 +122,21 @@
   };
 
   # Ensure the shared iptables fail2ban chain exists before any jail starts.
-  networking.firewall.extraRules = ''
-    # Fail2ban shared ban chain — created once, referenced by all jails.
-    # This replaces the older per-jail-chain approach and is more efficient
-    # when many jails ban the same source address. The f2b-nginx chain is
-    # jumped to from INPUT for traffic on http/https ports.
-    if ! iptables -L f2b-nginx -n >/dev/null 2>&1; then
-      iptables -N f2b-nginx
-      iptables -A f2b-nginx -j RETURN
-    fi
-  '';
+  # networking.firewall.extraRules was removed in NixOS 26.05 and the firewall
+  # is disabled in this LXC anyway, so create the chain via a oneshot service.
+  systemd.services.fail2ban-iptables-chain = {
+    description = "Create f2b-nginx iptables chain for fail2ban";
+    wantedBy = [ "fail2ban.service" ];
+    before = [ "fail2ban.service" ];
+    serviceConfig.Type = "oneshot";
+    path = [ pkgs.iptables ];
+    script = ''
+      if ! iptables -L f2b-nginx -n >/dev/null 2>&1; then
+        iptables -N f2b-nginx
+        iptables -A f2b-nginx -j RETURN
+      fi
+    '';
+  };
 
   # Networking
   networking = {

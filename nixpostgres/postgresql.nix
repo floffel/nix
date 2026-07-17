@@ -191,7 +191,6 @@ SQL
     bindsTo = [ "redis-nextcloud.service" ];
     serviceConfig = {
       Type = "oneshot";
-      ReadWritePaths = [ "/var/lib/secrets/redis" ];
     };
     path = [ pkgs.util-linux pkgs.coreutils ];
     script = ''

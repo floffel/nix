@@ -783,7 +783,7 @@ in
     # Install the OIDC client application
     extraAppsEnable = true;
     extraApps = {
-      inherit (config.services.nextcloud.package.pkgs.apps) user_oidc;
+      inherit (pkgs.nextcloud33Packages.apps) user_oidc;
     };
   };
 

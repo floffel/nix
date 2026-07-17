@@ -109,10 +109,10 @@
     # many jails ban the same offender — all go into one IPSET (f2b-nginx)
     # and a single DROP rule in the `fail2ban` chain.
     settings.actionban = ''
-      iptables -I f2b-<name> 1 -s <ip> -j DROP
+      iptables -I f2b-nginx 0 -s <ip> -j DROP
     '';
     settings.actionunban = ''
-      iptables -D f2b-<name> 1 -s <ip> -j DROP
+      iptables -D f2b-nginx 0 -s <ip> -j DROP
     '';
 
     # The ban-action is the default iptables-multiport, but we override it

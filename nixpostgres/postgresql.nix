@@ -179,34 +179,18 @@ SQL
   # locking) and fail2ban ban persistence on nixnginx. Listen on the service
   # LAN so all containers can connect; firewall is disabled in LXC mode.
 
-  services.redisServers = {
-    nextcloud = {
-      enable = true;
-      
-      # Listen on all interfaces so nixnginx and other containers can reach Redis.
-      listen = "*";
-      port = 6379;
-      
-      # Enable RDB persistence so fail2ban ban database survives restarts.
-      rdb_save = 900; # ms
-      rdb_save_min_keys = 1;
-      
-      # Protected mode — reject connections from untrusted networks unless they
-      # authenticate with REDIS_AUTH. Since firewall is disabled in LXC, ensure
-      # no public internet routes to this container.
-      protected-mode = true;
-      
-      # Limit memory to 256 MB — sufficient for Nextcloud session cache of
-      # ~10k concurrent users. Redis evicts oldest cached keys when the limit
-      # is hit (AllKeys policy).
-      maxmemory = "256mb";
-      maxmemory-policy = "allkeys-lru";
-
-      # TCP keepalive — detect dead connections (e.g. container restarts)
-      tcp-keepalive = 60;
-
-      # Slow log: log queries taking >5ms for performance debugging.
-      slowlog-log-slower-than = 5000; # microseconds
-    };
+  services.redis.servers.nextcloud = {
+    enable = true;
+    bind = "*";
+    port = 6379;
+    save = [[900 1]];
+    requirePassFile = "/var/lib/secrets/redis/nextcloud-password";
+    extraParams = [
+      "--protected-mode" "yes"
+      "--maxmemory" "256mb"
+      "--maxmemory-policy" "allkeys-lru"
+      "--tcp-keepalive" "60"
+      "--slowlog-log-slower-than" "5000"
+    ];
   };
 }

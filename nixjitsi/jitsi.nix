@@ -50,11 +50,8 @@
 
   services.jitsi-videobridge = {
     enable = true;
-    # Configure NAT settings to allow WebRTC connections from outside
     nat = {
       localAddress = "10.20.20.22";
-      # Public address of the server (domain name or WAN IP)
       publicAddress = "meet.minnecker.com";
     };
   };
-}

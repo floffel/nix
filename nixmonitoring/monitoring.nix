@@ -10,6 +10,10 @@
   # the container's persistent rootfs). Losing secret_key makes those blobs
   # undecryptable, so both files must persist — but they never need to leave
   # the container, hence no NAS mount. Idempotent: existing files are kept.
+  systemd.services.grafana = {
+    after = [ "influxdb-init.service" ];
+  };
+
   systemd.services.grafana-secrets = {
     description = "Provision Grafana local admin password and secret key";
     wantedBy = [ "grafana.service" ];

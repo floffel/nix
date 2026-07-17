@@ -25,50 +25,24 @@
       enable = false;
     };
 
-    # WireGuard VPN Interface (using wg-quick for compatibility with systemd-networkd)
-    wg-quick.interfaces.wg0 = {
-      # The IP address range of the VPN tunnel itself
-      address = [ "10.100.0.1/24" ];
-      
-      # The port to listen on
+    # WireGuard VPN Interface using the modern networking.wireguard module
+    wireguard.interfaces.wg0 = {
+      ips = [ "10.100.0.1/24" ];
       listenPort = 51820;
-      
-      # Path to the private key (stored securely outside the Nix store)
       privateKeyFile = "/var/lib/secrets/nixvpn/private.key";
-
-      # Optimize MTU for mobile networks (LTE/5G tunnels reduce available MTU)
-      # 1360 is standard to prevent cellular packet fragmentation drops
       mtu = 1360;
-      
-      # Post-setup commands: Enable NAT/Masquerading for traffic from wg0 to eth0
-      # Also enable TCP MSS Clamping to prevent PMTU path issues on mobile carriers
-      postUp = ''
-        ${pkgs.iptables}/bin/iptables -t nat -A POSTROUTING -s 10.100.0.0/24 -o eth0 -j MASQUERADE
-        ${pkgs.iptables}/bin/iptables -A FORWARD -i wg0 -j ACCEPT
-        ${pkgs.iptables}/bin/iptables -A FORWARD -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT
-        ${pkgs.iptables}/bin/iptables -t mangle -A FORWARD -o wg0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
-      '';
-      
-      # Post-shutdown commands: Clean up NAT and MSS clamping rules
-      postDown = ''
-        ${pkgs.iptables}/bin/iptables -t nat -D POSTROUTING -s 10.100.0.0/24 -o eth0 -j MASQUERADE
-        ${pkgs.iptables}/bin/iptables -D FORWARD -i wg0 -j ACCEPT
-        ${pkgs.iptables}/bin/iptables -D FORWARD -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT
-        ${pkgs.iptables}/bin/iptables -t mangle -D FORWARD -o wg0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
-      '';
-      
-      # Peer definitions (VPN Clients)
+
       peers = [
-	{ # home
+        { # home
           publicKey = "CLpdpnOTGlcFZLTIp3sSd7NSJfifjNeqM1kVjD4041k=";
-	  allowedIPs = [ "10.100.0.2/32" "192.168.1.0/24" ];
+          allowedIPs = [ "10.100.0.2/32" "192.168.1.0/24" ];
           persistentKeepalive = 25;
-	}
-	{ # small pc
+        }
+        { # small pc
           publicKey = "sqxfw2rgh/qDFmws79rJOaoWsRnWwb7GXdDDPpSNnk0=";
-	  allowedIPs = [ "10.100.0.4/32" ];
+          allowedIPs = [ "10.100.0.4/32" ];
           persistentKeepalive = 25;
-	}
+        }
         { # mobile
           publicKey = "j9zkTS61Os59Faz5pRscSYGTUwSgedTMOZszgzxfiQ0=";
           allowedIPs = [ "10.100.0.5/32" ];
@@ -79,6 +53,36 @@
           allowedIPs = [ "10.100.0.3/32" ];
           persistentKeepalive = 25;
         }
+      ];
+    };
+
+    # NAT/masquerade for VPN traffic — runs as a systemd oneshot hooked to
+    # the wireguard interface so the rules are applied before and cleaned
+    # after the interface comes up/down. Previously handled inline by
+    # wg-quick's postUp/postDown hooks.
+  };
+
+  # NAT and forwarding rules for VPN client traffic.
+  # This replaces the former wg-quick postUp/postDown hooks.
+  systemd.services.wireguard-wg0-nat = {
+    description = "WireGuard wg0 NAT and forwarding rules";
+    wantedBy = [ "sys-subsystem-net-devices-wg0.device" ];
+    bindsTo = [ "sys-subsystem-net-devices-wg0.device" ];
+    after = [ "sys-subsystem-net-devices-wg0.device" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = [
+        "${pkgs.iptables}/bin/iptables -t nat -A POSTROUTING -s 10.100.0.0/24 -o eth0 -j MASQUERADE"
+        "${pkgs.iptables}/bin/iptables -A FORWARD -i wg0 -j ACCEPT"
+        "${pkgs.iptables}/bin/iptables -A FORWARD -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT"
+        "${pkgs.iptables}/bin/iptables -t mangle -A FORWARD -o wg0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu"
+      ];
+      ExecStop = [
+        "${pkgs.iptables}/bin/iptables -t nat -D POSTROUTING -s 10.100.0.0/24 -o eth0 -j MASQUERADE"
+        "${pkgs.iptables}/bin/iptables -D FORWARD -i wg0 -j ACCEPT"
+        "${pkgs.iptables}/bin/iptables -D FORWARD -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT"
+        "${pkgs.iptables}/bin/iptables -t mangle -D FORWARD -o wg0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu"
       ];
     };
   };

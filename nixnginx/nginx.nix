@@ -11,6 +11,14 @@ let
       rev = version;
       sha256 = "sha256-NE539zZ/OqSEZidgdPlv8rDJ6yvPyi+k4Hm5NNLpAPs=";
     };
+    buildInputs = [ pkgs.openldap ];
+    buildPhase = ''
+      make
+    '';
+    installPhase = ''
+      mkdir -p $out
+      cp objs/ngx_http_auth_ldap_module.so $out/
+    '';
     meta = {
       license = [ pkgs.lib.licenses.bsd2 ];
     };
@@ -118,7 +126,7 @@ in
     upstreams = {
       forgejo.servers = { "nixforgejo:3000" = {}; };
       matrix.servers = { "nixmatrix:8008" = {}; };
-      jitsy.servers = { "nixjitsi:80" = {}; };
+      jitsi.servers = { "nixjitsi:80" = {}; };
       wikijs.servers = { "nixwikijs:3000" = {}; };
       vaultwarden.servers = { "nixvaultwarden:8080" = {}; };
       ki.servers = { "192.168.1.196:8080" = {}; };
@@ -562,7 +570,7 @@ in
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
         sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         locations."/" = {
-          proxyPass = "http://jitsy";
+          proxyPass = "http://jitsi";
           extraConfig = ''
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -768,7 +776,7 @@ in
     # Install the OIDC client application
     extraAppsEnable = true;
     extraApps = {
-      inherit (pkgs.nextcloud33Packages.apps) user_oidc;
+      inherit (config.services.nextcloud.package.pkgs.apps) user_oidc;
     };
   };
 

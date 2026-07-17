@@ -28,8 +28,8 @@
         # proxies HTTPS to this port (or the resolver can use DoT directly).
         do-tls = [ "yes" ];
         tls-port = 8853;
-        tls-cert-bundle = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
-        tls-key = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+        tls-service-key = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+        tls-service-pem = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
 
         # Use the system's root trust anchor store for DNSSEC validation.
         # Ensures Unbound can validate chains starting from the root.

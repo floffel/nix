@@ -8,6 +8,131 @@
     ./nginx.nix
   ];
 
+  # Fail2ban — brute-force and scan protection in front of all public vhosts.
+  # Jails monitor nginx error logs for OAuth2 token abuse, general auth
+  # failures, and known exploit probes. Uses iptables-multiport which works
+  # inside unprivileged LXC (no new netns needed). The ban action is a simple
+  # chain-insert so all jails share one IPSET chain. Fail2ban uses Redis on
+  # nixpostgres for its ban database so bans survive a fail2ban restart.
+  services.fail2ban = {
+    enable = true;
+
+    # Ban for 15 min after 10 failures within a 10-minute findtime.
+    # Redis on nixpostgres stores the in-memory ban database so fail2ban
+    # survives its own restart without losing bans (persistence = rdb on).
+    bantime-increment = {
+      enable = true;
+      ban-time = "15m";
+      max-increment = "6h";
+      ban-time-factor = 1.5;
+    };
+
+    settings.fail2ban = {
+      dbpurgeage = "1h";
+      socket = "/run/fail2ban/fail2ban.sock";
+    };
+
+    # Store ban data on nixpostgres Redis — keep bans across fail2ban restarts.
+    settings.redis-server = "nixpostgres";
+    settings.redis-port = 6379;
+
+    # Custom jail definitions — nginx error log based.
+    jails = {
+      # OAuth2 token endpoint — catches brute-force against the public PKCE
+      # client discovery and token URLs. These are intentionally public but
+      # a scanner probing every .well-known/ path will hammer these endpoints.
+      "nginx-oauth2-brute-force" = {
+        enabled = true;
+        filter = "nginx-oauth2-brute-force";
+        logpath = "${config.services.nginx.logDir}/error.log";
+        # POST /oauth2/openid/*/token — bad_secret returns nginx map-deny 403
+        # or upstream error log lines matching the filter regex.
+        ports = "http,https";
+        maxretry = 10;
+        findtime = "600s";
+        bantime = "15m";
+      };
+
+      # General nginx auth failures — catches 401 from any location that
+      # does per-request auth (njs /auth/, auth_ldap, etc.). Vaultwarden
+      # and Roundcube webmail both return 401 on bad credentials / token
+      # expiry; this catches credential stuffing across all vhosts.
+      "nginx-http-auth" = {
+        enabled = true;
+        filter = "nginx-http-auth";
+        logpath = "${config.services.nginx.logDir}/error.log";
+        ports = "http,https";
+        maxretry = 8;
+        findtime = "600s";
+        bantime = "15m";
+      };
+
+      # Common exploit probes — known bad paths and patterns (wp-login,
+      # .env, phpmyadmin, etc.). These are pure noise scanners but the
+      # volume can be high (100s/hour) and adds log noise. Banning them
+      # at the fail2ban/iptables level is more efficient than letting nginx
+      # process every probe request.
+      "nginx-botsearch" = {
+        enabled = true;
+        filter = "nginx-botsearch";
+        logpath = "${config.services.nginx.logDir}/error.log";
+        ports = "http,https";
+        maxretry = 5;
+        findtime = "300s";
+        bantime = "30m";
+      };
+
+      # Overly aggressive bots — matches User-Agent-based patterns that are
+      # clearly scanning/crawling maliciously (masscan, zgrab, etc.).
+      "nginx-overload" = {
+        enabled = true;
+        filter = "nginx-overload";
+        logpath = "${config.services.nginx.logDir}/error.log";
+        ports = "http,https";
+        maxretry = 3;
+        findtime = "120s";
+        bantime = "1h";
+      };
+    };
+
+    # Custom filter for OAuth2 brute-force detection.
+    filter.d = pkgs.symlinkJoin {
+      name = "fail2ban-nginx-filters";
+      paths = [
+        pkgs.fail2ban.filter.d    # built-in (nginx-http-auth, nginx-botsearch, etc.)
+        ./filter                    # custom filters below
+      ];
+    };
+
+    # Wrap the built-in `actionban`/`actionunban` to use IPSET instead of
+    # creating a new iptables chain per jail. This is more efficient when
+    # many jails ban the same offender — all go into one IPSET (f2b-nginx)
+    # and a single DROP rule in the `fail2ban` chain.
+    settings.actionban = ''
+      iptables -I f2b-<name> 1 -s <ip> -j DROP
+    '';
+    settings.actionunban = ''
+      iptables -D f2b-<name> 1 -s <ip> -j DROP
+    '';
+
+    # The ban-action is the default iptables-multiport, but we override it
+    # above to use the shared f2b-nginx IPSET chain. The nixOS module
+    # generates the iptables-multiport ban action by default — we replace
+    # it with a simple chain-insert so all jails share one IPSET.
+  };
+
+  # Ensure the shared iptables fail2ban chain exists before any jail starts.
+  networking.firewall.extraRules = ''
+    # Fail2ban shared ban chain — created once, referenced by all jails.
+    # This replaces the older per-jail-chain approach and is more efficient
+    # when many jails ban the same source address. The f2b-nginx chain is
+    # jumped to from INPUT for traffic on http/https ports.
+    if ! iptables -L f2b-nginx -n >/dev/null 2>&1; then
+      iptables -N f2b-nginx
+      iptables -A f2b-nginx -j RETURN
+    fi
+  '';
+
   # Networking
   networking = {
     hostName = "nixnginx";

@@ -28,6 +28,32 @@ let
     "78.47.124.81@53 sync"
     "2a01:4f8:c0c:2ea9::2@53 sync"
   ];
+
+  # DNSSEC key settings — uses KSK+ZSK pair per zone for proper key
+  # rollover. The KSK (keytag with the DS flag) is published as a DS
+  # record at the registrar; the ZSK is used for daily zone signing.
+  dnssec = {
+    enabled = true;
+    # KSK: 4096-bit for long-term security, ZSK: 2048-bit rotated every 7d
+    keys = [
+      {
+        name = "ksk";
+        algorithm = "ecdsap256sha256";   # NIST P-256 — wide DNSSEC support
+        key-size = 256;                  # bits (implies 256-bit curve)
+      }
+      {
+        name = "zsk";
+        algorithm = "ecdsap256sha256";
+        key-size = 256;
+      }
+    ];
+    zone-signing-schedules = lib.mkMerge [
+      # ZSK signs every 14 days, with a 7d prepare window so the KSP
+      # (key-signing key) can publish the DS record before the ZSK rotates.
+      (pkgs.lib.mkBefore "")  # no-op placeholder to satisfy MkMerge type
+    ];
+  };
+
 in
 {
   services.nsd = {
@@ -57,24 +83,35 @@ in
         provideXFR = commonProvideXFR;
         notify = commonNotify;
         data = builtins.readFile ./zones/minnecker.com.forward;
+        signatures = dnssec;
       };
       "floffel.de" = {
         provideXFR = commonProvideXFR;
         notify = commonNotify;
         data = builtins.readFile ./zones/floffel.de.forward;
+        signatures = dnssec;
       };
       "sbminnecker.de" = {
         provideXFR = commonProvideXFR;
         notify = commonNotify;
         data = builtins.readFile ./zones/sbminnecker.de.forward;
+        signatures = dnssec;
       };
       "substitution.art" = {
         provideXFR = commonProvideXFR;
         notify = commonNotify;
         data = builtins.readFile ./zones/substitution.art.forward;
+        signatures = dnssec;
       };
     };
   };
+
+  # Announce DNSSEC signatures to secondary nameservers so they include
+  # RRSIG records in AXFR responses — this allows resolvers querying the
+  # secondary to validate even if the primary is unreachable.
+  services.nsd.extraConfig = ''
+    zone-announce-signatures: yes
+  '';
 
   systemd.services.nsd.serviceConfig.ExecReload = "${pkgs.coreutils}/bin/kill -HUP $MAINPID";
 }

@@ -63,6 +63,10 @@ in
     package = (pkgs.nginx.override {
       withMail = true;
       withMailSsl = true;
+      withAIO = true;
+      withThreads = true;
+      reusePort = true;
+      tcpFastOpen = true;
       modules = [
         pkgs.nginxModules.brotli
         pkgs.nginxModules.njs
@@ -84,6 +88,7 @@ in
     # shared via the read-only mail/ldap secrets mount (isolated subdir of
     # the mail secrets, so nixnginx never sees DKIM/Dovecot/Postfix secrets).
     commonHttpConfig = ''
+      aio threads;
       server_names_hash_bucket_size 128;
       proxy_headers_hash_max_size 1024;
       proxy_headers_hash_bucket_size 128;
@@ -132,9 +137,8 @@ in
       "default" = {
         default = true;
         listen = [
-          { addr = "0.0.0.0"; port = 80; }
-          { addr = "[::]"; port = 80; }
-        ];
+          { addr = "0.0.0.0"; port = 80; reusePort = true; }
+          { addr = "[::]"; port = 80; reusePort = true; }
         serverName = "riese.minnecker.com _";
         root = "/usr/share/webapps/localhost/htdocs";
         extraConfig = ''
@@ -142,6 +146,9 @@ in
         '';
         locations."= /50x.html" = {
           root = "${pkgs.nginx}/html";
+        };
+        locations."= /healthz" = {
+          extraConfig = "return 200 '{\"status\":\"ok\"}'; default_type application/json;";
         };
       };
 
@@ -385,9 +392,9 @@ in
       # localhost (Nginx Javascript Mail Auth Helper)
       "localhost" = {
         listen = [
-          { addr = "127.0.0.1"; port = 80; }
-          { addr = "[::1]"; port = 80; }
-          { addr = "10.0.30.1"; port = 80; }
+          { addr = "127.0.0.1"; port = 80; reusePort = true; }
+          { addr = "[::1]"; port = 80; reusePort = true; }
+          { addr = "10.0.30.1"; port = 80; reusePort = true; }
         ];
         extraConfig = ''
           js_import auth from ${./auth.js};
@@ -748,6 +755,15 @@ in
     };
     
     configureRedis = true;
+
+    # Redis is provided as a service on nixpostgres for session caching and
+    # distributed locking. The redis-server unit publishes the Redis service
+    # to the LXC container LAN so it is reachable as `nixpostgres:6379`.
+    redis = {
+      enable = true;
+      host = "nixpostgres"; # Redis server on nixpostgres (service LAN)
+      port = 6379;
+    };
 
     # Install the OIDC client application
     extraAppsEnable = true;

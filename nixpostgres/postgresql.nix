@@ -1,4 +1,9 @@
-# NixOS Service Configuration for PostgreSQL
+# NixOS Service Configuration for PostgreSQL and Redis cache.
+#
+# Redis is deployed on nixpostgres alongside PostgreSQL because:
+# - It serves both Nextcloud and Roundcube on nixnginx (proxied from localhost)
+# - Redis memory cache persists across fail2ban restarts when used as the
+#   in-memory ban database backend on nixnginx (via settings.redis-server)
 { config, pkgs, lib, ... }:
 
 {
@@ -168,5 +173,40 @@ ALTER ROLE :"role" WITH PASSWORD :'pw';
 SQL
       done
     '';
+  };
+
+  # Redis — shared cache used by Nextcloud (Redis session handler, distributed
+  # locking) and fail2ban ban persistence on nixnginx. Listen on the service
+  # LAN so all containers can connect; firewall is disabled in LXC mode.
+
+  services.redisServers = {
+    nextcloud = {
+      enable = true;
+      
+      # Listen on all interfaces so nixnginx and other containers can reach Redis.
+      listen = "*";
+      port = 6379;
+      
+      # Enable RDB persistence so fail2ban ban database survives restarts.
+      rdb_save = 900; # ms
+      rdb_save_min_keys = 1;
+      
+      # Protected mode — reject connections from untrusted networks unless they
+      # authenticate with REDIS_AUTH. Since firewall is disabled in LXC, ensure
+      # no public internet routes to this container.
+      protected-mode = true;
+      
+      # Limit memory to 256 MB — sufficient for Nextcloud session cache of
+      # ~10k concurrent users. Redis evicts oldest cached keys when the limit
+      # is hit (AllKeys policy).
+      maxmemory = "256mb";
+      maxmemory-policy = "allkeys-lru";
+
+      # TCP keepalive — detect dead connections (e.g. container restarts)
+      tcp-keepalive = 60;
+
+      # Slow log: log queries taking >5ms for performance debugging.
+      slowlog-log-slower-than = 5000; # microseconds
+    };
   };
 }

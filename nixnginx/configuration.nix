@@ -27,14 +27,14 @@
       factor = "1.5";
     };
 
-    settings.fail2ban = {
+    extraSettings.fail2ban = {
       dbpurgeage = "1h";
       socket = "/run/fail2ban/fail2ban.sock";
     };
 
     # Store ban data on nixpostgres Redis — keep bans across fail2ban restarts.
-    settings.redis-server = "nixpostgres";
-    settings.redis-port = 6379;
+    extraSettings.redis-server = "nixpostgres";
+    extraSettings.redis-port = 6379;
 
     # Custom jail definitions — nginx error log based.
     jails = {
@@ -99,10 +99,10 @@
     # creating a new iptables chain per jail. This is more efficient when
     # many jails ban the same offender — all go into one IPSET (f2b-nginx)
     # and a single DROP rule in the `fail2ban` chain.
-    settings.actionban = ''
+    extraSettings.actionban = ''
       iptables -I f2b-nginx 0 -s <ip> -j DROP
     '';
-    settings.actionunban = ''
+    extraSettings.actionunban = ''
       iptables -D f2b-nginx 0 -s <ip> -j DROP
     '';
 

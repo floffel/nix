@@ -147,6 +147,7 @@ in
         listen = [
           { addr = "0.0.0.0"; port = 80; reusePort = true; }
           { addr = "[::]"; port = 80; reusePort = true; }
+        ];
         serverName = "riese.minnecker.com _";
         root = "/usr/share/webapps/localhost/htdocs";
         extraConfig = ''

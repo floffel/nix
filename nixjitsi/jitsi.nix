@@ -55,3 +55,4 @@
       publicAddress = "meet.minnecker.com";
     };
   };
+}

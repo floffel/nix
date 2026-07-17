@@ -52,14 +52,14 @@
         cache-min-ttl = 60;
         
         # Neg cache for NXDOMAIN to prevent repeated queries for non-existent names.
-        neg-cache-size = 16M;
+        neg-cache-size = "16M";
 
         # Number of threads to spawn (match available CPU cores, default is
         # num-threads: auto-detected). Reduces latency under load.
         num-threads = 4;
 
         # Number of message slots for in-flight queries (reduces latency).
-        msg-cache-size = 128M;
+        msg-cache-size = "128M";
 
         # Request privacy: do not reveal the client's IP in PTR lookups.
         private-address = [

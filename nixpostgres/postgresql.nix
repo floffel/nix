@@ -179,6 +179,39 @@ SQL
   # locking) and fail2ban ban persistence on nixnginx. Listen on the service
   # LAN so all containers can connect; firewall is disabled in LXC mode.
 
+  # Auto-provision the redis nextcloud password on the shared secrets mount,
+  # mirroring the postgresql-password-provisioning pattern: a oneshot unit that
+  # runs before redis-nextcloud.service, creates the password file on the NAS
+  # bind mount if missing, and fails loudly if the mount is absent.
+  systemd.services.redis-nextcloud-password-provisioning = {
+    description = "Provision Redis nextcloud password on the shared secrets mount";
+    wantedBy = [ "redis-nextcloud.service" ];
+    before = [ "redis-nextcloud.service" ];
+    partOf = [ "redis-nextcloud.service" ];
+    bindsTo = [ "redis-nextcloud.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ReadWritePaths = [ "/var/lib/secrets/redis" ];
+    };
+    path = [ pkgs.util-linux pkgs.coreutils ];
+    script = ''
+      set -euo pipefail
+
+      mountpoint -q /var/lib/secrets/redis || {
+        echo "Error: /var/lib/secrets/redis is not a mount point (missing Proxmox bind entry?)" >&2
+        exit 1
+      }
+
+      install -d -m 700 /var/lib/secrets/redis
+      f="/var/lib/secrets/redis/nextcloud-password"
+      if [ ! -s "$f" ]; then
+        pw="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+        printf '%s' "$pw" > "$f"
+      fi
+      chmod 600 "$f"
+    '';
+  };
+
   services.redis.servers.nextcloud = {
     enable = true;
     bind = "*";

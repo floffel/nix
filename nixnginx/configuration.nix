@@ -95,15 +95,6 @@
       };
     };
 
-    # Custom filter for OAuth2 brute-force detection.
-    filter.d = pkgs.symlinkJoin {
-      name = "fail2ban-nginx-filters";
-      paths = [
-        pkgs.fail2ban.filter.d    # built-in (nginx-http-auth, nginx-botsearch, etc.)
-        ./filter                    # custom filters below
-      ];
-    };
-
     # Wrap the built-in `actionban`/`actionunban` to use IPSET instead of
     # creating a new iptables chain per jail. This is more efficient when
     # many jails ban the same offender — all go into one IPSET (f2b-nginx)

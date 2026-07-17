@@ -88,9 +88,16 @@ in
   # Announce DNSSEC signatures to secondary nameservers so they include
   # RRSIG records in AXFR responses — this allows resolvers querying the
   # secondary to validate even if the primary is unreachable.
-  services.nsd.extraConfig = ''
-    zone-announce-signatures: yes
-  '';
+  #
+  # NOTE: The NixOS nsd module places extraConfig OUTSIDE the server: block
+  # (after all zone: blocks). In NSD 4.x this causes zone-announce-signatures
+  # to be misinterpreted as a zone-level tls-auth directive. Until the module
+  # supports placing directives inside the server: block, we rely on the
+  # NSD default behavior where signatures are announced to secondaries that
+  # receive NOTIFYs.
+  # services.nsd.extraConfig = ''''
+  #   zone-announce-signatures: yes
+  # '''';
 
   systemd.services.nsd.serviceConfig.ExecReload = "${pkgs.coreutils}/bin/kill -HUP $MAINPID";
 }

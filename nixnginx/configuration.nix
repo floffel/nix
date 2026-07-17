@@ -27,17 +27,28 @@
       factor = "1.5";
     };
 
-    extraSettings.fail2ban = {
+    daemonSettings.Definition = {
       dbpurgeage = "1h";
       socket = "/run/fail2ban/fail2ban.sock";
     };
 
-    # Store ban data on nixpostgres Redis — keep bans across fail2ban restarts.
-    extraSettings.redis-server = "nixpostgres";
-    extraSettings.redis-port = 6379;
-
     # Custom jail definitions — nginx error log based.
     jails = {
+      # Default settings for all jails: wrap actionban/actionunban to use
+      # IPSET instead of creating a new iptables chain per jail.  This is
+      # more efficient when many jails ban the same offender — all go into
+      # one IPSET (f2b-nginx) and a single DROP rule in the f2b-nginx chain.
+      # Redis settings store ban data on nixpostgres for persistence.
+      DEFAULT.settings = {
+        "redis-server" = "nixpostgres";
+        "redis-port" = 6379;
+        actionban = ''
+          iptables -I f2b-nginx 0 -s <ip> -j DROP
+        '';
+        actionunban = ''
+          iptables -D f2b-nginx 0 -s <ip> -j DROP
+        '';
+      };
       # OAuth2 token endpoint — catches brute-force against the public PKCE
       # client discovery and token URLs. These are intentionally public but
       # a scanner probing every .well-known/ path will hammer these endpoints.
@@ -94,22 +105,6 @@
         bantime = "1h";
       };
     };
-
-    # Wrap the built-in `actionban`/`actionunban` to use IPSET instead of
-    # creating a new iptables chain per jail. This is more efficient when
-    # many jails ban the same offender — all go into one IPSET (f2b-nginx)
-    # and a single DROP rule in the `fail2ban` chain.
-    extraSettings.actionban = ''
-      iptables -I f2b-nginx 0 -s <ip> -j DROP
-    '';
-    extraSettings.actionunban = ''
-      iptables -D f2b-nginx 0 -s <ip> -j DROP
-    '';
-
-    # The ban-action is the default iptables-multiport, but we override it
-    # above to use the shared f2b-nginx IPSET chain. The nixOS module
-    # generates the iptables-multiport ban action by default — we replace
-    # it with a simple chain-insert so all jails share one IPSET.
   };
 
   # Ensure the shared iptables fail2ban chain exists before any jail starts.

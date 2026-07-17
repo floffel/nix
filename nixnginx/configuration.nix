@@ -20,11 +20,11 @@
     # Ban for 15 min after 10 failures within a 10-minute findtime.
     # Redis on nixpostgres stores the in-memory ban database so fail2ban
     # survives its own restart without losing bans (persistence = rdb on).
+    bantime = "15m";
     bantime-increment = {
       enable = true;
-      ban-time = "15m";
-      max-increment = "6h";
-      ban-time-factor = 1.5;
+      maxtime = "6h";
+      factor = "1.5";
     };
 
     settings.fail2ban = {

@@ -761,18 +761,25 @@ in
       # flag explicitly permits local-remote calls so the OIDC flow can
       # reach the IdP through the local nginx listener.
       allow_local_remote_servers = true;
+
+      # Redis for session caching and distributed locking, provided by
+      # nixpostgres on the container LAN. Host and port go into config.php
+      # via settings; the password is injected via secretFile to avoid
+      # being baked into the world-readable Nix store.
+      "memcache.distributed" = ''\OC\Memcache\Redis'';
+      "memcache.locking" = ''\OC\Memcache\Redis'';
+      redis = {
+        host = "nixpostgres";
+        port = 6379;
+      };
     };
     
-    configureRedis = true;
+    configureRedis = false;
 
-    # Redis is provided as a service on nixpostgres for session caching and
-    # distributed locking. The redis-server unit publishes the Redis service
-    # to the LXC container LAN so it is reachable as `nixpostgres:6379`.
-    redis = {
-      enable = true;
-      host = "nixpostgres"; # Redis server on nixpostgres (service LAN)
-      port = 6379;
-    };
+    # Redis password injected via JSON secret file generated at boot
+    # from the shared NAS mount. Must not go through settings because
+    # that would land it in the Nix store.
+    secretFile = "/run/nextcloud-redis-secrets.json";
 
     # Install the OIDC client application
     extraAppsEnable = true;
@@ -937,6 +944,30 @@ systemd.services.nextcloud-setup.unitConfig = { };
         echo "Error: /var/lib/secrets/postgres/roundcube/db-password not found!"
         exit 1
       fi
+    '';
+  };
+
+  # Generate Nextcloud Redis secrets JSON file from the password provisioned
+  # on nixpostgres (shared via NAS bind mount). This oneshot runs before
+  # nextcloud-setup so the secretFile is present when config.php is written.
+  systemd.services.nextcloud-redis-secrets = {
+    description = "Generate Nextcloud Redis secrets from shared NAS password file";
+    wantedBy = [ "nextcloud-setup.service" ];
+    before = [ "nextcloud-setup.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      User = "root";
+    };
+    script = ''
+      set -euo pipefail
+      pwf="/var/lib/secrets/redis/nextcloud-password"
+      if [ ! -f "$pwf" ]; then
+        echo "Error: $pwf not found — NAS mount missing or password not provisioned yet" >&2
+        exit 1
+      fi
+      pw=$(cat "$pwf")
+      printf '{"redis":{"password":"%s"}}' "$pw" > /run/nextcloud-redis-secrets.json
+      chmod 644 /run/nextcloud-redis-secrets.json
     '';
   };
 }

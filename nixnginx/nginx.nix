@@ -145,8 +145,8 @@ in
       "default" = {
         default = true;
         listen = [
-          { addr = "0.0.0.0"; port = 80; reusePort = true; }
-          { addr = "[::]"; port = 80; reusePort = true; }
+          { addr = "0.0.0.0"; port = 80; }
+          { addr = "[::]"; port = 80; }
         ];
         serverName = "riese.minnecker.com _";
         root = "/usr/share/webapps/localhost/htdocs";
@@ -387,9 +387,9 @@ in
       # localhost (Nginx Javascript Mail Auth Helper)
       "localhost" = {
         listen = [
-          { addr = "127.0.0.1"; port = 80; reusePort = true; }
-          { addr = "[::1]"; port = 80; reusePort = true; }
-          { addr = "10.0.30.1"; port = 80; reusePort = true; }
+          { addr = "127.0.0.1"; port = 80; }
+          { addr = "[::1]"; port = 80; }
+          { addr = "10.0.30.1"; port = 80; }
         ];
         extraConfig = ''
           js_import auth from ${./auth.js};

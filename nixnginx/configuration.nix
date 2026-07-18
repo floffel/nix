@@ -56,7 +56,7 @@
         enabled = true;
         filter = "nginx-oauth2-brute-force";
         settings = {
-          logpath = "${config.services.nginx.logDir}/error.log";
+          logpath = "/var/log/nginx/error.log";
           port = "http,https";
           maxretry = 10;
           findtime = "600s";
@@ -72,7 +72,7 @@
         enabled = true;
         filter = "nginx-http-auth";
         settings = {
-          logpath = "${config.services.nginx.logDir}/error.log";
+          logpath = "/var/log/nginx/error.log";
           port = "http,https";
           maxretry = 8;
           findtime = "600s";
@@ -89,7 +89,7 @@
         enabled = true;
         filter = "nginx-botsearch";
         settings = {
-          logpath = "${config.services.nginx.logDir}/error.log";
+          logpath = "/var/log/nginx/error.log";
           port = "http,https";
           maxretry = 5;
           findtime = "300s";
@@ -103,7 +103,7 @@
         enabled = true;
         filter = "nginx-overload";
         settings = {
-          logpath = "${config.services.nginx.logDir}/error.log";
+          logpath = "/var/log/nginx/error.log";
           port = "http,https";
           maxretry = 3;
           findtime = "120s";

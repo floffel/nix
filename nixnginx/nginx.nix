@@ -219,11 +219,12 @@ in
       };
 
       # cloud.minnecker.com (Nextcloud Server)
+      # Root and PHP locations are handled by the Nextcloud module; only
+      # SSL certs and custom headers need to be supplied here.
       "cloud.minnecker.com" = {
         forceSSL = true;
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
         sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
-        root = config.services.nextcloud.home;
         extraConfig = ''
           charset utf-8;
           client_max_body_size 6G;
@@ -237,21 +238,6 @@ in
           add_header X-Robots-Tag "none" always;
           add_header X-XSS-Protection "1; mode=block" always;
         '';
-        locations."/" = {
-          index = "index.php";
-          extraConfig = "try_files $uri $uri/ /index.php?$args;";
-        };
-        locations."~ \\.php(/.*)?$" = {
-          extraConfig = ''
-            fastcgi_pass unix:${config.services.phpfpm.pools.nextcloud.socket};
-            fastcgi_index index.php;
-            include ${config.services.nginx.package}/conf/fastcgi.conf;
-
-            fastcgi_split_path_info ^(.+\.php)(/.*)$;
-            fastcgi_param SCRIPT_FILENAME $request_filename;
-            fastcgi_param PATH_INFO $fastcgi_path_info;
-          '';
-        };
       };
 
       # git.minnecker.com / git.flos.dev (Forgejo Proxy)

@@ -137,10 +137,8 @@
     # Static IP Configuration matching the nixnginx server setup
     useDHCP = false;
 
-    # Firewall configuration disabled per environment requirements
-    firewall = {
-      enable = false;
-    };
+    # Firewall required by fail2ban (iptables rules managed manually via oneshot)
+    firewall.enable = true;
 
     # Pin the public service hostnames to the local nginx reverse proxy.
     #

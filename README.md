@@ -92,7 +92,11 @@ The deployment process is identical for all containers, with the following excep
 
 *   **`nixmail` (Mail Server)**: Automatically handles linking the extra `nixmail.nix` module if the `CONTAINER` variable is set to `"nixmail"` in the script above.
 *   **`nixvpn` (WireGuard Gateway)**: Requires installing `wireguard-tools` to generate keys and setting up client configs (see below).
-*   **`nixforgejo-runner` (Forgejo Runner)**: Requires Nesting and Keyctl options enabled in the Proxmox Web UI (Options -> Features) to run nested Docker containers.
+*   **`nixforgejo-runner` (Forgejo Runner)**: Requires Nesting and Keyctl options enabled in the Proxmox Web UI (Options -> Features) to run nested Docker containers. For CI VM integration tests (`just test-vm`), also enable `/dev/kvm` passthrough by adding to `/etc/pve/lxc/<id>.conf`:
+  ```ini
+  lxc.cgroup2.devices.allow: c 10:232 rwm
+  lxc.mount.entry: /dev/kvm dev/kvm none bind,optional,create=file
+  ```
 
 ---
 

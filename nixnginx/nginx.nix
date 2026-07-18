@@ -225,6 +225,32 @@ in
         forceSSL = true;
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
         sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+        locations."/" = {
+          index = "index.php";
+          extraConfig = "try_files $uri $uri/ /index.php?$args;";
+        };
+        locations."~ \\.php(/.*)?$" = {
+          extraConfig = ''
+            fastcgi_pass unix:${config.services.phpfpm.pools.nextcloud.socket};
+            fastcgi_index index.php;
+            include ${config.services.nginx.package}/conf/fastcgi.conf;
+            fastcgi_split_path_info ^(.+\.php)(/.*)$;
+            fastcgi_param SCRIPT_FILENAME $request_filename;
+            fastcgi_param PATH_INFO $fastcgi_path_info;
+          '';
+        };
+        locations."= /.well-known/carddav" = {
+          extraConfig = "return 301 /remote.php/dav/;";
+        };
+        locations."= /.well-known/caldav" = {
+          extraConfig = "return 301 /remote.php/dav/;";
+        };
+        locations."= /.well-known/webfinger" = {
+          extraConfig = "return 301 /index.php/.well-known/webfinger;";
+        };
+        locations."= /.well-known/nodeinfo" = {
+          extraConfig = "return 301 /index.php/.well-known/nodeinfo;";
+        };
         extraConfig = ''
           charset utf-8;
           client_max_body_size 6G;

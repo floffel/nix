@@ -3,6 +3,9 @@
 {
   services.qemuGuest.enable = lib.mkForce true;
 
+  boot.isContainer = lib.mkForce false;
+  boot.loader.grub.enable = lib.mkForce false;
+
   networking.useDHCP = lib.mkForce true;
   networking.firewall.enable = lib.mkForce true;
   networking.extraHosts = ''

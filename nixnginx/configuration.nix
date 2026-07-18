@@ -113,6 +113,21 @@
     };
   };
 
+  environment.etc."fail2ban/filter.d/nginx-oauth2-brute-force.conf".text = ''
+    [Definition]
+    failregex = ^\s*\[\w+\] \d+#\d+: \*\d+ access forbidden by rule, client: <ADDR>.*request: "POST .*/(?:token|authorize|device_authorization)"
+                ^\s*\[\w+\] \d+#\d+: \*\d+ auth request unexpected status: 403 while sending to client, client: <ADDR>
+    ignoreregex =
+    journalmatch = _SYSTEMD_UNIT=nginx.service
+  '';
+
+  environment.etc."fail2ban/filter.d/nginx-overload.conf".text = ''
+    [Definition]
+    failregex = ^\s*\[\w+\] \d+#\d+: \*\d+ \w+ .*\(User-Agent: (?:masscan|zgrab|zgrab2|zgrab3|gobuster|nikto|dirbuster|sqlmap|wpscan|nmap|Nuclei|nessus)\)
+    ignoreregex =
+    journalmatch = _SYSTEMD_UNIT=nginx.service
+  '';
+
   # Ensure the shared iptables fail2ban chain exists before any jail starts.
   # networking.firewall.extraRules was removed in NixOS 26.05 and the firewall
   # is disabled in this LXC anyway, so create the chain via a oneshot service.

@@ -2,17 +2,6 @@
 { config, pkgs, lib, ... }:
 
 let
-  # The NixOS NSD module creates nsd-dnssec.service using
-  # dnssecTools = pkgs.bind.override { enablePython = true; }.
-  # However, the nixpkgs bind derivation's enablePython flag only adds
-  # Python as a build input but never passes --with-python to configure,
-  # so the Python-based tools (dnssec-keymgr) are never actually built.
-  # Work around this by overriding bind with the missing configure flag
-  # AND ensure it's in the closure via system.extraDependencies.
-  dnssecTools = (pkgs.bind.override { enablePython = true; }).overrideAttrs (old: {
-    configureFlags = old.configureFlags or [] ++ [ "--with-python" ];
-  });
-
   # Common secondary nameservers for zone transfers and notifications
   commonProvideXFR = [
     "213.239.242.238 NOKEY"              # ns1.first-ns.de
@@ -113,12 +102,4 @@ in
   systemd.services.nsd = {
     serviceConfig.ExecReload = "${pkgs.coreutils}/bin/kill -HUP $MAINPID";
   };
-
-  # The NixOS NSD module's nsd-dnssec unit script references
-  # dnssecTools = pkgs.bind.override { enablePython = true; } via
-  # an absolute store path. Nix closure computation does not follow
-  # the reference chain toplevel → etc → systemd unit → unit-script
-  # → bind, so the bind store path gets GC'd on deployed containers.
-  # system.extraDependencies forces the path into the toplevel closure.
-  system.extraDependencies = [ dnssecTools ];
 }

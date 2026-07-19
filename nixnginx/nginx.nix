@@ -841,34 +841,25 @@ systemd.services.nextcloud-setup.unitConfig = { };
       # https://cloud.minnecker.com/login?direct=1 as an escape hatch.
       $occ config:app:set --value=0 user_oidc allow_multiple_user_backends
 
-      # Idempotency guard: nothing to do if the provider already exists.
-      # (user_oidc:provider with no args lists all configured providers.)
-      if $occ user_oidc:provider | grep -q "kanidm"; then
-        echo "Kanidm OIDC provider already registered; nothing to do."
-        exit 0
-      fi
-
       if [ ! -f /var/lib/secrets/oauth2/nextcloud/secret ]; then
         echo "Error: /var/lib/secrets/oauth2/nextcloud/secret not found. Retrying."
         exit 1
       fi
 
-      # Fail (and thus trigger a restart) if the IdP discovery endpoint is
-      # not yet reachable — e.g. during early boot before DNS/networking settle.
       if ! curl -fsS --max-time 10 "$discovery" >/dev/null; then
         echo "Error: IdM discovery endpoint unreachable at $discovery. Retrying."
         exit 1
       fi
 
       client_secret=$(cat /var/lib/secrets/oauth2/nextcloud/secret)
-      # user_oidc's occ command is `user_oidc:provider <identifier>` with
-      # --clientid / --clientsecret / --discoveryuri options (not provider-add).
       $occ user_oidc:provider kanidm \
         --clientid="nextcloud" \
         --clientsecret="$client_secret" \
         --discoveryuri="$discovery" \
+        --scope="openid email profile groups_name" \
+        --mapping-groups="groups" \
         --group-provisioning=1
-      echo "Kanidm OIDC provider registered successfully."
+      echo "Kanidm OIDC provider registered/updated."
     '';
   };
 

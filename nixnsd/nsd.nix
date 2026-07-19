@@ -2,6 +2,15 @@
 { config, pkgs, lib, ... }:
 
 let
+  # The NixOS NSD module creates nsd-dnssec.service using
+  # dnssecTools = pkgs.bind.override { enablePython = true; }.
+  # The unit script embeds this store path via ${dnssecTools}/bin/dnssec-keymgr.
+  # Nix's closure computation does not reliably follow the reference chain
+  # toplevel → etc → unit → unit-script → bind, so bind gets GC'd on
+  # deployed containers. Adding dnssecTools to the service path embeds
+  # the store path in the unit file itself, which Nix always scans.
+  dnssecTools = pkgs.bind.override { enablePython = true; };
+
   # Common secondary nameservers for zone transfers and notifications
   commonProvideXFR = [
     "213.239.242.238 NOKEY"              # ns1.first-ns.de
@@ -103,13 +112,5 @@ in
     serviceConfig.ExecReload = "${pkgs.coreutils}/bin/kill -HUP $MAINPID";
   };
 
-  # The NixOS NSD module creates nsd-dnssec.service with a unit script that
-  # calls ${pkgs.bind}/bin/dnssec-keymgr via an absolute store path. The
-  # reference chain from the system toplevel through the unit script to
-  # the bind binary is not reliably captured by closure computation, so
-  # bind gets garbage collected on deployed containers (nix.gc = weekly).
-  # Adding bind to systemPackages forces it into the toplevel's direct
-  # dependency tree, protecting both the current and future bind store
-  # paths from GC.
-  environment.systemPackages = [ pkgs.bind ];
+  systemd.services.nsd-dnssec.path = [ dnssecTools ];
 }

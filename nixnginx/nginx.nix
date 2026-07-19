@@ -734,6 +734,7 @@ in
       # protection and the audit log key solely off REMOTE_ADDR.
       trusted_proxies = [ "127.0.0.1" "::1" ];
       forwarded_for_headers = [];
+      overwriteprotocol = "https";
 
       # idm.minnecker.com resolves to this host's own IP (10.20.20.14) via
       # networking.extraHosts, to dodge the hairpin-NAT self-reference

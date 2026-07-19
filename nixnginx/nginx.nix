@@ -757,9 +757,13 @@ in
         port = 6379;
       };
     };
+    
+    configureRedis = false;
 
-    # Load the PHP Redis extension so \OC\Memcache\Redis is available.
-    configureRedis = true;
+    # configureRedis adds a local Unix-socket Redis (conflicts with our
+    # remote nixpostgres Redis), so we load the PHP Redis extension
+    # manually instead.
+    phpExtraExtensions = allPkgs: [ allPkgs.redis ];
 
     # Redis password injected via JSON secret file generated at boot
     # from the shared NAS mount. Must not go through settings because

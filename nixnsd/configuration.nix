@@ -28,8 +28,8 @@
           mkdir -p "$KEYDIR"
           if ! ls "$KEYDIR/K${name}."*".key" >/dev/null 2>&1; then
             ORIGDIR="$PWD"; cd "$KEYDIR"
-            dnssec-keygen -a 13 -f KSK "${name}"
-            dnssec-keygen -a 13 "${name}"
+            dnssec-keygen -a 13 -f KSK -P now -A now "${name}"
+            dnssec-keygen -a 13 -P now -A now "${name}"
             cd "$ORIGDIR"
           fi
           dnssec-signzone -S -K "$KEYDIR" -o "${name}" -O full -N date \

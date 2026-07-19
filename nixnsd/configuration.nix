@@ -9,13 +9,49 @@
     ./acme.nix
   ];
 
-  # The NixOS NSD module creates nsd-dnssec.service which calls
-  # dnssec-keymgr from bind. This tool was removed in bind 9.20
-  # (shipped by nixos-26.05). The service fails with exit 127.
-  # Existing DNSSEC zones are already signed and continue to work;
-  # key rollover must be handled manually until the NixOS module
-  # is updated for bind 9.20.
-  systemd.suppressedSystemUnits = [ "nsd-dnssec.service" "nsd-dnssec.timer" ];
+  # The NixOS NSD module pre-signs zones with dnssec-keymgr from bind
+  # before starting NSD. This tool was removed in bind 9.20 (nixos-26.05).
+  # Override the nsd-dnssec service to use ldns-keygen for key generation
+  # and bind's dnssec-signzone (still present) for signing.
+  systemd.services.nsd-dnssec = lib.mkForce {
+    description = "DNSSEC key rollover";
+    wantedBy = [ "nsd.service" ];
+    before = [ "nsd.service" ];
+    path = with pkgs; [ bind ldns nsd ];
+    script =
+      let
+        stateDir = "/var/lib/nsd";
+        dnssecZones = lib.filterAttrs (_: zone: zone.dnssec or false) config.services.nsd.zones;
+        zoneScripts = lib.mapAttrsToList (name: zone: ''
+          echo "DNSSEC: signing ${name}"
+          KEYDIR="${stateDir}/dnssec"
+          mkdir -p "$KEYDIR"
+          # Generate keys only if they don't already exist for this zone
+          if ! ls "$KEYDIR/K${name}."*".key" >/dev/null 2>&1; then
+            ORIGDIR="$PWD"; cd "$KEYDIR"
+            ldns-keygen -a 13 -k "${name}"
+            ldns-keygen -a 13 "${name}"
+            cd "$ORIGDIR"
+          fi
+          dnssec-signzone -S -K "$KEYDIR" -o "${name}" -O full -N date \
+            "${stateDir}/zones/${name}"
+          nsd-checkzone "${name}" "${stateDir}/zones/${name}.signed" \
+            && mv -v "${stateDir}/zones/${name}.signed" "${stateDir}/zones/${name}"
+        '') dnssecZones;
+      in
+      ''
+        set -e
+        install -m 0600 -o nsd -g nsd -d "${stateDir}/dnssec"
+        ${lib.concatStringsSep "\n" zoneScripts}
+      '';
+    postStop = ''
+      /run/current-system/systemd/bin/systemctl kill -s SIGHUP nsd.service
+    '';
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+  };
 
   # Networking
   networking = {

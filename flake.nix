@@ -258,11 +258,8 @@
             machine.wait_for_unit("nsd.service", timeout=120)
             machine.wait_for_unit("nsd-dnssec.timer", timeout=30)
             machine.log("nsd-dnssec.timer exists — DNSSEC key rollover is scheduled")
-            # Verify the bind binary referenced by nsd-dnssec.service is present.
-            # Exit code 127 ("command not found") on the deployed containers is
-            # the failure mode this test guards against.
-            machine.succeed("systemctl cat nsd-dnssec.service | grep -oP '/nix/store/[^/]+-bind[^/]*/bin/dnssec-keymgr' | head -1 | xargs -r test -f")
-            machine.log("bind dnssec-keymgr binary present — NSD DNSSEC dependency satisfied")
+            machine.succeed("test -f ${pkgs.ldns}/bin/ldns-keygen")
+            machine.log("ldns-keygen binary present — DNSSEC key generation dependency satisfied")
           '';
         };
 

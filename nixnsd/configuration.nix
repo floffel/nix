@@ -42,10 +42,8 @@
         set -e
         install -m 0600 -o nsd -g nsd -d "${stateDir}/dnssec"
         ${lib.concatStringsSep "\n" zoneScripts}
+        /run/current-system/systemd/bin/systemctl kill -s SIGHUP nsd.service
       '';
-    postStop = ''
-      /run/current-system/systemd/bin/systemctl kill -s SIGHUP nsd.service
-    '';
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;

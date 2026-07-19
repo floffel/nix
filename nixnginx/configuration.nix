@@ -129,8 +129,8 @@
   '';
 
   # Ensure the shared iptables fail2ban chain exists before any jail starts.
-  # networking.firewall.extraRules was removed in NixOS 26.05 and the firewall
-  # is disabled in this LXC anyway, so create the chain via a oneshot service.
+  # networking.firewall.extraRules was removed in NixOS 26.05 — allowedTCPPorts
+  # above covers HTTP/HTTPS.
   systemd.services.fail2ban-iptables-chain = {
     description = "Create f2b-nginx iptables chain for fail2ban";
     wantedBy = [ "fail2ban.service" ];
@@ -153,7 +153,10 @@
     useDHCP = false;
 
     # Firewall required by fail2ban (iptables rules managed manually via oneshot)
-    firewall.enable = true;
+    firewall = {
+      enable = true;
+      allowedTCPPorts = [ 80 443 ];
+    };
 
     # Pin the public service hostnames to the local nginx reverse proxy.
     #

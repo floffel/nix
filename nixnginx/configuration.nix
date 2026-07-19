@@ -123,7 +123,7 @@
 
   environment.etc."fail2ban/filter.d/nginx-overload.conf".text = ''
     [Definition]
-    failregex = ^\s*\[\w+\] \d+#\d+: \*\d+ \w+ .*\(User-Agent: (?:masscan|zgrab|zgrab2|zgrab3|gobuster|nikto|dirbuster|sqlmap|wpscan|nmap|Nuclei|nessus)\)
+    failregex = ^\s*\[\w+\] \d+#\d+: \*\d+ \w+ .*client: <HOST>, .*\(User-Agent: (?:masscan|zgrab|zgrab2|zgrab3|gobuster|nikto|dirbuster|sqlmap|wpscan|nmap|Nuclei|nessus)\)
     ignoreregex =
     journalmatch = _SYSTEMD_UNIT=nginx.service
   '';

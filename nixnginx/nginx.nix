@@ -829,10 +829,11 @@ systemd.services.nextcloud-setup.unitConfig = { };
       occ="${config.services.nextcloud.occ}/bin/nextcloud-occ"
       discovery="https://idm.minnecker.com/oauth2/openid/nextcloud/.well-known/openid-configuration"
 
-      # Ensure user_oidc app is enabled
-      if ! $occ app:list | grep -q "user_oidc"; then
-        $occ app:enable user_oidc
-      fi
+      # Ensure user_oidc app is enabled — always run, it's idempotent.
+      # The app:list check is unreliable (lists disabled apps too), which
+      # causes config:app:set and user_oidc:provider to fail because the
+      # app's commands aren't registered unless it's actually enabled.
+      $occ app:enable user_oidc
 
       # Make OIDC the default login method: hides the local login form and
       # auto-redirects to the IdP. Admins can still reach the native form via

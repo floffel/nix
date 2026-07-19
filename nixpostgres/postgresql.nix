@@ -213,7 +213,7 @@ SQL
 
   services.redis.servers.nextcloud = {
     enable = true;
-    bind = "*";
+    bind = "* -::*";
     port = 6379;
     save = [[900 1]];
     requirePassFile = "/var/lib/secrets/redis/nextcloud-password";

@@ -16,7 +16,7 @@
   systemd.services.nsd-dnssec = lib.mkForce {
     description = "DNSSEC key rollover";
     wantedBy = [ "nsd.service" ];
-    before = [ "nsd.service" ];
+    after = [ "nsd.service" ];
     path = with pkgs; [ bind nsd ];
     script =
       let

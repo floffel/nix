@@ -229,7 +229,6 @@ in
         sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         extraConfig = ''
           charset utf-8;
-          client_max_body_size 6G;
           expires 1m;
 
           add_header Referrer-Policy "no-referrer" always;

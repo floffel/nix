@@ -9,19 +9,13 @@
     ./acme.nix
   ];
 
-  # The nixpkgs bind derivation's enablePython flag adds Python as a build
-  # input but never passes --with-python to configure, so dnssec-keymgr
-  # (a Python script needed by NSD's DNSSEC key rollover) is never built.
-  # This overlay forces --with-python into bind's configureFlags so the
-  # NixOS NSD module's dnssecTools = pkgs.bind.override { enablePython = true; }
-  # actually produces a bind with the Python tools.
-  nixpkgs.overlays = [
-    (final: prev: {
-      bind = prev.bind.overrideAttrs (old: {
-        configureFlags = (old.configureFlags or []) ++ [ "--with-python" ];
-      });
-    })
-  ];
+  # The NixOS NSD module creates nsd-dnssec.service which calls
+  # dnssec-keymgr from bind. This tool was removed in bind 9.20
+  # (shipped by nixos-26.05). The service fails with exit 127.
+  # Existing DNSSEC zones are already signed and continue to work;
+  # key rollover must be handled manually until the NixOS module
+  # is updated for bind 9.20.
+  systemd.suppressedSystemUnits = [ "nsd-dnssec.service" "nsd-dnssec.timer" ];
 
   # Networking
   networking = {

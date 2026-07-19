@@ -128,7 +128,7 @@
             --auto-discover-url "https://idm.minnecker.com/oauth2/openid/forgejo/.well-known/openid-configuration" \
             --scopes "openid email profile"
         fi
-      ) 9>/var/lock/forgejo-oidc-reconcile.lock
+      ) 9>/var/lib/forgejo/oidc-reconcile.lock
     '';
   };
 }

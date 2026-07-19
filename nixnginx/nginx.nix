@@ -25,7 +25,6 @@ let
   };
 
   nextcloud-setup-script = pkgs.writeShellScript "nextcloud-setup-override" ''
-    source /etc/setup-variables
     set -euo pipefail
 
     export OCC_BIN="${config.services.nextcloud.occ}/bin/nextcloud-occ"

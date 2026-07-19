@@ -435,7 +435,6 @@ in
         root = "${config.services.roundcube.package}/public_html";
         locations."/" = {
           index = "index.php";
-          extraConfig = "try_files $uri $uri/ /index.php?$args;";
         };
         locations."~ \\.php(/.*)?$" = {
           extraConfig = ''

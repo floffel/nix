@@ -787,7 +787,7 @@ systemd.services.nextcloud-setup.unitConfig = { };
     ];
     serviceConfig.ExecStart = lib.mkForce nextcloud-setup-script;
     serviceConfig.TimeoutStopSec = "30s";
-    serviceConfig.TimeoutStartSec = "120s";
+    serviceConfig.TimeoutStartSec = "600s";
     serviceConfig.KillMode = "mixed";
     serviceConfig.KillSignal = "SIGINT";
   };

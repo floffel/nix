@@ -112,5 +112,11 @@ in
     serviceConfig.ExecReload = "${pkgs.coreutils}/bin/kill -HUP $MAINPID";
   };
 
-  systemd.services.nsd-dnssec.path = [ dnssecTools ];
+  # The NixOS NSD module's nsd-dnssec unit script references
+  # dnssecTools = pkgs.bind.override { enablePython = true; } via
+  # an absolute store path. Nix closure computation does not follow
+  # the reference chain toplevel → etc → systemd unit → unit-script
+  # → bind, so the bind store path gets GC'd on deployed containers.
+  # system.extraDependencies forces the path into the toplevel closure.
+  system.extraDependencies = [ dnssecTools ];
 }

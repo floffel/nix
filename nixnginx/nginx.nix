@@ -745,20 +745,17 @@ in
       # flag explicitly permits local-remote calls so the OIDC flow can
       # reach the IdP through the local nginx listener.
       allow_local_remote_servers = true;
-
-      # Redis for session caching and distributed locking, provided by
-      # nixpostgres on the container LAN. Host and port go into config.php
-      # via settings; the password is injected via secretFile to avoid
-      # being baked into the world-readable Nix store.
-      "memcache.distributed" = ''\OC\Memcache\Redis'';
-      "memcache.locking" = ''\OC\Memcache\Redis'';
-      redis = {
-        host = "nixpostgres";
-        port = 6379;
-      };
     };
-    
-    configureRedis = false;
+
+    # Redis for session caching and distributed locking, provided by
+    # nixpostgres on the container LAN. configureRedis loads the PHP
+    # Redis extension, generates config.php redis cache entries, and
+    # picks up the password from secretFile.
+    redis = {
+      host = "nixpostgres";
+      port = 6379;
+    };
+    configureRedis = true;
 
     # Redis password injected via JSON secret file generated at boot
     # from the shared NAS mount. Must not go through settings because

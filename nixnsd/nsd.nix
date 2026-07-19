@@ -99,5 +99,13 @@ in
   #   zone-announce-signatures: yes
   # '''';
 
-  systemd.services.nsd.serviceConfig.ExecReload = "${pkgs.coreutils}/bin/kill -HUP $MAINPID";
+  systemd.services.nsd = {
+    serviceConfig.ExecReload = "${pkgs.coreutils}/bin/kill -HUP $MAINPID";
+  };
+
+  # Ensure bind is in the system closure. The NixOS NSD module creates
+  # nsd-dnssec.service which calls dnssec-keymgr from pkgs.bind, but the
+  # store path embedded in the unit script may not be captured by the
+  # closure computation. Adding bind to the service path guarantees it.
+  systemd.services.nsd-dnssec.path = [ pkgs.bind ];
 }

@@ -103,9 +103,13 @@ in
     serviceConfig.ExecReload = "${pkgs.coreutils}/bin/kill -HUP $MAINPID";
   };
 
-  # Ensure bind is in the system closure. The NixOS NSD module creates
-  # nsd-dnssec.service which calls dnssec-keymgr from pkgs.bind, but the
-  # store path embedded in the unit script may not be captured by the
-  # closure computation. Adding bind to the service path guarantees it.
-  systemd.services.nsd-dnssec.path = [ pkgs.bind ];
+  # The NixOS NSD module creates nsd-dnssec.service with a unit script that
+  # calls ${pkgs.bind}/bin/dnssec-keymgr via an absolute store path. The
+  # reference chain from the system toplevel through the unit script to
+  # the bind binary is not reliably captured by closure computation, so
+  # bind gets garbage collected on deployed containers (nix.gc = weekly).
+  # Adding bind to systemPackages forces it into the toplevel's direct
+  # dependency tree, protecting both the current and future bind store
+  # paths from GC.
+  environment.systemPackages = [ pkgs.bind ];
 }

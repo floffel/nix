@@ -258,8 +258,8 @@
             machine.wait_for_unit("nsd.service", timeout=120)
             machine.wait_for_unit("nsd-dnssec.timer", timeout=30)
             machine.log("nsd-dnssec.timer exists — DNSSEC key rollover is scheduled")
-            machine.succeed("test -f ${pkgs.ldns}/bin/ldns-keygen")
-            machine.log("ldns-keygen binary present — DNSSEC key generation dependency satisfied")
+            machine.succeed("test -f ${pkgs.bind}/bin/dnssec-keygen")
+            machine.log("dnssec-keygen binary present — DNSSEC key generation dependency satisfied")
           '';
         };
 

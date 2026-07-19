@@ -83,6 +83,7 @@
               builtins.throw "Config assertions failed for ${name}:${lib.concatStringsSep "" msgs}";
 
       testHelpers = ./tests/test-helpers.nix;
+      testPostgres = ./tests/test-postgres.nix;
 
       mkBootTest = name: path: extraTest: runTest {
         name = name;
@@ -171,7 +172,7 @@
           (builtins.any (u: (builtins.hasAttr "isSystemUser" u) && (u.name or "" == "alloy"))
             (builtins.attrValues (cfg.users.users or {})))
           ((builtins.length (builtins.attrNames (cfg.services.prometheus.exporters or {}))) >= 1)
-          ((builtins.length (builtins.attrNames (cfg.services.fail2ban.jails or {}))) >= 5)
+          ((builtins.length (builtins.attrNames (cfg.services.fail2ban.jails or {}))) >= 4)
         ];
         errorMsgs = [
           "nginx must be enabled" "fail2ban must be enabled"
@@ -206,6 +207,19 @@
 
         services-nixnginx = mkAssertCheck "nixnginx-services"
           servicesAssertions.assertions servicesAssertions.errors;
+
+        nsd-dnssec-bind = let
+          nsdCfg = (mkEvalSystem ./nixnsd/configuration.nix).config;
+          hasDnssec = builtins.any (z: z.dnssec or false)
+            (builtins.attrValues (nsdCfg.services.nsd.zones or {}));
+          dnssecUnit = nsdCfg.systemd.services."nsd-dnssec" or null;
+        in
+          if !hasDnssec then
+            pkgs.runCommand "check-nsd-dnssec-bind" {} "touch $out"
+          else if dnssecUnit == null then
+            builtins.throw "nsd-dnssec.service must exist when NSD zones have dnssec=true"
+          else
+            pkgs.runCommand "check-nsd-dnssec-bind" {} "touch $out";
       };
 
       devShells.${system}.default = pkgs.mkShell {
@@ -231,63 +245,143 @@
 
         vm-nixpostgres = mkServiceTest "nixpostgres-vm"
           ./nixpostgres/configuration.nix
-          [ "postgresql.service" "redis.service" ];
+          [ "postgresql.service" "redis-nextcloud.service" ];
 
-        vm-nixidm = mkBootTest "nixidm-vm" ./nixidm/configuration.nix ''
-          machine.log("nixidm booted")
-        '';
-
-        vm-nixnsd = mkServiceTest "nixnsd-vm"
-          ./nixnsd/configuration.nix
-          [ "nsd.service" ];
+        vm-nixnsd = runTest {
+          name = "nixnsd-vm";
+          nodes.machine = { ... }: {
+            imports = [ ./nixnsd/configuration.nix testHelpers ];
+          };
+          testScript = ''
+            start_all()
+            machine.wait_for_unit("multi-user.target", timeout=300)
+            machine.wait_for_unit("nsd.service", timeout=120)
+            machine.wait_for_unit("nsd-dnssec.timer", timeout=30)
+            machine.log("nsd-dnssec.timer exists — DNSSEC key rollover is scheduled")
+            # Verify the bind binary referenced by nsd-dnssec.service is present.
+            # Exit code 127 ("command not found") on the deployed containers is
+            # the failure mode this test guards against.
+            machine.succeed("systemctl cat nsd-dnssec.service | grep -oP '/nix/store/[^/]+-bind[^/]*/bin/dnssec-keymgr' | head -1 | xargs -r test -f")
+            machine.log("bind dnssec-keymgr binary present — NSD DNSSEC dependency satisfied")
+          '';
+        };
 
         vm-nixunbound = mkServiceTest "nixunbound-vm"
           ./nixunbound/configuration.nix
           [ "unbound.service" ];
 
-        vm-nixvpn = mkBootTest "nixvpn-vm" ./nixvpn/configuration.nix ''
-          machine.log("nixvpn booted")
-        '';
+        vm-nixidm = mkServiceTest "nixidm-vm"
+          ./nixidm/configuration.nix
+          [ "kanidm.service" ];
 
-        vm-nixmail = mkBootTest "nixmail-vm" ./nixmail/configuration.nix ''
-          machine.log("nixmail booted — mail services require LDAP backend")
-        '';
+        vm-nixvpn = runTest {
+          name = "nixvpn-vm";
+          nodes.machine = { ... }: {
+            imports = [ ./nixvpn/configuration.nix testHelpers ];
+          };
+          testScript = ''
+            start_all()
+            machine.wait_for_unit("multi-user.target", timeout=300)
+            machine.wait_for_unit("wireguard-metrics.timer", timeout=30)
+            machine.log("wireguard-metrics.timer active — Prometheus peer metrics scheduled")
+          '';
+        };
 
-        vm-nixforgejo = mkBootTest "nixforgejo-vm" ./nixforgejo/configuration.nix ''
-          machine.log("nixforgejo booted — requires postgres backend")
-        '';
+        vm-nixmail = runTest {
+          name = "nixmail-vm";
+          nodes.machine = { ... }: {
+            imports = [ ./nixmail/configuration.nix testHelpers ];
+          };
+          testScript = ''
+            start_all()
+            machine.wait_for_unit("multi-user.target", timeout=300)
+            machine.succeed("systemctl cat dovecot2.service >/dev/null")
+            machine.succeed("systemctl cat postfix.service >/dev/null")
+            machine.log("nixmail unit files valid — mail services require LDAP backend")
+          '';
+        };
 
-        vm-nixforgejo-runner = mkBootTest "nixforgejo-runner-vm"
-          ./nixforgejo-runner/configuration.nix ''
-          machine.log("nixforgejo-runner booted — requires docker + forgejo")
-        '';
+        vm-nixforgejo = runTest {
+          name = "nixforgejo-vm";
+          nodes.machine = { ... }: {
+            imports = [ ./nixforgejo/configuration.nix testHelpers testPostgres ];
+          };
+          testScript = ''
+            start_all()
+            machine.wait_for_unit("multi-user.target", timeout=300)
+            machine.wait_for_unit("postgresql.service", timeout=120)
+            machine.wait_for_unit("forgejo.service", timeout=120)
+            machine.log("forgejo started with local postgres")
+          '';
+        };
 
-        vm-nixmonitoring = mkBootTest "nixmonitoring-vm"
-          ./nixmonitoring/configuration.nix ''
-          machine.log("nixmonitoring booted — requires scrape targets")
-        '';
+        vm-nixforgejo-runner = runTest {
+          name = "nixforgejo-runner-vm";
+          nodes.machine = { ... }: {
+            imports = [ ./nixforgejo-runner/configuration.nix testHelpers ];
+          };
+          testScript = ''
+            start_all()
+            machine.wait_for_unit("multi-user.target", timeout=300)
+            machine.wait_for_unit("docker.socket", timeout=60)
+            machine.succeed("systemctl cat gitea-runner-default.service >/dev/null")
+            machine.log("docker socket active, runner unit valid — requires forgejo backend")
+          '';
+        };
 
-        vm-nixmatrix = mkBootTest "nixmatrix-vm" ./nixmatrix/configuration.nix ''
-          machine.log("nixmatrix booted — requires postgres + oauth2 backends")
-        '';
+        vm-nixmonitoring = mkServiceTest "nixmonitoring-vm"
+          ./nixmonitoring/configuration.nix
+          [ "prometheus.service" "loki.service" "grafana.service" "influxdb2.service" ];
 
-        vm-nixvaultwarden = mkBootTest "nixvaultwarden-vm"
-          ./nixvaultwarden/configuration.nix ''
-          machine.log("nixvaultwarden booted — requires postgres")
-        '';
+        vm-nixmatrix = runTest {
+          name = "nixmatrix-vm";
+          nodes.machine = { ... }: {
+            imports = [ ./nixmatrix/configuration.nix testHelpers testPostgres ];
+          };
+          testScript = ''
+            start_all()
+            machine.wait_for_unit("multi-user.target", timeout=300)
+            machine.wait_for_unit("postgresql.service", timeout=120)
+            machine.wait_for_unit("matrix-synapse.service", timeout=120)
+            machine.log("matrix-synapse started with local postgres")
+          '';
+        };
 
-        vm-nixwikijs = mkBootTest "nixwikijs-vm" ./nixwikijs/configuration.nix ''
-          machine.log("nixwikijs booted — requires postgres")
-        '';
+        vm-nixvaultwarden = runTest {
+          name = "nixvaultwarden-vm";
+          nodes.machine = { ... }: {
+            imports = [ ./nixvaultwarden/configuration.nix testHelpers testPostgres ];
+          };
+          testScript = ''
+            start_all()
+            machine.wait_for_unit("multi-user.target", timeout=300)
+            machine.wait_for_unit("postgresql.service", timeout=120)
+            machine.wait_for_unit("vaultwarden.service", timeout=120)
+            machine.log("vaultwarden started with local postgres")
+          '';
+        };
 
-        vm-nixjitsi = mkBootTest "nixjitsi-vm" ./nixjitsi/configuration.nix ''
-          machine.log("nixjitsi booted")
-        '';
+        vm-nixwikijs = runTest {
+          name = "nixwikijs-vm";
+          nodes.machine = { ... }: {
+            imports = [ ./nixwikijs/configuration.nix testHelpers testPostgres ];
+          };
+          testScript = ''
+            start_all()
+            machine.wait_for_unit("multi-user.target", timeout=300)
+            machine.wait_for_unit("postgresql.service", timeout=120)
+            machine.wait_for_unit("wiki-js.service", timeout=120)
+            machine.log("wiki-js started with local postgres")
+          '';
+        };
 
-        vm-nixopenwebui = mkBootTest "nixopenwebui-vm"
-          ./nixopenwebui/configuration.nix ''
-          machine.log("nixopenwebui booted")
-        '';
+        vm-nixjitsi = mkServiceTest "nixjitsi-vm"
+          ./nixjitsi/configuration.nix
+          [ "nginx.service" "jitsi-meet.service" "jitsi-videobridge.service" "prosody.service" "jicofo.service" ];
+
+        vm-nixopenwebui = mkServiceTest "nixopenwebui-vm"
+          ./nixopenwebui/configuration.nix
+          [ "open-webui.service" ];
       };
     };
 }

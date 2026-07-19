@@ -116,13 +116,23 @@
 
       mkdir -p /var/lib/secrets/forgejo
       openssl rand -base64 32 > /var/lib/secrets/forgejo/runner-token
-      chmod 600 /var/lib/secrets/forgejo/runner-token
+      echo "placeholder-token" > /var/lib/secrets/forgejo/runner-secrets
+      chmod 600 /var/lib/secrets/forgejo/runner-token /var/lib/secrets/forgejo/runner-secrets
 
       mkdir -p /var/lib/nextcloud-data
       chmod 700 /var/lib/nextcloud-data
 
       mkdir -p /var/lib/node-exporter-textfile
       chmod 755 /var/lib/node-exporter-textfile
+
+      mkdir -p /var/lib/secrets/redis
+      head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > /var/lib/secrets/redis/nextcloud-password
+      chmod 600 /var/lib/secrets/redis/nextcloud-password
     '';
   };
+
+  # Nullify provisioning services that check mountpoint - /var/lib/secrets
+  # is a regular directory in test VMs, not a bind mount.
+  systemd.services.postgresql-password-provisioning.serviceConfig.ExecStart = lib.mkForce [ "${pkgs.coreutils}/bin/true" ];
+  systemd.services.redis-nextcloud-password-provisioning.serviceConfig.ExecStart = lib.mkForce [ "${pkgs.coreutils}/bin/true" ];
 }

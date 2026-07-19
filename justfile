@@ -35,7 +35,10 @@ test-vm:
     nix build .#vmTests.x86_64-linux.vm-nixpostgres --accept-flake-config --no-link -L
     nix build .#vmTests.x86_64-linux.vm-nixnsd --accept-flake-config --no-link -L
     nix build .#vmTests.x86_64-linux.vm-nixunbound --accept-flake-config --no-link -L
-    @echo "=== Core VM tests passed (nixnginx, nixpostgres, nixnsd, nixunbound) ==="
+    nix build .#vmTests.x86_64-linux.vm-nixforgejo --accept-flake-config --no-link -L
+    nix build .#vmTests.x86_64-linux.vm-nixidm --accept-flake-config --no-link -L
+    nix build .#vmTests.x86_64-linux.vm-nixmonitoring --accept-flake-config --no-link -L
+    @echo "=== Core VM tests passed (nixnginx, nixpostgres, nixnsd, nixunbound, nixforgejo, nixidm, nixmonitoring) ==="
 
 # Full test suite (evaluation + config assertions + VM)
 test-full: test test-vm

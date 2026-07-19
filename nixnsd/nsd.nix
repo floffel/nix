@@ -4,12 +4,14 @@
 let
   # The NixOS NSD module creates nsd-dnssec.service using
   # dnssecTools = pkgs.bind.override { enablePython = true; }.
-  # The unit script embeds this store path via ${dnssecTools}/bin/dnssec-keymgr.
-  # Nix's closure computation does not reliably follow the reference chain
-  # toplevel → etc → unit → unit-script → bind, so bind gets GC'd on
-  # deployed containers. Adding dnssecTools to the service path embeds
-  # the store path in the unit file itself, which Nix always scans.
-  dnssecTools = pkgs.bind.override { enablePython = true; };
+  # However, the nixpkgs bind derivation's enablePython flag only adds
+  # Python as a build input but never passes --with-python to configure,
+  # so the Python-based tools (dnssec-keymgr) are never actually built.
+  # Work around this by overriding bind with the missing configure flag
+  # AND ensure it's in the closure via system.extraDependencies.
+  dnssecTools = (pkgs.bind.override { enablePython = true; }).overrideAttrs (old: {
+    configureFlags = old.configureFlags or [] ++ [ "--with-python" ];
+  });
 
   # Common secondary nameservers for zone transfers and notifications
   commonProvideXFR = [

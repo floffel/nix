@@ -44,6 +44,10 @@ let
     if [[ ! -s /var/lib/nextcloud-data/config/config.php ]]; then
       DBPASS="$(<"$CRED_DIR/dbpass")"
       ADMINPASS="$(<"$CRED_DIR/adminpass")"
+      # NixOS activation may create a zero-byte config.php owned by
+      # nobody (uid 65534) on NFS mounts due to root_squash. occ
+      # checks ownership and refuses to run if it exists, even if empty.
+      rm -f /var/lib/nextcloud-data/config/config.php
       $OCC_BIN maintenance:install \
         --admin-pass "$ADMINPASS" \
         --admin-user "admin" \

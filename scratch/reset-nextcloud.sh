@@ -43,6 +43,11 @@ else
   info "No config.php found — already clean"
 fi
 
+if [ -f "$DATA_DIR/config/config.php" ]; then
+  info "Deleting $DATA_DIR/config/config.php"
+  rm -f "$DATA_DIR/config/config.php"
+fi
+
 # -- 3. Wipe data directory ------------------------------------------
 # Keep the config/ subdirectory (expected by systemd-tmpfiles with
 # nextcloud:nextcloud ownership). Only wipe user data.

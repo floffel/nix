@@ -41,6 +41,9 @@ let
       echo "/var/lib/nextcloud-data/config not owned by nextcloud!" >&2; exit 1
     fi
 
+    touch /var/lib/nextcloud-data/config/config.php
+    chown nextcloud:nextcloud /var/lib/nextcloud-data/config/config.php
+
     if [[ ! -s /var/lib/nextcloud-data/config/config.php ]]; then
       DBPASS="$(<"$CRED_DIR/dbpass")"
       ADMINPASS="$(<"$CRED_DIR/adminpass")"
@@ -53,6 +56,7 @@ let
         --database-name "nextcloud" \
         --database-pass "$DBPASS" \
         --database-user "nextcloud"
+      chown nextcloud:nextcloud /var/lib/nextcloud-data/config/config.php
     fi
 
     $OCC_BIN upgrade || true

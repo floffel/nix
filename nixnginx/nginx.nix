@@ -857,6 +857,8 @@ systemd.services.nextcloud-setup.unitConfig = { };
         --clientsecret="$client_secret" \
         --discoveryuri="$discovery" \
         --scope="openid email profile groups_name" \
+        --mapping-uid="preferred_username" \
+        --unique-uid=0 \
         --mapping-groups="groups" \
         --group-provisioning=1
       echo "Kanidm OIDC provider registered/updated."

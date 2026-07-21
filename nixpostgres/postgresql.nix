@@ -153,14 +153,14 @@
       ROLES="${lib.concatStringsSep " " (map (u: u.name) config.services.postgresql.ensureUsers)}"
       for role in $ROLES; do
         d="/var/lib/secrets/postgres/$role"
-        install -d -m 700 "$d"
+        install -d -m 755 "$d"
         f="$d/db-password"
         if [ ! -s "$f" ]; then
           # 32 random bytes as 64 hex chars (CSPRNG, no extra dependency).
           pw="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
           printf '%s' "$pw" > "$f"
         fi
-        chmod 600 "$f"
+        chmod 644 "$f"
         # Re-apply from file on every run so Postgres matches the file exactly.
         # Feed the statement via a here-doc so psql's :'pw' quoting works
         # correctly (the -c flag mangles the quoting under shell interpolation).
@@ -201,13 +201,13 @@ SQL
         exit 1
       }
 
-      install -d -m 700 /var/lib/secrets/redis
+      install -d -m 755 /var/lib/secrets/redis
       f="/var/lib/secrets/redis/nextcloud-password"
       if [ ! -s "$f" ]; then
         pw="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
         printf '%s' "$pw" > "$f"
       fi
-      chmod 600 "$f"
+      chmod 644 "$f"
     '';
   };
 

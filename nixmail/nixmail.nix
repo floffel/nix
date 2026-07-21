@@ -47,7 +47,7 @@
 
       # 1. Dovecot LDAP password file
       printf '%s' "$TOKEN" > "$DEST/dovecot/ldap-password.txt"
-      chmod 600 "$DEST/dovecot/ldap-password.txt"
+      chmod 644 "$DEST/dovecot/ldap-password.txt"
       if id dovecot >/dev/null 2>&1; then
         chown "$(id -u dovecot):$(id -g dovecot)" "$DEST/dovecot/ldap-password.txt"
       fi
@@ -67,7 +67,7 @@
           echo "version = 3"
           echo "tls_require_cert = no"
         } > "$DEST/postfix/$name"
-        chmod 600 "$DEST/postfix/$name"
+        chmod 644 "$DEST/postfix/$name"
       }
 
       write_cf ldap-recipients.cf  '(&(mail=%s)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))' mail -

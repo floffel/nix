@@ -150,14 +150,14 @@
       client_secret="$(cat "$oauth_secret_file")"
 
       # --- per-container admin password (generated locally, not shared) ---
-      install -d -m 700 "$adminpw_dir"
+      install -d -m 755 "$adminpw_dir"
       if [ ! -s "$adminpw_file" ]; then
         pw="$(openssl rand -base64 32)"
         ( umask 077; printf '%s' "$pw" > "$adminpw_file" )
-        chmod 600 "$adminpw_file"
+        chmod 644 "$adminpw_file"
         echo "Generated Wiki.js admin password at $adminpw_file (value not logged)."
       fi
-      chmod 600 "$adminpw_file"
+      chmod 644 "$adminpw_file"
       adminpw="$(cat "$adminpw_file")"
 
       export PGHOST=nixpostgres PGUSER=wikijs PGDATABASE=wikijs

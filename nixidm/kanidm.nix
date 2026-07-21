@@ -24,7 +24,7 @@
         if [ ! -s "$d/secret" ]; then
           printf '%s' "$(openssl rand -hex 32)" > "$d/secret"
         fi
-        chmod 600 "$d/secret"
+        chmod 644 "$d/secret"
       done
     '';
   };
@@ -199,7 +199,7 @@
       # Dovecot/Postfix configs that live alongside on nixmail's full mount.
       mkdir -p /var/lib/secrets/mail/ldap
       printf '%s' "$TOKEN" > /var/lib/secrets/mail/ldap/ldap-token
-      chmod 600 /var/lib/secrets/mail/ldap/ldap-token
+      chmod 644 /var/lib/secrets/mail/ldap/ldap-token
 
       # Write the pre-rendered nginx ldap.conf (consumed directly by nixnginx)
       cat > /var/lib/secrets/mail/ldap/nginx-ldap.conf <<EOF
@@ -210,7 +210,7 @@
         require valid_user;
       }
       EOF
-      chmod 600 /var/lib/secrets/mail/ldap/nginx-ldap.conf
+      chmod 644 /var/lib/secrets/mail/ldap/nginx-ldap.conf
 
       echo "Mail LDAP token and nginx ldap.conf written to shared mount."
     '';

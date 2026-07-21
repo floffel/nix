@@ -86,14 +86,14 @@
       set -euo pipefail
       d=/var/lib/secrets/open-webui
       f="$d/env"
-      install -d -m 700 -o root -g root "$d"
+      install -d -m 755 -o root -g root "$d"
       # Create the file if it doesn't exist; never overwrite so manual
       # overrides survive restarts.
       if [ ! -e "$f" ]; then
         : > "$f"
       fi
       chown root:root "$f"
-      chmod 600 "$f"
+      chmod 644 "$f"
     '';
   };
 }

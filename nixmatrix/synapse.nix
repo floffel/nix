@@ -104,7 +104,7 @@
       EOF
       fi
       chown matrix-synapse:matrix-synapse "$f"
-      chmod 600 "$f"
+      chmod 644 "$f"
     '';
   };
 

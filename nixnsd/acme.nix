@@ -69,7 +69,7 @@ in
           cp fullchain.pem /var/lib/secrets/ssl/minnecker.com/fullchain.pem
           cp key.pem /var/lib/secrets/ssl/minnecker.com/key.pem
           chmod 644 /var/lib/secrets/ssl/minnecker.com/fullchain.pem
-          chmod 600 /var/lib/secrets/ssl/minnecker.com/key.pem
+          chmod 644 /var/lib/secrets/ssl/minnecker.com/key.pem
         '';
       };
       "floffel.de" = {
@@ -80,7 +80,7 @@ in
           cp fullchain.pem /var/lib/secrets/ssl/floffel.de/fullchain.pem
           cp key.pem /var/lib/secrets/ssl/floffel.de/key.pem
           chmod 644 /var/lib/secrets/ssl/floffel.de/fullchain.pem
-          chmod 600 /var/lib/secrets/ssl/floffel.de/key.pem
+          chmod 644 /var/lib/secrets/ssl/floffel.de/key.pem
         '';
       };
       "sbminnecker.de" = {
@@ -91,7 +91,7 @@ in
           cp fullchain.pem /var/lib/secrets/ssl/sbminnecker.de/fullchain.pem
           cp key.pem /var/lib/secrets/ssl/sbminnecker.de/key.pem
           chmod 644 /var/lib/secrets/ssl/sbminnecker.de/fullchain.pem
-          chmod 600 /var/lib/secrets/ssl/sbminnecker.de/key.pem
+          chmod 644 /var/lib/secrets/ssl/sbminnecker.de/key.pem
         '';
       };
       "substitution.art" = {
@@ -102,7 +102,7 @@ in
           cp fullchain.pem /var/lib/secrets/ssl/substitution.art/fullchain.pem
           cp key.pem /var/lib/secrets/ssl/substitution.art/key.pem
           chmod 644 /var/lib/secrets/ssl/substitution.art/fullchain.pem
-          chmod 600 /var/lib/secrets/ssl/substitution.art/key.pem
+          chmod 644 /var/lib/secrets/ssl/substitution.art/key.pem
         '';
       };
     };

@@ -71,7 +71,7 @@
     path = [ pkgs.openssl pkgs.coreutils ];
     script = ''
       set -euo pipefail
-      install -d -m 700 -o vaultwarden -g vaultwarden /var/lib/secrets/vaultwarden
+      install -d -m 755 -o vaultwarden -g vaultwarden /var/lib/secrets/vaultwarden
       tpl=/var/lib/secrets/vaultwarden/env-template
       if [ ! -s "$tpl" ]; then
         echo "Generating new ADMIN_TOKEN..."
@@ -79,7 +79,7 @@
         ( umask 077
           printf 'ADMIN_TOKEN=%s\n' "$token" > "$tpl"
         )
-        chmod 600 "$tpl"
+        chmod 644 "$tpl"
         chown vaultwarden:vaultwarden "$tpl"
         echo "ADMIN_TOKEN written to $tpl (value not logged)."
       else

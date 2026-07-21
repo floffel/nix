@@ -35,7 +35,7 @@
         openssl rand -hex 16 > "$d/secret-key"
       fi
       chown grafana:grafana "$d/admin-password" "$d/secret-key"
-      chmod 600 "$d/admin-password" "$d/secret-key"
+      chmod 644 "$d/admin-password" "$d/secret-key"
     '';
   };
 
@@ -215,7 +215,7 @@
       # Also store the initial admin token for future token management.
       if [ ! -s "$d/admin-token" ]; then
         printf '%s' "$TOKEN" > "$d/admin-token"
-        chmod 600 "$d/admin-token"
+        chmod 644 "$d/admin-token"
       fi
       echo "InfluxDB initialized: org=minnecker bucket=proxmox token=$d/token"
     '';

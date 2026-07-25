@@ -15,9 +15,10 @@
     # Static IP Configuration matching the server setup
     useDHCP = false;
 
-    # Firewall configuration disabled per environment requirements
+    # Firewall configuration
     firewall = {
       enable = false;
+      allowedTCPPorts = [ 2222 ];
     };
   };
 }

@@ -26,6 +26,7 @@
         HTTP_PORT = 3000;
 
         # Forgejo's built-in SSH server for git clone/push via ssh://
+        START_SSH_SERVER = true;
         SSH_PORT = 2222;
 
         # Forgejo sits behind the nixnginx reverse proxy. Trust the forwarded

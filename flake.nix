@@ -308,7 +308,8 @@
             machine.wait_for_unit("multi-user.target", timeout=300)
             machine.wait_for_unit("postgresql.service", timeout=120)
             machine.wait_for_unit("forgejo.service", timeout=120)
-            machine.log("forgejo started with local postgres")
+            machine.wait_for_open_port(2222, timeout=30)
+            machine.log("forgejo started with local postgres, SSH server on port 2222")
           '';
         };
 

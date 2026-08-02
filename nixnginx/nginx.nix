@@ -233,14 +233,6 @@ in
         extraConfig = ''
           charset utf-8;
           expires 1m;
-
-          add_header Referrer-Policy "no-referrer" always;
-          add_header X-Content-Type-Options "nosniff" always;
-          add_header X-Download-Options "noopen" always;
-          add_header X-Frame-Options "allow-from https://col.flos.dev/" always;
-          add_header X-Permitted-Cross-Domain-Policies "none" always;
-          add_header X-Robots-Tag "none" always;
-          add_header X-XSS-Protection "1; mode=block" always;
         '';
       };
 
@@ -713,6 +705,10 @@ in
     datadir = "/var/lib/nextcloud-data";
 
     maxUploadSize = "6G";
+
+    # Served over HTTPS by nginx → module injects the HSTS
+    # (Strict-Transport-Security) header that the security check expects.
+    https = true;
     
     # We do not run a local database, it resides on nixpostgres
     database.createLocally = false;
@@ -740,6 +736,10 @@ in
       forwarded_for_headers = [];
       overwriteprotocol = "https";
 
+      # Run the maintenance window (daily background jobs) at 02:00 local
+      # time to avoid resource-heavy tasks during normal usage hours.
+      maintenance_window_start = 2;
+
       # idm.minnecker.com resolves to this host's own IP (10.20.20.14) via
       # networking.extraHosts, to dodge the hairpin-NAT self-reference
       # described in configuration.nix. Nextcloud's Guzzle HTTP client
@@ -765,6 +765,12 @@ in
     
     configureRedis = false;
 
+    # The bundled default opcache.interned_strings_buffer of 8 is nearly
+    # full and trips the admin security check; raise it comfortably.
+    phpOptions = {
+      "opcache.interned_strings_buffer" = "128";
+    };
+
     # configureRedis adds a local Unix-socket Redis (conflicts with our
     # remote nixpostgres Redis), so we load the PHP Redis extension
     # manually instead.
@@ -778,7 +784,7 @@ in
     # Install the OIDC client application
     extraAppsEnable = true;
     extraApps = {
-      inherit (pkgs.nextcloud33Packages.apps) user_oidc;
+      inherit (pkgs.nextcloud33Packages.apps) user_oidc calendar;
     };
   };
 

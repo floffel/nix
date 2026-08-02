@@ -765,12 +765,14 @@ in
     
     configureRedis = false;
 
-    # The bundled default opcache.interned_strings_buffer of 8 is nearly
-    # full and trips the admin security check. Bumped above 8; kept small
-    # (16M) so it fits the container's shared-memory limit and stays well
-    # under opcache.memory_consumption (128M default).
+    # Raised above the security-check threshold of 8. The interned strings
+    # buffer is carved out of the opcache shared-memory segment, so
+    # memory_consumption must be raised alongside it — with the module
+    # default of 128M a 128M buffer leaves no room for the code cache and
+    # php-fpm aborts at startup with "insufficient shared memory".
     phpOptions = {
-      "opcache.interned_strings_buffer" = "16";
+      "opcache.interned_strings_buffer" = "128";
+      "opcache.memory_consumption" = "512";
     };
 
     # configureRedis adds a local Unix-socket Redis (conflicts with our

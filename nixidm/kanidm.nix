@@ -341,15 +341,16 @@
           originLanding = "https://cloud.minnecker.com/";
           basicSecretFile = "/var/lib/secrets/oauth2/nextcloud/secret";
           # user_oidc maps a `groups` claim onto local Nextcloud groups; a
-          # claim value of "admin" grants server admin. We deliberately use the
-          # standard `groups` scope (NOT `groups_name`, which repopulates the
-          # `groups` claim with every raw group name the user belongs to and
-          # thereby overwrites the claimMap's "admin" injection below — exactly
-          # why the admin group never materialised). With `groups`, the
-          # claimMap below is the sole source of the `groups` claim, so admins
-          # get groups=["admin"] and regular users get groups=[].
+          # claim value of "admin" grants server admin. We request NO built-in
+          # groups scope here (neither `groups` nor `groups_name`): both
+          # built-ins repopulate the `groups` claim with the user's full raw
+          # group list (uuid+spn, or names) and DROP the claimMap's "admin"
+          # injection below — which is why the admin group never materialised
+          # and Nextcloud filled up with group rubble. With no built-in groups
+          # scope, claimMaps.groups is the sole source of the `groups` claim:
+          # admins get groups=["admin"], regular users get groups=[].
           scopeMaps = {
-            nextcloud_users = [ "openid" "email" "profile" "groups" ];
+            nextcloud_users = [ "openid" "email" "profile" ];
           };
           claimMaps.groups = {
             joinType = "array";

@@ -455,7 +455,7 @@ in
         forceSSL = true;
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
         sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
-        root = "/usr/share/webapps/element/";
+        root = "${pkgs.element-web}";
         extraConfig = ''
           charset utf-8;
           client_max_body_size 2G;

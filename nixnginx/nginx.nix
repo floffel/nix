@@ -493,6 +493,17 @@ in
             proxy_send_timeout 600;
           '';
         };
+
+        # Synapse admin API and OIDC callback (/_synapse/client/oidc/callback).
+        locations."/_synapse" = {
+          proxyPass = "http://matrix";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
       };
 
       # vault.minnecker.com (Vaultwarden Proxy)

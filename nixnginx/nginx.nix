@@ -788,7 +788,7 @@ in
     # Install the OIDC client application
     extraAppsEnable = true;
     extraApps = {
-      inherit (pkgs.nextcloud33Packages.apps) user_oidc calendar;
+      inherit (pkgs.nextcloud33Packages.apps) user_oidc calendar contacts;
     };
   };
 

@@ -62,6 +62,13 @@
     ];
   };
 
+  # The default systemd unit sandboxes write access: only media_store is
+  # writable. Allow writes to the secrets directory so preStart's sed -i
+  # can rewrite client_secret and db-password on every start.
+  systemd.services.matrix-synapse.serviceConfig.ReadWritePaths = [
+    "/var/lib/secrets/matrix"
+  ];
+
   # Provision the secrets.yaml file idempotently on first boot, mirroring the
   # grafana-secrets / vaultwarden-secrets pattern. The file only contains
   # placeholders for the OIDC client config (no real secret material); the

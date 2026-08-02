@@ -64,6 +64,18 @@ let
     $OCC_BIN config:system:set trusted_domains 0 --value="cloud.minnecker.com"
     echo "Done."
   '';
+
+  # Element Web client — configured to connect to the local Synapse homeserver.
+  element-web = pkgs.element-web.override {
+    conf = {
+      default_server_config = {
+        "m.homeserver" = {
+          base_url = "https://matrix.minnecker.com";
+          server_name = "minnecker.com";
+        };
+      };
+    };
+  };
 in
 {
   # 1. Custom Nginx Service Configuration
@@ -455,7 +467,7 @@ in
         forceSSL = true;
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
         sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
-        root = "${pkgs.element-web}";
+        root = "${element-web}";
         extraConfig = ''
           charset utf-8;
           client_max_body_size 2G;

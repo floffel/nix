@@ -19,8 +19,6 @@
           bind_addresses = [ "::" ];
           type = "http";
           tls = false;
-          # Trust X-Forwarded-For from the nixnginx reverse proxy so Synapse
-          # logs and tracks the real client IP instead of the proxy address.
           x_forwarded = true;
           resources = [
             {
@@ -35,10 +33,11 @@
         }
       ];
 
-      # Database connection is configured in extraConfigFiles (secrets.yaml)
-      # to avoid leaking the password into the Nix store. The full database
-      # block (name + args, including password) lives there so the shallow
-      # multi-file merge replaces the block entirely rather than losing keys.
+      # Database connection and OIDC config live in a runtime-generated
+      # secrets.yaml (see matrix-synapse-secrets-config oneshot below).
+      # Both are excluded from settings here because Synapse shallow-merges
+      # extraConfigFiles — top-level keys from the extra file replace the
+      # main config entirely, so the full block must be in one place.
 
       # Disable public registration (new accounts created only via SSO)
       enable_registration = false;
@@ -48,106 +47,66 @@
       password_config = {
         enabled = false;
       };
-
-      # Configure OAuth/OIDC against Kanidm SSO
-      # Note: oidc_providers is configured in /var/lib/secrets/matrix/secrets.yaml
-      # to prevent exposing the client_secret in the Nix store. A preStart hook
-      # rewrites the client_secret line in that file from the shared OAuth2
-      # secret mount on every start so it can never drift from Kanidm's value.
     };
 
-    # Load sensitive data (database password, OIDC client secret) at startup from runtime file
+    # Load the runtime-generated config with database and OIDC secrets.
+    # This file lives on the writable local filesystem, not the read-only
+    # secrets mount, so it can be regenerated on every start.
     extraConfigFiles = [
-      "/var/lib/secrets/matrix/secrets.yaml"
+      "/var/lib/matrix-synapse/secrets.yaml"
     ];
   };
 
-  # The default systemd unit sandboxes write access: only media_store is
-  # writable. Allow writes to the secrets directory so preStart's sed -i
-  # can rewrite client_secret and db-password on every start.
-  systemd.services.matrix-synapse.serviceConfig.ReadWritePaths = [
-    "/var/lib/secrets/matrix"
-  ];
-
-  # Provision the secrets.yaml file idempotently on first boot, mirroring the
-  # grafana-secrets / vaultwarden-secrets pattern. The file only contains
-  # placeholders for the OIDC client config (no real secret material); the
-  # matrix-synapse.preStart hook below rewrites the two placeholder lines from
-  # the shared NAS mounts on every start so they can never drift. Existing
-  # files are never overwritten, so manual edits survive rebuilds.
-  systemd.services.matrix-synapse-secrets = {
-    description = "Provision Matrix Synapse secrets.yaml";
+  # Generate a fresh secrets.yaml on every service start with the real
+  # credentials from the shared secrets mounts. Runs as root (no systemd
+  # seccomp sandbox) before matrix-synapse, so sed-in-place and mount
+  # permissions are irrelevant — cat into a writable local path.
+  systemd.services.matrix-synapse-secrets-config = {
+    description = "Generate Matrix Synapse runtime config (database + OIDC)";
     wantedBy = [ "matrix-synapse.service" ];
     before = [ "matrix-synapse.service" ];
+    partOf = [ "matrix-synapse.service" ];
+    bindsTo = [ "matrix-synapse.service" ];
     serviceConfig = {
       Type = "oneshot";
-      RemainAfterExit = true;
     };
     path = [ pkgs.coreutils ];
     script = ''
-      d=/var/lib/secrets/matrix
-      f="$d/secrets.yaml"
-      mkdir -p "$d"
-      chown matrix-synapse:matrix-synapse "$d"
-      if [ ! -s "$f" ]; then
-        echo "Writing $f with placeholder secrets"
-        cat > "$f" <<'EOF'
-      database:
-        name: "psycopg2"
-        args:
-          user: "matrix"
-          database: "matrix"
-          host: "nixpostgres"
-          port: 5432
-          password: "PLACEHOLDER_REWRITTEN_FROM_SHARED_MOUNT"
-        allow_unsafe_locale: true
-      oidc_providers:
-        - idp_id: "kanidm"
-          idp_name: "Kanidm SSO"
-          issuer: "https://idm.minnecker.com/oauth2/openid/matrix"
-          client_id: "matrix"
-          client_secret: "PLACEHOLDER_REWRITTEN_FROM_SHARED_MOUNT"
-          scopes: ["openid", "profile", "email"]
-          user_mapping_provider:
-            config:
-              subject_claim: "sub"
-              localpart_claim: "preferred_username"
-              display_name_claim: "name"
-              email_claim: "email"
-      EOF
-      fi
-      chown matrix-synapse:matrix-synapse "$f"
-      chmod 644 "$f"
+      set -euo pipefail
+
+      OUT=/var/lib/matrix-synapse/secrets.yaml
+
+      DBPW=$(cat /var/lib/secrets/postgres/matrix/db-password 2>/dev/null || echo "PLACEHOLDER")
+      CLIENTSECRET=$(cat /var/lib/secrets/oauth2/matrix/secret 2>/dev/null || echo "PLACEHOLDER")
+
+      install -d -m 755 -o matrix-synapse -g matrix-synapse "$(dirname "$OUT")"
+
+      cat > "$OUT" <<EOF
+database:
+  name: "psycopg2"
+  args:
+    user: "matrix"
+    database: "matrix"
+    host: "nixpostgres"
+    port: 5432
+    password: "$DBPW"
+  allow_unsafe_locale: true
+oidc_providers:
+  - idp_id: "kanidm"
+    idp_name: "Kanidm SSO"
+    issuer: "https://idm.minnecker.com/oauth2/openid/matrix"
+    client_id: "matrix"
+    client_secret: "$CLIENTSECRET"
+    scopes: ["openid", "profile", "email"]
+    user_mapping_provider:
+      config:
+        subject_claim: "sub"
+        localpart_claim: "preferred_username"
+        display_name_claim: "name"
+        email_claim: "email"
+EOF
+      chown matrix-synapse:matrix-synapse "$OUT"
+      chmod 600 "$OUT"
     '';
   };
-
-  # Keep secrets.yaml in sync with the shared secrets mounts on every start:
-  #   * the OIDC client_secret is rewritten from the shared OAuth2 secret file
-  #     that Kanidm provisions (/var/lib/secrets/oauth2/matrix/secret, the same
-  #     file nixidm reads), avoiding a stale secret -> 401 at token exchange.
-  #   * the database password is rewritten from the shared Postgres secrets
-  #     mount (/var/lib/secrets/postgres/matrix/db-password, provisioned on
-  #     nixpostgres), so Postgres remains the sole writer of DB passwords and
-  #     the value in secrets.yaml can never drift from the role's password.
-  systemd.services.matrix-synapse.preStart = ''
-    YAML_FILE="/var/lib/secrets/matrix/secrets.yaml"
-
-    SECRET_FILE="/var/lib/secrets/oauth2/matrix/secret"
-    if [ -r "$SECRET_FILE" ] && [ -f "$YAML_FILE" ]; then
-      SECRET=$(cat "$SECRET_FILE")
-      grep -q '^[[:space:]]*client_secret:' "$YAML_FILE" || { echo "Error: client_secret: line not found in $YAML_FILE" >&2; exit 1; }
-      ${pkgs.gnused}/bin/sed -i -E \
-        "s#^([[:space:]]*)client_secret:.*#\1client_secret: \"$SECRET\"#" \
-        "$YAML_FILE"
-    fi
-
-    DBPW_FILE="/var/lib/secrets/postgres/matrix/db-password"
-    if [ -r "$DBPW_FILE" ] && [ -f "$YAML_FILE" ]; then
-      DBPW=$(cat "$DBPW_FILE")
-      grep -q '^[[:space:]]*password:' "$YAML_FILE" || { echo "Error: password: line not found in $YAML_FILE" >&2; exit 1; }
-      ${pkgs.gnused}/bin/sed -i -E \
-        "s#^([[:space:]]*)password:.*#\1password: \"$DBPW\"#" \
-        "$YAML_FILE"
-    fi
-  '';
 }

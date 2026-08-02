@@ -39,10 +39,8 @@
       # extraConfigFiles — top-level keys from the extra file replace the
       # main config entirely, so the full block must be in one place.
 
-      # Auto-provision new users on first OIDC login. password_config.enabled
-      # is false (below) so manual signup via username/password is impossible
-      # — only SSO creates accounts.
-      enable_registration = true;
+      # Disable public registration (new accounts created only via SSO)
+      enable_registration = false;
 
       # SSO-only login: hide the username/password form so Kanidm OIDC is the
       # only way in (matches the new identity-based setup).

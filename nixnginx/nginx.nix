@@ -736,6 +736,10 @@ in
       forwarded_for_headers = [];
       overwriteprotocol = "https";
 
+      # File-based logging so the log viewer works in the web admin UI
+      # (the module default of "syslog" disables it).
+      log_type = "file";
+
       # Run the maintenance window (daily background jobs) at 02:00 local
       # time to avoid resource-heavy tasks during normal usage hours.
       maintenance_window_start = 2;

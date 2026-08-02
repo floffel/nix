@@ -50,6 +50,12 @@
       # Disable public registration (new accounts created only via SSO)
       enable_registration = false;
 
+      # SSO-only login: hide the username/password form so Kanidm OIDC is the
+      # only way in (matches the new identity-based setup).
+      password_config = {
+        enabled = false;
+      };
+
       # Configure OAuth/OIDC against Kanidm SSO
       # Note: oidc_providers is configured in /var/lib/secrets/matrix/secrets.yaml
       # to prevent exposing the client_secret in the Nix store. A preStart hook

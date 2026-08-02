@@ -341,10 +341,15 @@
           originLanding = "https://cloud.minnecker.com/";
           basicSecretFile = "/var/lib/secrets/oauth2/nextcloud/secret";
           # user_oidc maps a `groups` claim onto local Nextcloud groups; a
-          # claim value of "admin" grants server admin. The groups_name scope
-          # also flows regular group membership through.
+          # claim value of "admin" grants server admin. We deliberately use the
+          # standard `groups` scope (NOT `groups_name`, which repopulates the
+          # `groups` claim with every raw group name the user belongs to and
+          # thereby overwrites the claimMap's "admin" injection below — exactly
+          # why the admin group never materialised). With `groups`, the
+          # claimMap below is the sole source of the `groups` claim, so admins
+          # get groups=["admin"] and regular users get groups=[].
           scopeMaps = {
-            nextcloud_users = [ "openid" "email" "profile" "groups_name" ];
+            nextcloud_users = [ "openid" "email" "profile" "groups" ];
           };
           claimMaps.groups = {
             joinType = "array";
@@ -383,7 +388,7 @@
 
         matrix = {
           displayName = "Matrix Synapse";
-          originUrl = "https://matrix.minnecker.com/_synapse/client/oauth2/callback";
+          originUrl = "https://matrix.minnecker.com/_synapse/client/oidc/callback";
           originLanding = "https://matrix.minnecker.com/";
           basicSecretFile = "/var/lib/secrets/oauth2/matrix/secret";
           scopeMaps = { matrix_users = [ "openid" "email" "profile" ]; };

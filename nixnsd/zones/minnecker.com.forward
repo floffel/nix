@@ -1,6 +1,6 @@
 $TTL 7200
 @   IN SOA r.floffel.de. postmaster.minnecker.com. (
-    1781361005	; serial
+    2026080201	; serial
     14400       ; refresh
     3600        ; retry
     604800      ; expire
@@ -48,5 +48,5 @@ backendmail		 IN CNAME  riese
 _acme-challenge          IN A       127.0.0.1
 *			 IN CNAME  px
 mail		 IN CNAME  riese
-matrix		 IN CNAME  riese
+matrix		 IN CNAME  px
 kie		 IN CNAME  px

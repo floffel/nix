@@ -93,6 +93,7 @@
           host: "nixpostgres"
           port: 5432
           password: "PLACEHOLDER_REWRITTEN_FROM_SHARED_MOUNT"
+        allow_unsafe_locale: true
       oidc_providers:
         - idp_id: "kanidm"
           idp_name: "Kanidm SSO"

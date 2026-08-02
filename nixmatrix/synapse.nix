@@ -35,17 +35,10 @@
         }
       ];
 
-      # Connect to PostgreSQL on nixpostgres container
-      database = {
-        name = "psycopg2";
-        args = {
-          user = "matrix";
-          database = "matrix";
-          host = "nixpostgres";
-          port = 5432;
-          # Password loaded from extraConfigFiles to avoid store leak
-        };
-      };
+      # Database connection is configured in extraConfigFiles (secrets.yaml)
+      # to avoid leaking the password into the Nix store. The full database
+      # block (name + args, including password) lives there so the shallow
+      # multi-file merge replaces the block entirely rather than losing keys.
 
       # Disable public registration (new accounts created only via SSO)
       enable_registration = false;
@@ -88,11 +81,17 @@
       d=/var/lib/secrets/matrix
       f="$d/secrets.yaml"
       mkdir -p "$d"
+      chown matrix-synapse:matrix-synapse "$d"
       if [ ! -s "$f" ]; then
         echo "Writing $f with placeholder secrets"
         cat > "$f" <<'EOF'
       database:
+        name: "psycopg2"
         args:
+          user: "matrix"
+          database: "matrix"
+          host: "nixpostgres"
+          port: 5432
           password: "PLACEHOLDER_REWRITTEN_FROM_SHARED_MOUNT"
       oidc_providers:
         - idp_id: "kanidm"

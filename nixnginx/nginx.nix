@@ -766,9 +766,11 @@ in
     configureRedis = false;
 
     # The bundled default opcache.interned_strings_buffer of 8 is nearly
-    # full and trips the admin security check; raise it comfortably.
+    # full and trips the admin security check. Bumped above 8; kept small
+    # (16M) so it fits the container's shared-memory limit and stays well
+    # under opcache.memory_consumption (128M default).
     phpOptions = {
-      "opcache.interned_strings_buffer" = "128";
+      "opcache.interned_strings_buffer" = "16";
     };
 
     # configureRedis adds a local Unix-socket Redis (conflicts with our

@@ -31,7 +31,7 @@ for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
   ksk_file=""
   for f in "$KEYDIR"/K"${zone}".+013+*.key; do
     [ -f "$f" ] || continue
-    if grep -qE "DNSKEY\s+257\s" "$f" 2>/dev/null; then
+    if head -1 "$f" | grep -q "key-signing key" 2>/dev/null; then
       ksk_file="$f"
       break
     fi
@@ -42,7 +42,7 @@ for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
     continue
   fi
 
-  dnskey_line=$(head -1 "$ksk_file")
+  dnskey_line=$(grep -v "^;" "$ksk_file" | head -1)
   echo "  KeyFile: $(basename "$ksk_file")"
   echo "  DNSKEY: ${dnskey_line}"
 

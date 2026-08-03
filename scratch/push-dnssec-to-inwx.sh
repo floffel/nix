@@ -43,16 +43,27 @@ for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
 
   echo "=== ${zone} ==="
 
-  # Get DS records from the signed zone file
-  ds_records=$(grep -E "^${zone/./\\.}\.[[:space:]]+[0-9]+[[:space:]]+IN[[:space:]]+DS[[:space:]]" "$zonefile" 2>/dev/null || true)
+  # Get DNSKEY records from the signed zone file
+  tmpfile=$(mktemp)
+  dnskeys=$(grep -E "^${zone/./\\.}\.[[:space:]]+[0-9]+[[:space:]]+IN[[:space:]]+DNSKEY[[:space:]]+" "$zonefile" 2>/dev/null || true)
+
+  if [ -z "$dnskeys" ]; then
+    echo "  WARNING: No DNSKEY records found in signed zone file" >&2
+    rm -f "$tmpfile"
+    continue
+  fi
+
+  echo "$dnskeys" > "$tmpfile"
+  ds_records=$(dnssec-dsfromkey -2 "$tmpfile" 2>/dev/null || true)
+  rm -f "$tmpfile"
 
   if [ -z "$ds_records" ]; then
-    echo "  WARNING: No DS records found in signed zone file" >&2
+    echo "  WARNING: Could not generate DS records from DNSKEY" >&2
     continue
   fi
 
   # Parse DS records and push each
-  echo "$ds_records" | while read -r _ _ _ keytag algo digest_type digest; do
+  echo "$ds_records" | while read -r _ _ _ _ keytag algo digest_type digest; do
     echo "  KeyTag=${keytag} Alg=${algo} Type=${digest_type} Digest=${digest}"
 
     body="

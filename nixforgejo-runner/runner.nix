@@ -10,7 +10,11 @@ let
         - ubuntu-latest:docker://node:20-bullseye
         - ubuntu-22.04:docker://node:20-bullseye
         - ubuntu-20.04:docker://node:20-bullseye
+        - docker:docker://node:20-bullseye
         - native:host
+
+    container:
+      docker_host: automount
   '';
 
   mergeConfig = pkgs.writeShellScript "forgejo-merge-config" ''
@@ -51,8 +55,13 @@ in
         "ubuntu-latest:docker://node:20-bullseye"
         "ubuntu-22.04:docker://node:20-bullseye"
         "ubuntu-20.04:docker://node:20-bullseye"
+        "docker:docker://node:20-bullseye"
         "native:host"
       ];
+
+      settings = {
+        container.docker_host = "automount";
+      };
     };
   };
 

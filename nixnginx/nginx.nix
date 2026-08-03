@@ -553,6 +553,51 @@ in
             proxy_set_header Host $host;
           '';
         };
+        locations."/complete-compat-sso" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
+        locations."/graphql" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
+        locations."/token" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
+        locations."/userinfo" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
+        locations."/jwks" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
         locations."/_matrix" = {
           proxyPass = "http://matrix";
           extraConfig = ''

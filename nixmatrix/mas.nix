@@ -157,7 +157,7 @@ in
       DBPW=$(cat /var/lib/secrets/postgres/matrix/mas-db-password 2>/dev/null || echo "PLACEHOLDER")
       CLIENT_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
       ADMIN_TOKEN=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
-      OIDC_SECRET=$(cat /var/lib/secrets/oauth2/mas/secret 2>/dev/null || echo "PLACEHOLDER")
+      OIDC_SECRET=$(cat /var/lib/secrets/oauth2/matrix/mas-secret 2>/dev/null || echo "PLACEHOLDER")
 
       cat > /run/matrix-authentication-service/secrets.yaml <<EOF
 database:

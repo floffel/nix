@@ -62,20 +62,24 @@
         -subj "/CN=*.substitution.art" 2>/dev/null
 
       THE_PASS="$(openssl rand -base64 12)"
-      for role in forgejo nextcloud roundcube matrix vaultwarden wikijs mas; do
+      for role in forgejo nextcloud roundcube matrix vaultwarden wikijs; do
         role_dir="/var/lib/secrets/postgres/$role"
         mkdir -p "$role_dir"
         echo "$THE_PASS" > "$role_dir/db-password"
         chmod 600 "$role_dir/db-password"
       done
+      echo "$THE_PASS" > /var/lib/secrets/postgres/matrix/mas-db-password
+      chmod 600 /var/lib/secrets/postgres/matrix/mas-db-password
 
       mkdir -p /var/lib/secrets/oauth2
-      for client in forgejo nextcloud grafana mas vaultwarden wikijs; do
+      for client in forgejo nextcloud grafana vaultwarden wikijs; do
         client_dir="/var/lib/secrets/oauth2/$client"
         mkdir -p "$client_dir"
         openssl rand -base64 32 > "$client_dir/secret"
         chmod 600 "$client_dir/secret"
       done
+      openssl rand -base64 32 > /var/lib/secrets/oauth2/matrix/mas-secret
+      chmod 600 /var/lib/secrets/oauth2/matrix/mas-secret
 
       mkdir -p /var/lib/secrets/nginx
       openssl rand -base64 16 > /var/lib/secrets/nginx/nextcloud-admin-password.txt

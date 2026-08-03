@@ -90,6 +90,7 @@ upstream_oauth2:
       human_name: "Kanidm"
       issuer: "https://idm.minnecker.com/oauth2/openid/mas"
       client_id: "mas"
+      token_endpoint_auth_method: "client_secret_basic"
       scope: "openid profile email"
       claims_imports:
         localpart:

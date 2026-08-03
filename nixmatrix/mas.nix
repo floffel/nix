@@ -96,7 +96,7 @@ upstream_oauth2:
       claims_imports:
         localpart:
           action: "require"
-          template: "{{ user.preferred_username | split(pat='@') | first }}"
+          template: "{{ user.name }}"
         displayname:
           action: "suggest"
           template: "{{ user.name }}"

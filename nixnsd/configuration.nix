@@ -17,7 +17,7 @@
     description = "DNSSEC key rollover";
     wantedBy = [ "nsd.service" ];
     after = [ "nsd.service" ];
-    path = with pkgs; [ bind nsd ];
+    path = with pkgs; [ bind nsd curl ];
     script =
       let
         stateDir = "/var/lib/nsd";
@@ -43,6 +43,12 @@
         install -m 0600 -o nsd -g nsd -d "${stateDir}/dnssec"
         ${lib.concatStringsSep "\n" zoneScripts}
         /run/current-system/systemd/bin/systemctl kill -s SIGHUP nsd.service
+
+        # Push new DS records to INWX registrar
+        if [ -x /root/nixos-config/scratch/push-dnssec-to-inwx.sh ]; then
+          echo "DNSSEC: pushing DS records to INWX..."
+          /root/nixos-config/scratch/push-dnssec-to-inwx.sh || echo "DNSSEC: WARNING - INWX push failed (check /var/lib/secrets/nsd/inwx.env)"
+        fi
       '';
     serviceConfig = {
       Type = "oneshot";

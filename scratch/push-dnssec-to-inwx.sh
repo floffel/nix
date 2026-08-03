@@ -82,7 +82,7 @@ for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
         <name>digest</name><value><string>${digest}</string></value>
       </member>"
 
-    result=$(inwx_call "domain.pushDnsSec" "$body")
+    result=$(inwx_call "dnssec.adddnskey" "$body")
     echo "  API response: ${result}" >&2
 
     if echo "$result" | grep -q '<name>code</name><value><int>1000</int>'; then

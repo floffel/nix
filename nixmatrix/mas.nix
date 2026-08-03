@@ -46,7 +46,11 @@ let
         }
       ];
     };
-    database.uri = "postgresql://mas@nixpostgres/mas";
+    database = {
+      host = "nixpostgres";
+      username = "mas";
+      database = "mas";
+    };
     matrix = {
       homeserver = "minnecker.com";
       endpoint = "http://localhost:8008";

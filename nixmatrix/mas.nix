@@ -112,10 +112,25 @@ matrix:
   secret: "$ADMIN_TOKEN"
 clients:
   - client_id: "${synapseClientId}"
+    client_auth_method: "client_secret_basic"
     client_secret: "$CLIENT_SECRET"
 upstream_oauth2:
   providers:
     - id: "${upstreamProviderId}"
+      human_name: "Kanidm"
+      issuer: "https://idm.minnecker.com/oauth2/openid/mas"
+      client_id: "mas"
+      scope: "openid profile email"
+      claims_imports:
+        localpart:
+          action: "require"
+          template: "{{ user.preferred_username }}"
+        displayname:
+          action: "suggest"
+          template: "{{ user.name }}"
+        email:
+          action: "suggest"
+          template: "{{ user.email }}"
       client_secret: "$OIDC_SECRET"
 EOF
         chmod 644 /run/matrix-authentication-service/secrets.yaml

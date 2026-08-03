@@ -340,8 +340,9 @@
             start_all()
             machine.wait_for_unit("multi-user.target", timeout=300)
             machine.wait_for_unit("postgresql.service", timeout=120)
+            machine.wait_for_unit("matrix-authentication-service.service", timeout=120)
             machine.wait_for_unit("matrix-synapse.service", timeout=120)
-            machine.log("matrix-synapse started with local postgres")
+            machine.log("matrix-synapse and MAS started with local postgres")
           '';
         };
 

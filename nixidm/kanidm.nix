@@ -18,7 +18,7 @@
     };
     path = [ pkgs.openssl ];
     script = ''
-      for c in forgejo nextcloud grafana matrix vaultwarden wikijs; do
+      for c in forgejo nextcloud grafana mas vaultwarden wikijs; do
         d=/var/lib/secrets/oauth2/$c
         mkdir -p "$d"
         if [ ! -s "$d/secret" ]; then
@@ -387,11 +387,11 @@
           };
         };
 
-        matrix = {
-          displayName = "Matrix Synapse";
-          originUrl = "https://matrix.minnecker.com/_synapse/client/oidc/callback";
+        mas = {
+          displayName = "Matrix Authentication Service";
+          originUrl = "https://matrix.minnecker.com/upstream/callback/01J8QGXVJHSKAB1JFJYF2TBBDD";
           originLanding = "https://matrix.minnecker.com/";
-          basicSecretFile = "/var/lib/secrets/oauth2/matrix/secret";
+          basicSecretFile = "/var/lib/secrets/oauth2/mas/secret";
           scopeMaps = { matrix_users = [ "openid" "email" "profile" ]; };
         };
 

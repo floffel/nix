@@ -27,6 +27,7 @@
       "matrix"
       "vaultwarden"
       "wikijs"
+      "mas"
     ];
 
     # Automatically ensure users exist and own their respective databases
@@ -55,6 +56,10 @@
         name = "wikijs";
         ensureDBOwnership = true;
       }
+      {
+        name = "mas";
+        ensureDBOwnership = true;
+      }
     ];
 
     # Client authentication rules (pg_hba.conf)
@@ -79,12 +84,14 @@
       host    matrix          matrix          10.20.20.1/24          scram-sha-256
       host    vaultwarden     vaultwarden     10.20.20.1/24          scram-sha-256
       host    wikijs          wikijs          10.20.20.1/24          scram-sha-256
+      host    mas             mas             10.20.20.1/24          scram-sha-256
       host    roundcube       roundcube       fd01::1/64             scram-sha-256
       host    nextcloud       nextcloud       fd01::1/64             scram-sha-256
       host    forgejo         forgejo         fd01::1/64             scram-sha-256
       host    matrix          matrix          fd01::1/64             scram-sha-256
       host    vaultwarden     vaultwarden     fd01::1/64             scram-sha-256
       host    wikijs          wikijs          fd01::1/64             scram-sha-256
+      host    mas             mas             fd01::1/64             scram-sha-256
     '';
   };
 

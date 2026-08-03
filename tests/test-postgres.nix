@@ -10,12 +10,14 @@
       "vaultwarden"
       "wikijs"
       "matrix"
+      "mas"
     ];
     ensureUsers = [
       { name = "forgejo"; ensureDBOwnership = true; }
       { name = "vaultwarden"; ensureDBOwnership = true; }
       { name = "wikijs"; ensureDBOwnership = true; }
       { name = "matrix"; ensureDBOwnership = true; }
+      { name = "mas"; ensureDBOwnership = true; }
     ];
     authentication = lib.mkForce ''
       local all all trust

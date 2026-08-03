@@ -141,6 +141,7 @@ in
     upstreams = {
       forgejo.servers = { "nixforgejo:3000" = {}; };
       matrix.servers = { "nixmatrix:8008" = {}; };
+      mas.servers = { "nixmatrix:8080" = {}; };
       jitsi.servers = { "nixjitsi:80" = {}; };
       wikijs.servers = { "nixwikijs:3000" = {}; };
       vaultwarden.servers = { "nixvaultwarden:8080" = {}; };
@@ -462,7 +463,7 @@ in
         '';
       };
 
-      # matrix.minnecker.com (Element Web client & Matrix Synapse Reverse Proxy)
+      # matrix.minnecker.com (Element Web client, MAS OAuth, & Matrix Synapse Reverse Proxy)
       "matrix.minnecker.com" = {
         forceSSL = true;
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
@@ -471,6 +472,15 @@ in
         extraConfig = ''
           charset utf-8;
           client_max_body_size 2G;
+
+          # MAS compatibility layer: login/logout/refresh → MAS instead of Synapse
+          location ~ ^/_matrix/client/(.*)/(login|logout|refresh) {
+            proxy_http_version 1.1;
+            proxy_pass http://mas;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          }
         '';
         locations."/.well-known/matrix/server" = {
           extraConfig = "return 200 '{ \"m.server\": \"matrix.minnecker.com:443\" }';";
@@ -478,6 +488,69 @@ in
         locations."/.well-known/matrix/client" = {
           extraConfig = ''
             return 200 '{ "m.homeserver": { "base_url": "https://matrix.minnecker.com" } }';
+          '';
+        };
+        locations."/.well-known/openid-configuration" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
+        locations."/.well-known/oauth-authorization-server" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
+        locations."/account" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
+        locations."/authorize" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
+        locations."/api" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
+        locations."/upstream" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
+        locations."/assets" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
           '';
         };
         locations."/_matrix" = {
@@ -494,7 +567,7 @@ in
           '';
         };
 
-        # Synapse admin API and OIDC callback (/_synapse/client/oidc/callback).
+        # Synapse admin API (no longer serves OIDC callbacks — MAS handles those)
         locations."/_synapse" = {
           proxyPass = "http://matrix";
           extraConfig = ''

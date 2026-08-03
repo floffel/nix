@@ -62,7 +62,7 @@
         -subj "/CN=*.substitution.art" 2>/dev/null
 
       THE_PASS="$(openssl rand -base64 12)"
-      for role in forgejo nextcloud roundcube matrix vaultwarden wikijs; do
+      for role in forgejo nextcloud roundcube matrix vaultwarden wikijs mas; do
         role_dir="/var/lib/secrets/postgres/$role"
         mkdir -p "$role_dir"
         echo "$THE_PASS" > "$role_dir/db-password"
@@ -70,7 +70,7 @@
       done
 
       mkdir -p /var/lib/secrets/oauth2
-      for client in forgejo nextcloud grafana matrix vaultwarden wikijs; do
+      for client in forgejo nextcloud grafana mas vaultwarden wikijs; do
         client_dir="/var/lib/secrets/oauth2/$client"
         mkdir -p "$client_dir"
         openssl rand -base64 32 > "$client_dir/secret"

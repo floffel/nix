@@ -6,6 +6,7 @@
     ../common-lxc.nix
     ../hosts.nix
     ./synapse.nix
+    ./mas.nix
   ];
 
   # Networking

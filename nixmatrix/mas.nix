@@ -4,7 +4,7 @@ let
   package = pkgs.matrix-authentication-service;
   synapseClientId = "0000000000000000000SYNAPSE";
   upstreamProviderId = "01J8QGXVJHSKAB1JFJYF2TBBDD";
-  localpartTemplate = "{{ user.preferred_username | split(pat='@') | first | lower }}";
+  localpartTemplate = "{{ (user.preferred_username | split('@'))[0] | lower }}";
 
   configYaml = pkgs.formats.yaml { };
 

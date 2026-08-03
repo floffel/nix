@@ -7,7 +7,6 @@ set -euo pipefail
 
 SECRETS_FILE="/var/lib/secrets/nsd/inwx.env"
 API_URL="https://api.domrobot.com/xmlrpc/"
-KEYDIR="/var/lib/nsd/dnssec"
 
 if [ ! -f "$SECRETS_FILE" ]; then
   echo "ERROR: $SECRETS_FILE not found — create it with INWX_USER and INWX_PASS" >&2
@@ -38,20 +37,13 @@ inwx_call() {
 }
 
 for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
+  zonefile="/var/lib/nsd/zones/${zone}"
+  [ -f "$zonefile" ] || continue
+
   echo "=== ${zone} ==="
 
-  # Find KSK key file (KSK has flags=257 in the .key file)
-  ksk_file=$(ls "${KEYDIR}/K${zone}.+013+"*.key 2>/dev/null | while read -r f; do
-    grep -q "^${zone}\..*IN DNSKEY 257 " "$f" 2>/dev/null && echo "$f"
-  done | head -1)
-
-  if [ -z "$ksk_file" ]; then
-    echo "  WARNING: No KSK key file found for ${zone}" >&2
-    continue
-  fi
-
-  # Generate DS from KSK
-  ds_records=$(nix-shell -p bind --run "dnssec-dsfromkey -2 '${ksk_file}'" 2>/dev/null || true)
+  # Generate DS from the signed zone file (extracts KSK DNSKEY, generates DS)
+  ds_records=$(nix-shell -p bind --run "dnssec-dsfromkey -2 -s '${zonefile}'" 2>/dev/null || true)
 
   if [ -z "$ds_records" ]; then
     echo "  WARNING: Could not generate DS records from DNSKEY" >&2

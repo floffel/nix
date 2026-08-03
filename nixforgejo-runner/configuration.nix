@@ -15,14 +15,15 @@
     # Static IP Configuration matching the server setup
     useDHCP = false;
 
-    # Ensure proper DNS resolution from within the container
-    # (systemd-networkd should handle this via proxmoxLXC, but
-    #  explicitly setting nameservers guarantees resolv.conf is correct)
-    nameservers = [ "10.20.20.16" "185.12.64.1" ];
-
     # Firewall configuration disabled per environment requirements
     firewall = {
       enable = false;
     };
   };
+
+  # Disable systemd-resolved — the Proxmox LXC pushes public DNS servers
+  # that don't know about local domains (git.minnecker.com, etc.).
+  # Fall back to static /etc/resolv.conf from hosts.nix which points to
+  # the local Unbound resolver at 10.20.20.16.
+  services.resolved.enable = false;
 }

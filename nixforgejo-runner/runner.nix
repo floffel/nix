@@ -35,6 +35,9 @@ let
 in
 {
   virtualisation.docker.enable = true;
+  virtualisation.docker.daemon.settings = {
+    dns = [ "10.20.20.16" "185.12.64.1" ];
+  };
   virtualisation.docker.autoPrune = {
     enable = true;
     dates = "weekly";

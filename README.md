@@ -384,6 +384,22 @@ Below are the key files and credentials required per container:
 
 #### 🌐 nixnsd (NSD Authoritative Nameserver)
 * **TSIG Key**: Write the base64-encoded secondary sync TSIG transfer key to `/var/lib/secrets/nsd/sync.key` (owned by `nsd:nsd`, `chmod 600`).
+* **INWX API Credentials** (for automatic DNSSEC DS record push):
+  Write `/var/lib/secrets/nsd/inwx.env` (chmod 600):
+  ```env
+  INWX_USER=your_username
+  INWX_PASS=your_password
+  ```
+* **DNSSEC key rotation** is handled by the `nsd-dnssec` service triggered by a systemd timer.
+  When keys are rotated and zones are re-signed, the new DS records are automatically pushed
+  to INWX via `scratch/push-dnssec-to-inwx.sh`. Run manually at any time:
+  ```bash
+  /root/nixos-config/scratch/push-dnssec-to-inwx.sh
+  ```
+  To retrieve DNSKEY and DS records for all zones:
+  ```bash
+  /root/nixos-config/scratch/get-dnssec-records.sh
+  ```
 
 #### 🚀 nixforgejo-runner (Forgejo Actions Runner)
 * **Registration Token**: Write `/var/lib/secrets/forgejo/runner-token` (chmod 600):

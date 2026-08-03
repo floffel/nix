@@ -54,38 +54,8 @@ let
     matrix = {
       homeserver = "minnecker.com";
       endpoint = "http://localhost:8008";
-      secret = "PLACEHOLDER";
     };
     passwords.enabled = false;
-    upstream_oauth2.providers = [
-      {
-        id = upstreamProviderId;
-        human_name = "Kanidm";
-        issuer = "https://idm.minnecker.com/oauth2/openid/mas";
-        client_id = "mas";
-        scope = "openid profile email";
-        claims_imports = {
-          localpart = {
-            action = "require";
-            template = "{{ user.preferred_username }}";
-          };
-          displayname = {
-            action = "suggest";
-            template = "{{ user.name }}";
-          };
-          email = {
-            action = "suggest";
-            template = "{{ user.email }}";
-          };
-        };
-      }
-    ];
-    clients = [
-      {
-        client_id = synapseClientId;
-        client_auth_method = "client_secret_basic";
-      }
-    ];
   };
 in
 {

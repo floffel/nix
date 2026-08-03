@@ -92,6 +92,35 @@ in
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "simple";
+      RuntimeDirectory = "matrix-authentication-service";
+      RuntimeDirectoryMode = "0755";
+      ExecStartPre = pkgs.writeShellScript "mas-runtime-secrets" ''
+        set -euo pipefail
+        DBPW=$(cat /var/lib/secrets/postgres/matrix/mas-db-password 2>/dev/null || echo "PLACEHOLDER")
+        CLIENT_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+        ADMIN_TOKEN=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+        OIDC_SECRET=$(cat /var/lib/secrets/oauth2/matrix/mas-secret 2>/dev/null || echo "PLACEHOLDER")
+
+        cat > /run/matrix-authentication-service/secrets.yaml <<EOF
+database:
+  password: "$DBPW"
+matrix:
+  secret: "$ADMIN_TOKEN"
+clients:
+  - client_id: "${synapseClientId}"
+    client_secret: "$CLIENT_SECRET"
+upstream_oauth2:
+  providers:
+    - id: "${upstreamProviderId}"
+      client_secret: "$OIDC_SECRET"
+EOF
+        chmod 644 /run/matrix-authentication-service/secrets.yaml
+
+        printf '%s' "$CLIENT_SECRET" > /run/matrix-authentication-service/synapse-client-secret
+        printf '%s' "$ADMIN_TOKEN" > /run/matrix-authentication-service/synapse-admin-token
+        chmod 644 /run/matrix-authentication-service/synapse-client-secret \
+          /run/matrix-authentication-service/synapse-admin-token
+      '';
       ExecStart = lib.concatStringsSep " " [
         "${lib.getExe package}" "server"
         "--config" "${mainConfig}"
@@ -102,8 +131,6 @@ in
       RestartSec = "1s";
       StateDirectory = "matrix-authentication-service";
       StateDirectoryMode = "0700";
-      RuntimeDirectory = "matrix-authentication-service";
-      RuntimeDirectoryMode = "0700";
       WorkingDirectory = "/var/lib/matrix-authentication-service";
 
       CapabilityBoundingSet = "";
@@ -141,44 +168,16 @@ in
   };
 
   systemd.services.mas-secrets-config = {
-    description = "Generate MAS runtime and persistent secrets";
+    description = "Generate MAS persistent secrets (encryption + signing keys)";
     wantedBy = [ "matrix-authentication-service.service" ];
     before = [ "matrix-authentication-service.service" ];
-    partOf = [ "matrix-authentication-service.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      RuntimeDirectory = "matrix-authentication-service";
-      RuntimeDirectoryMode = "0755";
     };
     path = [ pkgs.coreutils pkgs.openssl ];
     script = ''
       set -euo pipefail
-
-      DBPW=$(cat /var/lib/secrets/postgres/matrix/mas-db-password 2>/dev/null || echo "PLACEHOLDER")
-      CLIENT_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
-      ADMIN_TOKEN=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
-      OIDC_SECRET=$(cat /var/lib/secrets/oauth2/matrix/mas-secret 2>/dev/null || echo "PLACEHOLDER")
-
-      cat > /run/matrix-authentication-service/secrets.yaml <<EOF
-database:
-  password: "$DBPW"
-matrix:
-  secret: "$ADMIN_TOKEN"
-clients:
-  - client_id: "${synapseClientId}"
-    client_secret: "$CLIENT_SECRET"
-upstream_oauth2:
-  providers:
-    - id: "${upstreamProviderId}"
-      client_secret: "$OIDC_SECRET"
-EOF
-      chmod 644 /run/matrix-authentication-service/secrets.yaml
-
-      printf '%s' "$CLIENT_SECRET" > /run/matrix-authentication-service/synapse-client-secret
-      printf '%s' "$ADMIN_TOKEN" > /run/matrix-authentication-service/synapse-admin-token
-      chmod 644 /run/matrix-authentication-service/synapse-client-secret \
-        /run/matrix-authentication-service/synapse-admin-token
 
       PERSISTENT=/var/lib/matrix-authentication-service/persistent-secrets.yaml
       if [ ! -f "$PERSISTENT" ]; then

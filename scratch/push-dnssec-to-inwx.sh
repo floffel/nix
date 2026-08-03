@@ -47,6 +47,13 @@ for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
     continue
   fi
 
+  # Also get the KSK DNSKEY line for INWX API
+  dnskey_line=$(grep "DNSKEY 257 " "$zonefile" 2>/dev/null | head -1 || true)
+  if [ -z "$dnskey_line" ]; then
+    echo "  WARNING: No KSK DNSKEY found" >&2
+    continue
+  fi
+
   echo "$ds_records" | while read -r _ _ _ keytag algo digest_type digest; do
     echo "  KeyTag=${keytag} Alg=${algo} Type=${digest_type} Digest=${digest}"
 
@@ -55,16 +62,7 @@ for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
         <name>domainname</name><value><string>${zone}</string></value>
       </member>
       <member>
-        <name>keytag</name><value><int>${keytag}</int></value>
-      </member>
-      <member>
-        <name>alg</name><value><int>${algo}</int></value>
-      </member>
-      <member>
-        <name>type</name><value><int>${digest_type}</int></value>
-      </member>
-      <member>
-        <name>digest</name><value><string>${digest}</string></value>
+        <name>dnskey</name><value><string>${dnskey_line}</string></value>
       </member>"
 
     result=$(inwx_call "dnssec.adddnskey" "$body")

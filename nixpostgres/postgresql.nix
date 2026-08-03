@@ -174,6 +174,20 @@
         # :'pw' makes psql emit the value as a properly-quoted SQL string
         # literal, preventing both SQL injection from a hand-edited file and
         # password leakage via psql error output.
+
+        # Wait until the role exists (ensureUsers runs in a post-start phase
+        # that may not have completed when this service starts).
+        for i in {1..30}; do
+          if psql -Atc "SELECT 1 FROM pg_roles WHERE rolname='$role'" 2>/dev/null | grep -q 1; then
+            break
+          fi
+          sleep 1
+        done
+        if ! psql -Atc "SELECT 1 FROM pg_roles WHERE rolname='$role'" 2>/dev/null | grep -q 1; then
+          echo "Error: role $role still does not exist after 30s" >&2
+          exit 1
+        fi
+
         pw="$(cat "$f")"
         psql -v ON_ERROR_STOP=1 -v role="$role" -v pw="$pw" <<'SQL' >/dev/null
 ALTER ROLE :"role" WITH PASSWORD :'pw';

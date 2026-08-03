@@ -50,6 +50,7 @@ let
     matrix = {
       homeserver = "minnecker.com";
       endpoint = "http://localhost:8008";
+      secret = "PLACEHOLDER";
     };
     passwords.enabled = false;
     upstream_oauth2.providers = [

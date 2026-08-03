@@ -44,6 +44,13 @@
         ratelimit = 500;
         prefetch = "yes";
         serve-expired = "yes";
+
+        domain-insecure = [
+          "minnecker.com."
+          "floffel.de."
+          "sbminnecker.de."
+          "substitution.art."
+        ];
       };
 
       stub-zone = [

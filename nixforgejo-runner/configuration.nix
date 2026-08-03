@@ -26,13 +26,4 @@
   # Fall back to static /etc/resolv.conf from hosts.nix which points to
   # the local Unbound resolver at 10.20.20.16.
   services.resolved.enable = false;
-
-  # Force a static /etc/resolv.conf so that DNS uses the local Unbound
-  # resolver at 10.20.20.16 instead of whatever Proxmox SDN pushes.
-  environment.etc."resolv.conf".text = ''
-    nameserver 10.20.20.16
-    nameserver 185.12.64.1
-    search hosts.local.minnecker.com
-    options edns0
-  '';
 }

@@ -83,9 +83,9 @@ matrix_authentication_service:
   issuer: "https://matrix.minnecker.com/"
   client_id: "${synapseClientId}"
   client_auth_method: "client_secret_basic"
-client_secret: "$MAS_CLIENT_SECRET"
-    secret: "$MAS_ADMIN_TOKEN"
-    account_management_url: "https://matrix.minnecker.com/account"
+  client_secret: "$MAS_CLIENT_SECRET"
+  secret: "$MAS_ADMIN_TOKEN"
+  account_management_url: "https://matrix.minnecker.com/account"
 EOF
       chown matrix-synapse:matrix-synapse "$OUT"
       chmod 600 "$OUT"

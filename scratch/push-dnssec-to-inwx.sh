@@ -59,7 +59,7 @@ for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
   fi
 
   # Parse DS records and push each
-  echo "$ds_records" | while read -r _ _ _ _ keytag algo digest_type digest; do
+  echo "$ds_records" | while read -r _ _ _ keytag algo digest_type digest; do
     echo "  KeyTag=${keytag} Alg=${algo} Type=${digest_type} Digest=${digest}"
 
     body="

@@ -63,8 +63,8 @@ in
       OUT=/var/lib/matrix-synapse/secrets.yaml
 
       DBPW=$(cat /var/lib/secrets/postgres/matrix/db-password 2>/dev/null || echo "PLACEHOLDER")
-      MAS_CLIENT_SECRET=$(cat /run/matrix-authentication-service/synapse-client-secret 2>/dev/null || echo "PLACEHOLDER")
-      MAS_ADMIN_TOKEN=$(cat /run/matrix-authentication-service/synapse-admin-token 2>/dev/null || echo "PLACEHOLDER")
+      MAS_CLIENT_SECRET=$(cat /var/lib/matrix-authentication-service/client-secret 2>/dev/null || echo "PLACEHOLDER")
+      MAS_ADMIN_TOKEN=$(cat /var/lib/matrix-authentication-service/admin-token 2>/dev/null || echo "PLACEHOLDER")
 
       install -d -m 755 -o matrix-synapse -g matrix-synapse "$(dirname "$OUT")"
 

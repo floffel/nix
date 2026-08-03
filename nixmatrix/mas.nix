@@ -147,6 +147,7 @@ in
     partOf = [ "matrix-authentication-service.service" ];
     serviceConfig = {
       Type = "oneshot";
+      RemainAfterExit = true;
       RuntimeDirectory = "matrix-authentication-service";
       RuntimeDirectoryMode = "0755";
     };

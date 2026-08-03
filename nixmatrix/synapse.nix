@@ -78,15 +78,14 @@ database:
     port: 5432
     password: "$DBPW"
   allow_unsafe_locale: true
-experimental_features:
-  msc3861:
-    enabled: true
-    issuer: "https://matrix.minnecker.com/"
-    client_id: "${synapseClientId}"
-    client_auth_method: "client_secret_basic"
-    client_secret: "$MAS_CLIENT_SECRET"
-    admin_token: "$MAS_ADMIN_TOKEN"
-    account_management_url: "https://matrix.minnecker.com/account"
+matrix_authentication_service:
+  enabled: true
+  issuer: "https://matrix.minnecker.com/"
+  client_id: "${synapseClientId}"
+  client_auth_method: "client_secret_basic"
+  client_secret: "$MAS_CLIENT_SECRET"
+  admin_token: "$MAS_ADMIN_TOKEN"
+  account_management_url: "https://matrix.minnecker.com/account"
 EOF
       chown matrix-synapse:matrix-synapse "$OUT"
       chmod 600 "$OUT"

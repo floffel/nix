@@ -86,9 +86,9 @@ in
 {
   systemd.services.matrix-authentication-service = {
     description = "Matrix Authentication Service";
-    after = [ "network.target" ];
+    after = [ "network.target" "mas-secrets-config.service" ];
+    requires = [ "mas-secrets-config.service" ];
     wantedBy = [ "multi-user.target" ];
-    bindsTo = [ "mas-secrets-config.service" ];
     serviceConfig = {
       Type = "simple";
       ExecStart = lib.concatStringsSep " " [

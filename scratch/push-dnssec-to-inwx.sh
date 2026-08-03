@@ -42,8 +42,8 @@ for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
 
   echo "=== ${zone} ==="
 
-  # Generate DS from the signed zone file (extracts KSK DNSKEY, generates DS)
-  ds_records=$(nix-shell -p bind --run "dnssec-dsfromkey -2 -s '${zonefile}'" 2>/dev/null || true)
+  # Generate DS from DNSKEY records in the signed zone file
+  ds_records=$(nix-shell -p bind --run "dnssec-dsfromkey -2 -f '${zonefile}' '${zone}'" 2>/dev/null || true)
 
   if [ -z "$ds_records" ]; then
     echo "  WARNING: Could not generate DS records from DNSKEY" >&2

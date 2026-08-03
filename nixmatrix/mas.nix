@@ -91,6 +91,7 @@ upstream_oauth2:
       issuer: "https://idm.minnecker.com/oauth2/openid/mas"
       client_id: "mas"
       token_endpoint_auth_method: "client_secret_basic"
+      id_token_signed_response_alg: "ES256"
       scope: "openid profile email"
       claims_imports:
         localpart:

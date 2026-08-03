@@ -96,6 +96,7 @@ in
         "${lib.getExe package}" "server"
         "--config" "${mainConfig}"
         "--config" "/run/matrix-authentication-service/secrets.yaml"
+        "--config" "/var/lib/matrix-authentication-service/persistent-secrets.yaml"
       ];
       Restart = "on-failure";
       RestartSec = "1s";
@@ -140,17 +141,16 @@ in
   };
 
   systemd.services.mas-secrets-config = {
-    description = "Generate MAS runtime secrets (DB password, shared secrets, OIDC client secret)";
+    description = "Generate MAS runtime and persistent secrets";
     wantedBy = [ "matrix-authentication-service.service" ];
     before = [ "matrix-authentication-service.service" ];
     partOf = [ "matrix-authentication-service.service" ];
-    bindsTo = [ "matrix-authentication-service.service" ];
     serviceConfig = {
       Type = "oneshot";
       RuntimeDirectory = "matrix-authentication-service";
       RuntimeDirectoryMode = "0755";
     };
-    path = [ pkgs.coreutils ];
+    path = [ pkgs.coreutils pkgs.openssl ];
     script = ''
       set -euo pipefail
 
@@ -178,6 +178,23 @@ EOF
       printf '%s' "$ADMIN_TOKEN" > /run/matrix-authentication-service/synapse-admin-token
       chmod 644 /run/matrix-authentication-service/synapse-client-secret \
         /run/matrix-authentication-service/synapse-admin-token
+
+      PERSISTENT=/var/lib/matrix-authentication-service/persistent-secrets.yaml
+      if [ ! -f "$PERSISTENT" ]; then
+        install -d -m 755 "$(dirname "$PERSISTENT")"
+        ENCRYPTION=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
+        SIGNING_KEY=$(head -c 32 /dev/urandom | openssl base64 -A)
+
+        cat > "$PERSISTENT" <<PEOF
+secrets:
+  encryption: "$ENCRYPTION"
+  keys:
+    - kid: "01J8QQ0000000000000000000MAS"
+      key: "$SIGNING_KEY"
+      alg: "HS256"
+PEOF
+        chmod 600 "$PERSISTENT"
+      fi
     '';
   };
 }

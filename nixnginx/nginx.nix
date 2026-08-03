@@ -526,6 +526,15 @@ in
             proxy_set_header Host $host;
           '';
         };
+        locations."/oauth2/" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
         locations."/api" = {
           proxyPass = "http://mas";
           extraConfig = ''

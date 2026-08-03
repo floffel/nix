@@ -54,7 +54,7 @@ for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
   fi
 
   # Generate DS from KSK key file
-  ds_records=$(dnssec-dsfromkey -2 "${ksk_file}" 2>/dev/null || true)
+  ds_records=$(nix-shell -p bind --run "dnssec-dsfromkey -2 '${ksk_file}'" 2>/dev/null || true)
 
   if [ -z "$ds_records" ]; then
     echo "  WARNING: Could not generate DS records from DNSKEY" >&2

@@ -41,8 +41,11 @@ in
   };
 
   systemd.services.matrix-synapse = {
-    after = [ "matrix-authentication-service.service" ];
-    wants = [ "matrix-authentication-service.service" ];
+    after = [ "matrix-authentication-service.service" "matrix-synapse-secrets-config.service" ];
+    wants = [ "matrix-authentication-service.service" "matrix-synapse-secrets-config.service" ];
+    restartTriggers = [
+      config.systemd.services.matrix-synapse-secrets-config.script
+    ];
   };
 
   systemd.services.matrix-synapse-secrets-config = {

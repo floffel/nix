@@ -159,9 +159,15 @@
       # added there can never be missed by this provisioning loop.
       ROLES="${lib.concatStringsSep " " (map (u: u.name) config.services.postgresql.ensureUsers)}"
       for role in $ROLES; do
-        d="/var/lib/secrets/postgres/$role"
-        install -d -m 755 "$d"
-        f="$d/db-password"
+        if [ "$role" = "mas" ]; then
+          d="/var/lib/secrets/postgres/matrix"
+          f="$d/mas-db-password"
+          install -d -m 755 "$d"
+        else
+          d="/var/lib/secrets/postgres/$role"
+          install -d -m 755 "$d"
+          f="$d/db-password"
+        fi
         if [ ! -s "$f" ]; then
           # 32 random bytes as 64 hex chars (CSPRNG, no extra dependency).
           pw="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"

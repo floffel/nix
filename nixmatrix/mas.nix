@@ -173,15 +173,16 @@ EOF
       if [ ! -f "$PERSISTENT" ]; then
         install -d -m 755 "$(dirname "$PERSISTENT")"
         ENCRYPTION=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
-        SIGNING_KEY=$(head -c 32 /dev/urandom | openssl base64 -A)
+        openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /var/lib/matrix-authentication-service/signing-key.pem 2>/dev/null
+        chmod 600 /var/lib/matrix-authentication-service/signing-key.pem
 
         cat > "$PERSISTENT" <<PEOF
 secrets:
   encryption: "$ENCRYPTION"
   keys:
     - kid: "01J8QQ0000000000000000000MAS"
-      key: "$SIGNING_KEY"
-      alg: "HS256"
+      key_file: /var/lib/matrix-authentication-service/signing-key.pem
+      alg: "RS256"
 PEOF
         chmod 600 "$PERSISTENT"
       fi

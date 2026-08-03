@@ -37,13 +37,24 @@ inwx_call() {
 }
 
 for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
-  zonefile="/var/lib/nsd/zones/${zone}"
-  [ -f "$zonefile" ] || continue
-
   echo "=== ${zone} ==="
 
-  # Generate DS from DNSKEY records in the signed zone file
-  ds_records=$(nix-shell -p bind --run "dnssec-dsfromkey -2 -f '${zonefile}' '${zone}'" 2>/dev/null || true)
+  ksk_file=""
+  for f in /var/lib/nsd/dnssec/K${zone}.+013+*.key; do
+    [ -f "$f" ] || continue
+    if grep -q "DNSKEY 257 " "$f" 2>/dev/null; then
+      ksk_file="$f"
+      break
+    fi
+  done
+
+  if [ -z "$ksk_file" ]; then
+    echo "  WARNING: No KSK key file found for ${zone}" >&2
+    continue
+  fi
+
+  # Generate DS from KSK key file
+  ds_records=$(nix-shell -p bind --run "dnssec-dsfromkey -2 '${ksk_file}'" 2>/dev/null || true)
 
   if [ -z "$ds_records" ]; then
     echo "  WARNING: Could not generate DS records from DNSKEY" >&2

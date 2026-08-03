@@ -1,99 +1,141 @@
 { config, pkgs, lib, ... }:
 
 let
+  package = pkgs.matrix-authentication-service;
   synapseClientId = "0000000000000000000SYNAPSE";
   upstreamProviderId = "01J8QGXVJHSKAB1JFJYF2TBBDD";
-in
-{
-  services.matrix-authentication-service = {
-    enable = true;
 
-    settings = {
-      http = {
-        public_base = "https://matrix.minnecker.com/";
-        trusted_proxies = [
-          "10.20.20.0/24"
-          "fd01::/64"
-        ];
-        listeners = [
-          {
-            name = "web";
-            resources = [
-              { name = "discovery"; }
-              { name = "human"; }
-              { name = "oauth"; }
-              { name = "compat"; }
-              { name = "graphql"; }
-              { name = "assets"; }
-            ];
-            binds = [
-              {
-                host = "::";
-                port = 8080;
-              }
-            ];
-          }
-          {
-            name = "internal";
-            resources = [
-              { name = "health"; }
-            ];
-            binds = [
-              {
-                host = "::";
-                port = 8081;
-              }
-            ];
-          }
-        ];
-      };
+  configYaml = pkgs.formats.yaml { };
 
-      database = {
-        uri = lib.mkForce "postgresql://mas@nixpostgres/mas";
-      };
-
-      matrix = {
-        homeserver = "minnecker.com";
-        endpoint = "http://localhost:8008";
-      };
-
-      passwords.enabled = false;
-
-      upstream_oauth2.providers = [
-        {
-          id = upstreamProviderId;
-          human_name = "Kanidm";
-          issuer = "https://idm.minnecker.com/oauth2/openid/mas";
-          client_id = "mas";
-          scope = "openid profile email";
-          claims_imports = {
-            localpart = {
-              action = "require";
-              template = "{{ user.preferred_username }}";
-            };
-            displayname = {
-              action = "suggest";
-              template = "{{ user.name }}";
-            };
-            email = {
-              action = "suggest";
-              template = "{{ user.email }}";
-            };
-          };
-        }
+  mainConfig = configYaml.generate "mas-config.yaml" {
+    http = {
+      public_base = "https://matrix.minnecker.com/";
+      trusted_proxies = [
+        "10.20.20.0/24"
+        "fd01::/64"
       ];
-
-      clients = [
+      listeners = [
         {
-          client_id = synapseClientId;
-          client_auth_method = "client_secret_basic";
+          name = "web";
+          resources = [
+            { name = "discovery"; }
+            { name = "human"; }
+            { name = "oauth"; }
+            { name = "compat"; }
+            { name = "graphql"; }
+            { name = "assets"; }
+          ];
+          binds = [
+            {
+              host = "::";
+              port = 8080;
+            }
+          ];
+        }
+        {
+          name = "internal";
+          resources = [
+            { name = "health"; }
+          ];
+          binds = [
+            {
+              host = "::";
+              port = 8081;
+            }
+          ];
         }
       ];
     };
-
-    extraConfigFiles = [
-      "/run/matrix-authentication-service/secrets.yaml"
+    database.uri = "postgresql://mas@nixpostgres/mas";
+    matrix = {
+      homeserver = "minnecker.com";
+      endpoint = "http://localhost:8008";
+    };
+    passwords.enabled = false;
+    upstream_oauth2.providers = [
+      {
+        id = upstreamProviderId;
+        human_name = "Kanidm";
+        issuer = "https://idm.minnecker.com/oauth2/openid/mas";
+        client_id = "mas";
+        scope = "openid profile email";
+        claims_imports = {
+          localpart = {
+            action = "require";
+            template = "{{ user.preferred_username }}";
+          };
+          displayname = {
+            action = "suggest";
+            template = "{{ user.name }}";
+          };
+          email = {
+            action = "suggest";
+            template = "{{ user.email }}";
+          };
+        };
+      }
     ];
+    clients = [
+      {
+        client_id = synapseClientId;
+        client_auth_method = "client_secret_basic";
+      }
+    ];
+  };
+in
+{
+  systemd.services.matrix-authentication-service = {
+    description = "Matrix Authentication Service";
+    after = [ "network.target" ];
+    wantedBy = [ "multi-user.target" ];
+    bindsTo = [ "mas-secrets-config.service" ];
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = lib.concatStringsSep " " [
+        "${lib.getExe package}" "server"
+        "--config" "${mainConfig}"
+        "--config" "/run/matrix-authentication-service/secrets.yaml"
+      ];
+      Restart = "on-failure";
+      RestartSec = "1s";
+      StateDirectory = "matrix-authentication-service";
+      StateDirectoryMode = "0700";
+      RuntimeDirectory = "matrix-authentication-service";
+      RuntimeDirectoryMode = "0700";
+      WorkingDirectory = "/var/lib/matrix-authentication-service";
+
+      CapabilityBoundingSet = "";
+      AmbientCapabilities = "";
+      LockPersonality = true;
+      NoNewPrivileges = true;
+      PrivateTmp = true;
+      PrivateDevices = true;
+      ProtectClock = true;
+      ProtectControlGroups = true;
+      ProtectHome = true;
+      ProtectHostname = true;
+      ProtectKernelLogs = true;
+      ProtectKernelModules = true;
+      ProtectKernelTunables = true;
+      ProtectProc = "invisible";
+      ProcSubset = "pid";
+      ProtectSystem = "strict";
+      RemoveIPC = true;
+      RestrictAddressFamilies = [
+        "AF_UNIX"
+        "AF_INET"
+        "AF_INET6"
+      ];
+      RestrictNamespaces = true;
+      RestrictRealtime = true;
+      RestrictSUIDSGID = true;
+      SystemCallArchitectures = "native";
+      SystemCallErrorNumber = "EPERM";
+      SystemCallFilter = [
+        "@system-service"
+      ];
+      UMask = "0077";
+    };
   };
 
   systemd.services.mas-secrets-config = {

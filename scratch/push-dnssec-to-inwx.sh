@@ -67,24 +67,22 @@ for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
 
     body="
       <member>
-        <name>domain</name><value><string>${zone}</string></value>
+        <name>domainname</name><value><string>${zone}</string></value>
       </member>
       <member>
         <name>keytag</name><value><int>${keytag}</int></value>
       </member>
       <member>
-        <name>algorithm</name><value><int>${algo}</int></value>
+        <name>alg</name><value><int>${algo}</int></value>
       </member>
       <member>
-        <name>dsType</name><value><int>${digest_type}</int></value>
+        <name>type</name><value><int>${digest_type}</int></value>
       </member>
       <member>
         <name>digest</name><value><string>${digest}</string></value>
       </member>"
 
-    result=$(inwx_call "dnssec.adddnskey" "$body")
-    echo "  API response: ${result}" >&2
-
+result=$(inwx_call "dnssec.adddnskey" "$body")
     if echo "$result" | grep -q '<name>code</name><value><int>1000</int>'; then
       echo "  -> OK (pushed to registry)"
     else

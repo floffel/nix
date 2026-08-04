@@ -1188,18 +1188,26 @@ systemd.services.nextcloud-setup.unitConfig = { };
   };
 
   # Generate the TURN shared secret at activation time — before any service
-  # starts.  Root-owned 0600 is fine: the coturn module's ExecStartPre
-  # (replace-secret) reads it as root and embeds it into coturn's config.
+  # starts.  The coturn module's ExecStartPre (replace-secret) runs as the
+  # coturn user, so the file must be readable by that user.
   system.activationScripts.coturn-secret = {
     text = ''
       install -d -m 755 /var/lib/coturn
       if [ ! -s /var/lib/coturn/shared-secret ]; then
         ${pkgs.openssl}/bin/openssl rand -hex 32 > /var/lib/coturn/shared-secret
-        chmod 600 /var/lib/coturn/shared-secret
+        chmod 644 /var/lib/coturn/shared-secret
       fi
       if [ -d /var/lib/secrets/coturn ]; then
         cp /var/lib/coturn/shared-secret /var/lib/secrets/coturn/shared-secret
-        chmod 600 /var/lib/secrets/coturn/shared-secret
+        chmod 644 /var/lib/secrets/coturn/shared-secret
+      fi
+      if id coturn >/dev/null 2>&1; then
+        chown coturn:coturn /var/lib/coturn/shared-secret
+        chmod 600 /var/lib/coturn/shared-secret
+        if [ -d /var/lib/secrets/coturn ]; then
+          chown coturn:coturn /var/lib/secrets/coturn/shared-secret
+          chmod 600 /var/lib/secrets/coturn/shared-secret
+        fi
       fi
     '';
   };

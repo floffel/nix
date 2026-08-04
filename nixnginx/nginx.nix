@@ -1241,9 +1241,9 @@ systemd.services.nextcloud-setup.unitConfig = { };
   # config in the read-only Nix store, so we build our own at /run/ with
   # the password from the shared NAS mount and point ExecStart at it.
   systemd.services.livekit = {
+    serviceConfig.RuntimeDirectory = "livekit";
     preStart = ''
       set -euo pipefail
-      mkdir -p /run/livekit
       REDIS_PW=$(cat /var/lib/secrets/redis/nextcloud-password)
       cat > /run/livekit/config.json <<EOF
       {

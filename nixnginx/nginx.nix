@@ -1280,8 +1280,8 @@ systemd.services.nextcloud-setup.unitConfig = { };
     if [ ! -s /var/lib/livekit/keys.yaml ]; then
       secret=$(${pkgs.openssl}/bin/openssl rand -hex 32)
       printf 'lk-jwt-service: %s\n' "$secret" > /var/lib/livekit/keys.yaml
-      chmod 600 /var/lib/livekit/keys.yaml
     fi
+    chmod 644 /var/lib/livekit/keys.yaml
   '';
 
   # Generate the TURN shared secret at activation time — before any service

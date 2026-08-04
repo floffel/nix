@@ -1271,7 +1271,9 @@ systemd.services.nextcloud-setup.unitConfig = { };
         "rtc": {
           "port_range_start": 40000,
           "port_range_end": 41000,
-          "use_external_ip": true
+          "use_external_ip": true,
+          "node_ip": "10.20.20.14",
+          "external_ip": "178.63.124.242"
         },
         "room": {
           "auto_create": false

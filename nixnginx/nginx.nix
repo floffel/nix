@@ -488,7 +488,7 @@ in
         locations."/.well-known/matrix/client" = {
           extraConfig = ''
             default_type application/json;
-            return 200 '{"m.homeserver":{"base_url":"https://matrix.minnecker.com"},"m.turn_servers":[{"uris":["turn:turn.minnecker.com:3478?transport=udp","turns:turn.minnecker.com:5349?transport=tcp"],"username":"","password":""}],"org.matrix.msc4140.livekit":{"livekit_service_url":"wss://livekit.minnecker.com","jwt_service_url":"https://livekit.minnecker.com/jwt"}}';
+            return 200 '{"m.homeserver":{"base_url":"https://matrix.minnecker.com"},"m.turn_servers":[{"uris":["turn:turn.minnecker.com:3478?transport=udp","turns:turn.minnecker.com:5349?transport=tcp"],"username":"","password":""}],"org.matrix.msc4143.rtc_foci":[{"type":"livekit","livekit_service_url":"https://livekit.minnecker.com/jwt"}]}';
           '';
         };
         locations."/.well-known/openid-configuration" = {
@@ -761,8 +761,8 @@ in
         forceSSL = true;
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
         sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
-        locations."/jwt" = {
-          proxyPass = "http://127.0.0.1:8082";
+        locations."/jwt/" = {
+          proxyPass = "http://127.0.0.1:8082/";
           extraConfig = ''
             proxy_set_header Host $host;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -1257,6 +1257,9 @@ systemd.services.nextcloud-setup.unitConfig = { };
           "port_range_start": 40000,
           "port_range_end": 41000,
           "use_external_ip": false
+        },
+        "room": {
+          "auto_create": false
         }
       }
       EOF
@@ -1270,11 +1273,15 @@ systemd.services.nextcloud-setup.unitConfig = { };
   services.lk-jwt-service = {
     enable = true;
     port = 8082;
-    livekitUrl = "ws://127.0.0.1:7880";
+    livekitUrl = "wss://livekit.minnecker.com";
     keyFile = "/var/lib/livekit/keys.yaml";
   };
 
   systemd.services.lk-jwt-service.serviceConfig.SupplementaryGroups = [ "livekit-keys" ];
+
+  # lk-jwt-service needs LIVEKIT_FULL_ACCESS_HOMESERVERS so local users can
+  # trigger LiveKit room creation.  The nixpkgs module doesn't set it.
+  systemd.services.lk-jwt-service.environment.LIVEKIT_FULL_ACCESS_HOMESERVERS = "minnecker.com";
 
   # Shared group so livekit and lk-jwt-service (dynamic users) can read the
   # key file via group permissions without it being world-readable.  Named

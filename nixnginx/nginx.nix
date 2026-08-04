@@ -1215,7 +1215,7 @@ systemd.services.nextcloud-setup.unitConfig = { };
   # by host routing.  Uses Redis on nixpostgres for session coordination.
   services.livekit = {
     enable = true;
-    openFirewall = false;  # we manage ports manually
+    openFirewall = false;
     redis.createLocally = false;
     settings = {
       port = 7880;
@@ -1227,6 +1227,34 @@ systemd.services.nextcloud-setup.unitConfig = { };
       };
     };
     keyFile = "/var/lib/livekit/keys.yaml";
+  };
+
+  # Inject the Redis password at runtime — the livekit module generates a
+  # config in the read-only Nix store, so we build our own at /run/ with
+  # the password from the shared NAS mount and point ExecStart at it.
+  systemd.services.livekit = {
+    preStart = ''
+      set -euo pipefail
+      REDIS_PW=$(cat /var/lib/secrets/redis/nextcloud-password)
+      cat > /run/livekit/config.json <<EOF
+      {
+        "port": 7880,
+        "redis": {
+          "address": "nixpostgres:6379",
+          "password": "$REDIS_PW"
+        },
+        "rtc": {
+          "port_range_start": 40000,
+          "port_range_end": 41000,
+          "use_external_ip": false
+        }
+      }
+      EOF
+      chmod 600 /run/livekit/config.json
+    '';
+    serviceConfig.ExecStart = lib.mkForce [
+      "${pkgs.livekit}/bin/livekit-server --config=/run/livekit/config.json --key-file=/var/lib/livekit/keys.yaml"
+    ];
   };
 
   services.lk-jwt-service = {

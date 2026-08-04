@@ -1126,4 +1126,56 @@ systemd.services.nextcloud-setup.unitConfig = { };
       chmod 644 /run/nextcloud-redis-secrets.json
     '';
   };
+
+  # Coturn TURN/STUN server for Matrix VoIP (Element X voice/video calls).
+  #
+  # Uses the same TLS certificates as nginx (shared ACME wildcard certs).
+  # Auth is HMAC-based (REST API): Synapse generates short-lived credentials
+  # for clients using the shared secret. The secret is generated once by a
+  # oneshot on first boot and mirrored to the NAS at
+  # /var/lib/secrets/coturn/shared-secret so nixmatrix can read it.
+  services.coturn = {
+    enable = true;
+    listening-ips = [ "::" ];
+    listening-port = 3478;
+    tls-listening-port = 5349;
+    realm = "turn.minnecker.com";
+    lt-cred-mech = true;
+    use-auth-secret = true;
+    static-auth-secret-file = "/var/lib/coturn/shared-secret";
+    cert = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+    pkey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+    min-port = 49152;
+    max-port = 65535;
+    secure-stun = true;
+    no-cli = true;
+  };
+
+  systemd.services.coturn-secret = {
+    description = "Provision Coturn TURN shared secret for Matrix VoIP";
+    wantedBy = [ "coturn.service" ];
+    before = [ "coturn.service" ];
+    requiredBy = [ "coturn.service" ];
+    serviceConfig.Type = "oneshot";
+    path = [ pkgs.openssl pkgs.coreutils ];
+    script = ''
+      set -euo pipefail
+      f="/var/lib/coturn/shared-secret"
+      install -d -m 755 -o coturn -g coturn "$(dirname "$f")"
+
+      if [ ! -s "$f" ]; then
+        secret=$(openssl rand -hex 32)
+        (umask 077; printf '%s\n' "$secret" > "$f")
+        chown coturn:coturn "$f"
+      else
+        secret=$(cat "$f")
+      fi
+
+      nasf="/var/lib/secrets/coturn/shared-secret"
+      if [ -d "$(dirname "$nasf")" ]; then
+        (umask 077; printf '%s\n' "$secret" > "$nasf")
+        chown coturn:coturn "$nasf" 2>/dev/null || chown root:root "$nasf"
+      fi
+    '';
+  };
 }

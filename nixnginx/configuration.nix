@@ -156,6 +156,8 @@
     firewall = {
       enable = true;
       allowedTCPPorts = [ 80 443 ];
+      allowedUDPPorts = [ 3478 5349 ];
+      allowedUDPPortRanges = [ { from = 49152; to = 65535; } ];
     };
 
     # Pin the public service hostnames to the local nginx reverse proxy.

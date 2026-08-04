@@ -36,6 +36,10 @@ RULES=(
   
   # Jitsi Video Bridge
   "udp:10000:${JITSI_IP}:10000:udp:2000"
+  
+  # Coturn TURN/STUN for Matrix VoIP (Element X calls)
+  "udp:3478:${NGINX_IP}:3478:udp:300"
+  "udp:5349:${NGINX_IP}:5349:udp:300"
 )
 
 # --- Functions ---
@@ -74,6 +78,14 @@ enable_forwarding() {
       fi
     fi
   done
+
+  # Coturn TURN relay port range (media — no per-IP rate limit)
+  if ! iptables -t nat -C PREROUTING -i "$PUB_IF" -p udp --dport 49152:65535 -j DNAT --to-destination "${NGINX_IP}" 2>/dev/null; then
+    iptables -t nat -A PREROUTING -i "$PUB_IF" -p udp --dport 49152:65535 -j DNAT --to-destination "${NGINX_IP}"
+    echo "  [+] NAT: Forwarded UDP 49152-65535 -> ${NGINX_IP} (TURN relay range)"
+  else
+    echo "  [=] NAT: Rule already exists for UDP 49152-65535"
+  fi
 }
 
 disable_forwarding() {
@@ -100,6 +112,12 @@ disable_forwarding() {
       fi
     fi
   done
+
+  # Coturn TURN relay port range
+  if iptables -t nat -C PREROUTING -i "$PUB_IF" -p udp --dport 49152:65535 -j DNAT --to-destination "${NGINX_IP}" 2>/dev/null; then
+    iptables -t nat -D PREROUTING -i "$PUB_IF" -p udp --dport 49152:65535 -j DNAT --to-destination "${NGINX_IP}"
+    echo "  [-] NAT: Removed forward for UDP 49152-65535"
+  fi
 }
 
 show_status() {

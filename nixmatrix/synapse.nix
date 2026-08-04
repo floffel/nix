@@ -12,6 +12,11 @@ in
       server_name = "minnecker.com";
       public_baseurl = "https://matrix.minnecker.com/";
 
+      turn_uris = [
+        "turn:turn.minnecker.com:3478?transport=udp"
+        "turns:turn.minnecker.com:5349?transport=tcp"
+      ];
+
       listeners = [
         {
           port = 8008;
@@ -68,6 +73,7 @@ in
       DBPW=$(cat /var/lib/secrets/postgres/matrix/db-password 2>/dev/null || echo "PLACEHOLDER")
       MAS_CLIENT_SECRET=$(cat /var/lib/matrix-authentication-service/client-secret 2>/dev/null || echo "PLACEHOLDER")
       MAS_ADMIN_TOKEN=$(cat /var/lib/matrix-authentication-service/admin-token 2>/dev/null || echo "PLACEHOLDER")
+      TURN_SECRET=$(cat /var/lib/secrets/coturn/shared-secret 2>/dev/null || echo "PLACEHOLDER")
 
       install -d -m 755 -o matrix-synapse -g matrix-synapse "$(dirname "$OUT")"
 
@@ -89,6 +95,7 @@ matrix_authentication_service:
   client_secret: "$MAS_CLIENT_SECRET"
   secret: "$MAS_ADMIN_TOKEN"
   account_management_url: "https://matrix.minnecker.com/account"
+turn_shared_secret: "$TURN_SECRET"
 EOF
       chown matrix-synapse:matrix-synapse "$OUT"
       chmod 600 "$OUT"

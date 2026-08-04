@@ -173,12 +173,14 @@
             (builtins.attrValues (cfg.users.users or {})))
           ((builtins.length (builtins.attrNames (cfg.services.prometheus.exporters or {}))) >= 1)
           ((builtins.length (builtins.attrNames (cfg.services.fail2ban.jails or {}))) >= 4)
+          (cfg.services.coturn.enable or false)
         ];
         errorMsgs = [
           "nginx must be enabled" "fail2ban must be enabled"
           "nextcloud must be enabled" "phpfpm nextcloud pool must exist"
           "alloy user must exist" "node_exporter must be enabled"
           "at least 5 fail2ban jails must be defined"
+          "coturn must be enabled"
         ];
       in { assertions = assertions; errors = errorMsgs; };
     in
@@ -239,7 +241,8 @@
             machine.wait_for_unit("multi-user.target", timeout=300)
             machine.wait_for_unit("nginx.service", timeout=120)
             machine.wait_for_open_port(443)
-            machine.log("nginx started — vhost routing covered by routing-nixnginx check")
+            machine.succeed("systemctl cat coturn.service >/dev/null")
+            machine.log("nginx + coturn started — vhost routing covered by routing-nixnginx check")
           '';
         };
 

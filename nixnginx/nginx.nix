@@ -1242,7 +1242,7 @@ systemd.services.nextcloud-setup.unitConfig = { };
   # the password from the shared NAS mount and point ExecStart at it.
   systemd.services.livekit = {
     serviceConfig.RuntimeDirectory = "livekit";
-    serviceConfig.SupplementaryGroups = [ "livekit" ];
+    serviceConfig.SupplementaryGroups = [ "livekit-keys" ];
     preStart = ''
       set -euo pipefail
       REDIS_PW=$(cat /var/lib/secrets/redis/nextcloud-password)
@@ -1274,11 +1274,13 @@ systemd.services.nextcloud-setup.unitConfig = { };
     keyFile = "/var/lib/livekit/keys.yaml";
   };
 
-  systemd.services.lk-jwt-service.serviceConfig.SupplementaryGroups = [ "livekit" ];
+  systemd.services.lk-jwt-service.serviceConfig.SupplementaryGroups = [ "livekit-keys" ];
 
   # Shared group so livekit and lk-jwt-service (dynamic users) can read the
-  # key file via group permissions without it being world-readable.
-  users.groups.livekit = { };
+  # key file via group permissions without it being world-readable.  Named
+  # livekit-keys to avoid colliding with livekit's DynamicUser (which uses
+  # the name "livekit").
+  users.groups.livekit-keys = { };
 
   # Generate LiveKit API keys at activation time.  Shared by livekit and
   # lk-jwt-service (both point to the same keyFile).
@@ -1288,7 +1290,7 @@ systemd.services.nextcloud-setup.unitConfig = { };
       secret=$(${pkgs.openssl}/bin/openssl rand -hex 32)
       printf 'lk-jwt-service: %s\n' "$secret" > /var/lib/livekit/keys.yaml
     fi
-    chown root:livekit /var/lib/livekit/keys.yaml
+    chown root:livekit-keys /var/lib/livekit/keys.yaml
     chmod 640 /var/lib/livekit/keys.yaml
   '';
 

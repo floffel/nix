@@ -802,9 +802,6 @@ in
         locations."/.well-known/matrix/client" = {
           extraConfig = ''
             default_type application/json;
-            add_header Access-Control-Allow-Origin "*" always;
-            add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
-            add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
             return 200 '{"m.homeserver":{"base_url":"https://matrix.minnecker.com"},"m.turn_servers":[{"uris":["turn:turn.minnecker.com:3478?transport=udp","turns:turn.minnecker.com:5349?transport=tcp"],"username":"","password":""}],"org.matrix.msc4143.rtc_foci":[{"type":"livekit","livekit_service_url":"https://livekit.minnecker.com/jwt"}]}';
           '';
         };
@@ -826,6 +823,7 @@ in
           expires 1m;
           index home.html index.html;
 
+          add_header Access-Control-Allow-Origin "*" always;
           add_header Referrer-Policy "no-referrer" always;
           add_header X-Content-Type-Options "nosniff" always;
           add_header X-Frame-Options "SAMEORIGIN" always;

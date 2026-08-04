@@ -1131,8 +1131,8 @@ systemd.services.nextcloud-setup.unitConfig = { };
   #
   # Uses the same TLS certificates as nginx (shared ACME wildcard certs).
   # Auth is HMAC-based (REST API): Synapse generates short-lived credentials
-  # for clients using the shared secret. The secret is generated once by a
-  # oneshot on first boot and mirrored to the NAS at
+  # for clients using the shared secret. The secret is generated on first
+  # boot via coturn's preStart and mirrored to the NAS at
   # /var/lib/secrets/coturn/shared-secret so nixmatrix can read it.
   services.coturn = {
     enable = true;
@@ -1151,14 +1151,9 @@ systemd.services.nextcloud-setup.unitConfig = { };
     no-cli = true;
   };
 
-  systemd.services.coturn-secret = {
-    description = "Provision Coturn TURN shared secret for Matrix VoIP";
-    wantedBy = [ "coturn.service" ];
-    before = [ "coturn.service" ];
-    requiredBy = [ "coturn.service" ];
-    serviceConfig.Type = "oneshot";
-    path = [ pkgs.openssl pkgs.coreutils ];
-    script = ''
+  systemd.services.coturn = {
+    path = [ pkgs.openssl ];
+    preStart = ''
       set -euo pipefail
       f="/var/lib/coturn/shared-secret"
       install -d -m 755 -o coturn -g coturn "$(dirname "$f")"
@@ -1174,7 +1169,7 @@ systemd.services.nextcloud-setup.unitConfig = { };
       nasf="/var/lib/secrets/coturn/shared-secret"
       if [ -d "$(dirname "$nasf")" ]; then
         (umask 077; printf '%s\n' "$secret" > "$nasf")
-        chown coturn:coturn "$nasf" 2>/dev/null || chown root:root "$nasf"
+        chown coturn:coturn "$nasf" 2>/dev/null || true
       fi
     '';
   };

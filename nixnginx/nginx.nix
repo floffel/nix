@@ -1243,6 +1243,7 @@ systemd.services.nextcloud-setup.unitConfig = { };
   systemd.services.livekit = {
     preStart = ''
       set -euo pipefail
+      mkdir -p /run/livekit
       REDIS_PW=$(cat /var/lib/secrets/redis/nextcloud-password)
       cat > /run/livekit/config.json <<EOF
       {

@@ -49,6 +49,11 @@ in
               names = [ "federation" ];
               compress = false;
             }
+            # Needed for Element Call / MatrixRTC: get an OpenID token to
+            # exchange with lk-jwt-service for a LiveKit JWT.
+            {
+              names = [ "openid" ];
+            }
           ];
         }
       ];

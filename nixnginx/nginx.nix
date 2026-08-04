@@ -487,7 +487,8 @@ in
         };
         locations."/.well-known/matrix/client" = {
           extraConfig = ''
-            return 200 '{ "m.homeserver": { "base_url": "https://matrix.minnecker.com" } }';
+            default_type application/json;
+            return 200 '{"m.homeserver":{"base_url":"https://matrix.minnecker.com"},"m.turn_servers":[{"uris":["turn:turn.minnecker.com:3478?transport=udp","turns:turn.minnecker.com:5349?transport=tcp"],"username":"","password":""}]}';
           '';
         };
         locations."/.well-known/openid-configuration" = {

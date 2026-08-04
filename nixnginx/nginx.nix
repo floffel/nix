@@ -1233,6 +1233,7 @@ systemd.services.nextcloud-setup.unitConfig = { };
   services.lk-jwt-service = {
     enable = true;
     port = 8082;
+    livekitUrl = "http://127.0.0.1:7880";
     keyFile = "/var/lib/livekit/keys.yaml";
   };
 

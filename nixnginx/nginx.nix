@@ -488,7 +488,7 @@ in
         locations."/.well-known/matrix/client" = {
           extraConfig = ''
             default_type application/json;
-            return 200 '{"m.homeserver":{"base_url":"https://matrix.minnecker.com"},"m.turn_servers":[{"uris":["turn:turn.minnecker.com:3478?transport=udp","turns:turn.minnecker.com:5349?transport=tcp"],"username":"","password":""}],"org.matrix.msc4140.livekit":{"livekit_service_url":"wss://livekit.minnecker.com"}}';
+            return 200 '{"m.homeserver":{"base_url":"https://matrix.minnecker.com"},"m.turn_servers":[{"uris":["turn:turn.minnecker.com:3478?transport=udp","turns:turn.minnecker.com:5349?transport=tcp"],"username":"","password":""}],"org.matrix.msc4140.livekit":{"livekit_service_url":"wss://livekit.minnecker.com","jwt_service_url":"https://livekit.minnecker.com/jwt"}}';
           '';
         };
         locations."/.well-known/openid-configuration" = {
@@ -761,6 +761,14 @@ in
         forceSSL = true;
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
         sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+        locations."/jwt" = {
+          proxyPass = "http://127.0.0.1:8082";
+          extraConfig = ''
+            proxy_set_header Host $host;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+          '';
+        };
         locations."/" = {
           proxyPass = "http://127.0.0.1:7880";
           proxyWebsockets = true;

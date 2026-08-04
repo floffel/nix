@@ -1167,8 +1167,8 @@ systemd.services.nextcloud-setup.unitConfig = { };
   #
   # Uses the same TLS certificates as nginx (shared ACME wildcard certs).
   # Auth is HMAC-based (REST API): Synapse generates short-lived credentials
-  # for clients using the shared secret. The secret is generated on first
-  # boot via coturn's preStart and mirrored to the NAS at
+  # for clients using the shared secret. The secret is generated at
+  # activation time and mirrored to the NAS at
   # /var/lib/secrets/coturn/shared-secret so nixmatrix can read it.
   services.coturn = {
     enable = true;
@@ -1187,25 +1187,19 @@ systemd.services.nextcloud-setup.unitConfig = { };
     no-cli = true;
   };
 
-  systemd.services.coturn = {
-    path = [ pkgs.openssl ];
-    preStart = ''
-      set -euo pipefail
-      f="/var/lib/coturn/shared-secret"
-      install -d -m 755 -o coturn -g coturn "$(dirname "$f")"
-
-      if [ ! -s "$f" ]; then
-        secret=$(openssl rand -hex 32)
-        (umask 077; printf '%s\n' "$secret" > "$f")
-        chown coturn:coturn "$f"
-      else
-        secret=$(cat "$f")
+  # Generate the TURN shared secret at activation time — before any service
+  # starts.  Root-owned 0600 is fine: the coturn module's ExecStartPre
+  # (replace-secret) reads it as root and embeds it into coturn's config.
+  system.activationScripts.coturn-secret = {
+    text = ''
+      install -d -m 755 /var/lib/coturn
+      if [ ! -s /var/lib/coturn/shared-secret ]; then
+        ${pkgs.openssl}/bin/openssl rand -hex 32 > /var/lib/coturn/shared-secret
+        chmod 600 /var/lib/coturn/shared-secret
       fi
-
-      nasf="/var/lib/secrets/coturn/shared-secret"
-      if [ -d "$(dirname "$nasf")" ]; then
-        (umask 077; printf '%s\n' "$secret" > "$nasf")
-        chown coturn:coturn "$nasf" 2>/dev/null || true
+      if [ -d /var/lib/secrets/coturn ]; then
+        cp /var/lib/coturn/shared-secret /var/lib/secrets/coturn/shared-secret
+        chmod 600 /var/lib/secrets/coturn/shared-secret
       fi
     '';
   };

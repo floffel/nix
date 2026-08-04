@@ -793,6 +793,15 @@ in
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
         sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
         root = "/usr/share/webapps/www.minnecker.com";
+        locations."/.well-known/matrix/server" = {
+          extraConfig = "default_type application/json; return 200 '{ \"m.server\": \"matrix.minnecker.com:443\" }';";
+        };
+        locations."/.well-known/matrix/client" = {
+          extraConfig = ''
+            default_type application/json;
+            return 200 '{"m.homeserver":{"base_url":"https://matrix.minnecker.com"},"m.turn_servers":[{"uris":["turn:turn.minnecker.com:3478?transport=udp","turns:turn.minnecker.com:5349?transport=tcp"],"username":"","password":""}],"org.matrix.msc4143.rtc_foci":[{"type":"livekit","livekit_service_url":"https://livekit.minnecker.com/jwt"}]}';
+          '';
+        };
         locations."/api/whatsapp/webhook" = {
           proxyPass = "http://192.168.1.196:8002";
           extraConfig = ''

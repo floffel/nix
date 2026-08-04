@@ -580,6 +580,33 @@ in
             proxy_set_header Host $host;
           '';
         };
+        locations."/token" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
+        locations."/userinfo" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
+        locations."/jwks" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
         locations."/login" = {
           proxyPass = "http://mas";
           extraConfig = ''
@@ -590,6 +617,15 @@ in
           '';
         };
         locations."/consent" = {
+          proxyPass = "http://mas";
+          extraConfig = ''
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
+        locations."/register" = {
           proxyPass = "http://mas";
           extraConfig = ''
             proxy_http_version 1.1;

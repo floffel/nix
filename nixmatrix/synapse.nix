@@ -17,6 +17,18 @@ in
         "turns:turn.minnecker.com:5349?transport=tcp"
       ];
 
+      # MatrixRTC / LiveKit transport.  Element X's native SDK prefers the
+      # authenticated /_matrix/client/v1/rtc/transports endpoint over the
+      # .well-known rtc_foci, so Synapse must advertise the transport here.
+      matrix_rtc = {
+        transports = [
+          {
+            type = "livekit";
+            livekit_service_url = "https://livekit.minnecker.com/jwt";
+          }
+        ];
+      };
+
       listeners = [
         {
           port = 8008;

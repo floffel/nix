@@ -1194,8 +1194,8 @@ systemd.services.nextcloud-setup.unitConfig = { };
     install -d -m 755 /var/lib/coturn
     if [ ! -s /var/lib/coturn/shared-secret ]; then
       ${pkgs.openssl}/bin/openssl rand -hex 32 > /var/lib/coturn/shared-secret
-      chmod 644 /var/lib/coturn/shared-secret
     fi
+    chmod 644 /var/lib/coturn/shared-secret
     if [ -d /var/lib/secrets/coturn ]; then
       cp /var/lib/coturn/shared-secret /var/lib/secrets/coturn/shared-secret
       chmod 644 /var/lib/secrets/coturn/shared-secret

@@ -174,6 +174,8 @@
           ((builtins.length (builtins.attrNames (cfg.services.prometheus.exporters or {}))) >= 1)
           ((builtins.length (builtins.attrNames (cfg.services.fail2ban.jails or {}))) >= 4)
           (cfg.services.coturn.enable or false)
+          (cfg.services.livekit.enable or false)
+          (cfg.services.lk-jwt-service.enable or false)
         ];
         errorMsgs = [
           "nginx must be enabled" "fail2ban must be enabled"
@@ -181,6 +183,8 @@
           "alloy user must exist" "node_exporter must be enabled"
           "at least 5 fail2ban jails must be defined"
           "coturn must be enabled"
+          "livekit must be enabled"
+          "lk-jwt-service must be enabled"
         ];
       in { assertions = assertions; errors = errorMsgs; };
     in

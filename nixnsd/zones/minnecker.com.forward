@@ -49,5 +49,5 @@ _acme-challenge          IN A       127.0.0.1
 *			 IN CNAME  px
 mail		 IN CNAME  riese
 matrix		 IN CNAME  px
-turn		 IN CNAME  px
+livekit		 IN CNAME  px
 kie		 IN CNAME  px

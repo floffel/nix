@@ -157,7 +157,7 @@
       enable = true;
       allowedTCPPorts = [ 80 443 ];
       allowedUDPPorts = [ 3478 5349 ];
-      allowedUDPPortRanges = [ { from = 49152; to = 65535; } ];
+      allowedUDPPortRanges = [ { from = 49152; to = 65535; } { from = 40000; to = 41000; } ];
     };
 
     # Pin the public service hostnames to the local nginx reverse proxy.
@@ -196,6 +196,8 @@
       fd01::14 wiki.minnecker.com
       10.20.20.14 meet.minnecker.com
       fd01::14 meet.minnecker.com
+      10.20.20.14 livekit.minnecker.com
+      fd01::14 livekit.minnecker.com
       10.20.20.14 www.minnecker.com minnecker.com
       fd01::14 www.minnecker.com minnecker.com
     '';

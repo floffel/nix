@@ -86,6 +86,14 @@ enable_forwarding() {
   else
     echo "  [=] NAT: Rule already exists for UDP 49152-65535"
   fi
+
+  # LiveKit RTC media port range (no per-IP rate limit)
+  if ! iptables -t nat -C PREROUTING -i "$PUB_IF" -p udp --dport 40000:41000 -j DNAT --to-destination "${NGINX_IP}" 2>/dev/null; then
+    iptables -t nat -A PREROUTING -i "$PUB_IF" -p udp --dport 40000:41000 -j DNAT --to-destination "${NGINX_IP}"
+    echo "  [+] NAT: Forwarded UDP 40000-41000 -> ${NGINX_IP} (LiveKit RTC)"
+  else
+    echo "  [=] NAT: Rule already exists for UDP 40000-41000"
+  fi
 }
 
 disable_forwarding() {
@@ -117,6 +125,12 @@ disable_forwarding() {
   if iptables -t nat -C PREROUTING -i "$PUB_IF" -p udp --dport 49152:65535 -j DNAT --to-destination "${NGINX_IP}" 2>/dev/null; then
     iptables -t nat -D PREROUTING -i "$PUB_IF" -p udp --dport 49152:65535 -j DNAT --to-destination "${NGINX_IP}"
     echo "  [-] NAT: Removed forward for UDP 49152-65535"
+  fi
+
+  # LiveKit RTC media port range
+  if iptables -t nat -C PREROUTING -i "$PUB_IF" -p udp --dport 40000:41000 -j DNAT --to-destination "${NGINX_IP}" 2>/dev/null; then
+    iptables -t nat -D PREROUTING -i "$PUB_IF" -p udp --dport 40000:41000 -j DNAT --to-destination "${NGINX_IP}"
+    echo "  [-] NAT: Removed forward for UDP 40000-41000"
   fi
 }
 

@@ -488,7 +488,7 @@ in
         locations."/.well-known/matrix/client" = {
           extraConfig = ''
             default_type application/json;
-            return 200 '{"m.homeserver":{"base_url":"https://matrix.minnecker.com"},"m.turn_servers":[{"uris":["turn:turn.minnecker.com:3478?transport=udp","turns:turn.minnecker.com:5349?transport=tcp"],"username":"","password":""}]}';
+            return 200 '{"m.homeserver":{"base_url":"https://matrix.minnecker.com"},"m.turn_servers":[{"uris":["turn:turn.minnecker.com:3478?transport=udp","turns:turn.minnecker.com:5349?transport=tcp"],"username":"","password":""}],"org.matrix.msc4140.livekit":{"livekit_service_url":"wss://livekit.minnecker.com"}}';
           '';
         };
         locations."/.well-known/openid-configuration" = {
@@ -753,6 +753,29 @@ in
         extraConfig = ''
           charset utf-8;
           client_max_body_size 500M;
+        '';
+      };
+
+      # livekit.minnecker.com (LiveKit SFU WebSocket proxy for Element X VoIP)
+      "livekit.minnecker.com" = {
+        forceSSL = true;
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+        locations."/" = {
+          proxyPass = "http://127.0.0.1:7880";
+          proxyWebsockets = true;
+          extraConfig = ''
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_http_version 1.1;
+            proxy_read_timeout 86400;
+          '';
+        };
+        extraConfig = ''
+          charset utf-8;
+          client_max_body_size 4G;
         '';
       };
 
@@ -1187,6 +1210,42 @@ systemd.services.nextcloud-setup.unitConfig = { };
     secure-stun = true;
     no-cli = true;
   };
+
+  # LiveKit SFU — required by Element X/Element Call for MatrixRTC VoIP.
+  # WebSocket signaling proxied through nginx; UDP media ports forwarded
+  # by host routing.  Uses Redis on nixpostgres for session coordination.
+  services.livekit = {
+    enable = true;
+    openFirewall = false;  # we manage ports manually
+    redis.createLocally = false;
+    settings = {
+      port = 7880;
+      redis.address = "nixpostgres:6379";
+      rtc = {
+        port_range_start = 40000;
+        port_range_end = 41000;
+        use_external_ip = false;
+      };
+    };
+    keyFile = "/var/lib/livekit/keys.yaml";
+  };
+
+  services.lk-jwt-service = {
+    enable = true;
+    port = 8082;
+    keyFile = "/var/lib/livekit/keys.yaml";
+  };
+
+  # Generate LiveKit API keys at activation time.  Shared by livekit and
+  # lk-jwt-service (both point to the same keyFile).
+  system.activationScripts.livekit-keys = ''
+    install -d -m 755 /var/lib/livekit
+    if [ ! -s /var/lib/livekit/keys.yaml ]; then
+      secret=$(${pkgs.openssl}/bin/openssl rand -hex 32)
+      printf 'lk-jwt-service: %s\n' "$secret" > /var/lib/livekit/keys.yaml
+      chmod 600 /var/lib/livekit/keys.yaml
+    fi
+  '';
 
   # Generate the TURN shared secret at activation time — before any service
   # starts.  The coturn module's ExecStartPre (replace-secret) runs as the

@@ -20,6 +20,10 @@ in
       # MatrixRTC / LiveKit transport.  Element X's native SDK prefers the
       # authenticated /_matrix/client/v1/rtc/transports endpoint over the
       # .well-known rtc_foci, so Synapse must advertise the transport here.
+      # The endpoint is only registered with msc4143_enabled.
+      experimental_features = {
+        msc4143_enabled = true;
+      };
       matrix_rtc = {
         transports = [
           {

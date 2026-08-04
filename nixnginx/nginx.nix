@@ -1244,7 +1244,9 @@ systemd.services.nextcloud-setup.unitConfig = { };
       rtc = {
         port_range_start = 40000;
         port_range_end = 41000;
-        use_external_ip = false;
+        # Advertise the public IP for RTC media so clients on other networks
+        # can reach the SFU through the host DNAT (uses STUN to detect it).
+        use_external_ip = true;
       };
     };
     keyFile = "/var/lib/livekit/keys.yaml";
@@ -1269,7 +1271,7 @@ systemd.services.nextcloud-setup.unitConfig = { };
         "rtc": {
           "port_range_start": 40000,
           "port_range_end": 41000,
-          "use_external_ip": false
+          "use_external_ip": true
         },
         "room": {
           "auto_create": false

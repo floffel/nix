@@ -6,6 +6,7 @@ let
 
   baseConfig = pkgs.writeText "runner-base.yaml" ''
     runner:
+      capacity: 4
       labels:
         - ubuntu-latest:docker://node:20-bullseye
         - ubuntu-22.04:docker://node:20-bullseye

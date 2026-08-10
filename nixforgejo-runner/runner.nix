@@ -16,6 +16,10 @@ let
 
     container:
       docker_host: automount
+
+    cache:
+      enabled: true
+      dir: /var/lib/gitea-runner/cache
   '';
 
   mergeConfig = pkgs.writeShellScript "forgejo-merge-config" ''

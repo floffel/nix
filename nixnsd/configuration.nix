@@ -5,8 +5,12 @@ let
   stateDir = "/var/lib/nsd";
   nsdUser = "nsd";
 
+  # Primary zones = those declared with inline data (everything that isn't a
+  # pure secondary). Every primary zonefile must be seeded, or NSD can't serve it.
+  primaryZones = lib.filterAttrs (_: zone: (zone.data or "") != "") config.services.nsd.zones;
+
   # Zones that should be DNSSEC-signed (as declared in ./nsd.nix)
-  dnssecZones = lib.filterAttrs (_: zone: zone.dnssec or false) config.services.nsd.zones;
+  dnssecZones = lib.filterAttrs (_: zone: zone.dnssec or false) primaryZones;
 
   # Plain (unsigned) zone data from the git-tracked zone files. Used to seed
   # a fresh NSD host with the raw zone content before it gets signed. Conforms
@@ -15,7 +19,7 @@ let
     mkdir -p "$out"
     ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: zone: ''
       cp ${pkgs.writeText "plain-zones-${lib.strings.sanitizeDerivationName name}" zone.data} "$out/${name}"
-    '') dnssecZones)}
+    '') primaryZones)}
   '';
 
   # Install the configured TSIG transfer keys into NSD's chroot private dir,
@@ -58,7 +62,7 @@ in
 
     # Seed plain zones for signing only when absent, so existing signed
     # zonefiles (and their DS records) survive restarts untouched.
-    for z in ${lib.concatStringsSep " " (lib.attrNames dnssecZones)}; do
+    for z in ${lib.concatStringsSep " " (lib.attrNames primaryZones)}; do
       if [ ! -e "${stateDir}/zones/''$z" ]; then
         cp -L "${plainZonesDir}/''$z" "${stateDir}/zones/''$z"
       fi

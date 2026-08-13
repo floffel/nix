@@ -671,12 +671,12 @@ EOF
     # 5. Auto-folder routing by recipient detail (user+tag / user.tag).
     if envelope :detail :matches "to" "*" {
       if allof (
-        not string :is "${1}" "",
-        not string :contains "${1}" "/",
-        not string :is "${1}" ".",
-        not string :is "${1}" ".."
+        not string :is "''${1}" "",
+        not string :contains "''${1}" "/",
+        not string :is "''${1}" ".",
+        not string :is "''${1}" ".."
       ) {
-        fileinto :create "tags/${1}";
+        fileinto :create "tags/''${1}";
         stop;
       }
     }

@@ -644,10 +644,10 @@ PY
 """, timeout=300,
             )
 
-            # Misc stack health: dovecot stats, rspamd configtest, FTS plugin,
-            # and the rspamd WebUI/controller listener.
+            # Misc stack health: dovecot stats + sieve extensions config,
+            # rspamd configtest, and the rspamd WebUI/controller listener.
             machine.succeed("doveadm stats dump >/dev/null && echo DOVECOT-STATS-OK")
-            machine.succeed("doveconf -a | grep -q 'fts = flatcurve' && echo FTS-OK")
+            machine.succeed("doveconf -a | grep -q 'sieve_global_extensions' && echo SIEVE-OK")
             machine.succeed("rspamadm configtest && echo RSPAMD-CONFIGTEST-OK")
             machine.wait_until_succeeds(
               "curl -sf http://127.0.0.1:11334/ >/dev/null && echo RSPAMD-UI-OK", timeout=120

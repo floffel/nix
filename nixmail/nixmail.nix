@@ -1,5 +1,28 @@
 { config, pkgs, lib, ... }:
 
+let
+  # parsedmarc config rendered from our own ini (the NixOS module's generated
+  # ini + stock unit are unsuitable: they assume a DynamicUser and IMAP.
+  # See the parsedmarc section below).
+  parsedmarcIni = (pkgs.formats.ini { }).generate "parsedmarc.ini" {
+    general = {
+      save_aggregate = false;
+      save_forensic = false;
+    };
+    maildir = {
+      maildir_path = "/var/vmail/minnecker.com/postmaster/maildir/.Reports";
+      create = true;
+      delete = true;
+    };
+    smtp = {
+      host = "127.0.0.1";
+      port = 587;
+      ssl = false;
+      from = "reports@minnecker.com";
+      to = "florian@minnecker.com";
+    };
+  };
+in
 {
   systemd.tmpfiles.rules = [
     "d /var/vmail 0770 dovecot dovecot - -"
@@ -402,30 +425,13 @@
         };
       };
 
-      "protocol lda" = { mail_plugins = "$mail_plugins sieve fts"; };
-      "protocol lmtp" = { mail_plugins = "$mail_plugins sieve fts"; };
-      # Full-text search on the IMAP side (flatcurve indexes on delivery via
-      # lmtp; searching happens over imap).
-      "protocol imap" = { mail_plugins = "$mail_plugins fts"; };
+      "protocol lda" = { mail_plugins = "$mail_plugins sieve"; };
+      "protocol lmtp" = { mail_plugins = "$mail_plugins sieve"; };
 
       # Sieve 2.4 settings. Enable the extensions our routing script and
       # user-facing vacation/notify scripts rely on.
       sieve_extensions = [ "envelope" "notify" "vacation" ];
       sieve_global_extensions = [ "envelope" "variables" "mailbox" ];
-
-      # FTS (flatcurve, bundled). Tuning keys confirmed against dovecot 2.4;
-      # adjust threads/token length after observing load in production.
-      plugin = {
-        fts = "flatcurve";
-        fts_autoindex = "yes";
-        fts_autoindex_exclude = "\\Junk";
-        fts_flatcurve_min_token_len = "2";
-        fts_flatcurve_max_threads = "2";
-      };
-
-      # Flatcurve indexing workers.
-      "service indexer" = { process_limit = "1"; };
-      "service indexer-worker" = { process_limit = "2"; };
 
       # Global BEFORE sieve: routing (quarantine, spam->Junk, reports,
       # +detail auto-folder). Order of rules matters (see routing.sieve).
@@ -527,7 +533,6 @@
             header = "X-Rspamd-Quarantine";
             value = "yes";
             score = 12;
-            condition = "default";
           }
         }
       '';
@@ -539,7 +544,7 @@
       # mount via rspamd's $file$ directive (plaintext, provisioned by the
       # mail-rspamd-password oneshot).
       "worker-controller.inc".text = ''
-        secure_ip = ["127.0.0.1" "10.20.20.14" "fd01::14"];
+        secure_ip = "127.0.0.1,10.20.20.14,fd01::14";
         password = "$file$/var/lib/secrets/mail/rspamd/controller-password";
         enable_password = "$file$/var/lib/secrets/mail/rspamd/controller-enable-password";
       '';
@@ -747,45 +752,35 @@ EOF
       grafana.dashboard = false;
     };
 
-    settings = {
-      general = {
-        save_aggregate = false;
-        save_forensic = false;
-      };
-      maildir = {
-        # The .Reports mailbox (postmaster maildir subfolder) that the
-        # routing sieve files aggregate reports into.
-        maildir_path = "/var/vmail/minnecker.com/postmaster/maildir/.Reports";
-        create = true;
-        delete = true;
-      };
-      smtp = {
-        # Localhost submission, no user/password -> authenticated by
-        # mynetworks, not by an account.
-        host = "127.0.0.1";
-        port = 587;
-        ssl = false;
-        from = "reports@minnecker.com";
-        to = [ "florian@minnecker.com" ];
-      };
-    };
+    # Config is generated from `parsedmarcIni` (top of file) and injected by
+    # the overridden unit below, not from the module's settings renderer.
+    settings = { };
   };
 
-  # parsedmarc must read postmaster's Maildir, so run it as the dovecot
-  # mail user (which owns /var/vmail) instead of the module's throwaway
-  # DynamicUser. Ensure dovecot (unit "dovecot.service", not the 2.3
-  # "dovecot2.service") and the LDA-delivery path are up first.
+  # The stock parsedmarc NixOS module runs the service as a throwaway
+  # DynamicUser and its ExecStartPre does `chown parsedmarc:parsedmarc` on the
+  # generated ini — neither works here: there is no such user (DynamicUser is
+  # off) and Dovecot-owned Maildirs need the dovecot user to read them.
+  #
+  # Replace the unit: run as the dovecot mail user (owner of /var/vmail), in
+  # the host user namespace (so the dovecot UID is visible), and point it at
+  # our rendererd ini. Ensure dovecot and the LDA-delivery path are up first.
   systemd.services.parsedmarc = {
     after = [ "dovecot.service" "postfix.service" ];
-    serviceConfig = {
-      User = lib.mkForce "dovecot";
-      Group = lib.mkForce "dovecot";
-      DynamicUser = lib.mkForce false;
-      # A private user namespace would hide the dovecot UID and break reading
-      # /var/vmail — run in the host namespace so dovecot-owned Maildirs are
-      # accessible.
-      PrivateUsers = lib.mkForce false;
-      StateDirectory = lib.mkForce "parsedmarc";
+    serviceConfig = lib.mkForce {
+      Type = "simple";
+      User = "dovecot";
+      Group = "dovecot";
+      RuntimeDirectory = "parsedmarc";
+      RuntimeDirectoryMode = "0755";
+      ExecStartPre = "+${pkgs.writeShellScript "parsedmarc-pre" ''
+        install -m 0640 -o dovecot -g dovecot ${parsedmarcIni} /run/parsedmarc/parsedmarc.ini
+      ''}";
+      ExecStart = "${pkgs.parsedmarc}/bin/parsedmarc -c /run/parsedmarc/parsedmarc.ini";
+      RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
+      PrivateUsers = false;
+      ProtectHome = true;
+      ProtectSystem = false;
     };
   };
 }

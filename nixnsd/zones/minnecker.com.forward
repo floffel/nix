@@ -1,6 +1,6 @@
 $TTL 7200
 @   IN SOA r.floffel.de. postmaster.minnecker.com. (
-    2026080201	; serial
+    2026081101	; serial
     14400       ; refresh
     3600        ; retry
     604800      ; expire
@@ -20,8 +20,16 @@ $TTL 7200
 
 minnecker.com.		 IN CAA	0   issue "letsencrypt.org"
 
-minnecker.com._domainkey IN TXT     ( "v=DKIM1; k=rsa; "
+minnecker._domainkey IN TXT     ( "v=DKIM1; k=rsa; "
 	"p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC/CJG+JldHRHctxRdKz5RfaCOfqSXEYyvbVDsBoEgdgU2vU7dpQu8iIi0IvLm2ImGMmp1duxQPxp1oec5fltHdNKK39GK2aoVinIr+wcBkJwjNzZUSngeqIlzXRXXe72mNKpFVAxs9qgIHMQyjz9V/VhjcKxE2CwbEkgumGV9aKQIDAQAB" )  ; ----- DKIM key minnecker.com
+
+arc._domainkey               IN TXT     ( "v=DKIM1; k=rsa; "
+	"p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC/CJG+JldHRHctxRdKz5RfaCOfqSXEYyvbVDsBoEgdgU2vU7dpQu8iIi0IvLm2ImGMmp1duxQPxp1oec5fltHdNKK39GK2aoVinIr+wcBkJwjNzZUSngeqIlzXRXXe72mNKpFVAxs9qgIHMQyjz9V/VhjcKxE2CwbEkgumGV9aKQIDAQAB" )  ; ----- ARC key (same key as DKIM)
+
+_mta-sts                     IN TXT     "v=STSv1; id=2026081101"
+_smtp._tls                   IN TXT     "v=TLSRPTv1; rua=mailto:reports@minnecker.com"
+mta-sts                      IN CNAME   px
+default._bimi                IN TXT     "v=BIMI1; l=https://www.minnecker.com/bimi-logo.svg"
 
 
 autoconfig               IN CNAME   mail

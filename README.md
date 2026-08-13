@@ -177,6 +177,61 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/coturn var/lib/secrets/coturn none 
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/coturn var/lib/secrets/coturn none bind,ro 0 0
 ```
 
+#### Mail hardening & email features
+
+The `nixmail` container bind-mounts the `mail` secrets parent
+(`/var/lib/secrets/mail`) **read-write**, so the extra mail secrets below need
+no additional mount lines — they are generated/provisioned under the existing
+mount:
+
+| Path under `/var/lib/secrets/mail` | Provider | Purpose |
+| :--- | :--- | :--- |
+| `parsedmarc/imap-password` | Operator (one-time) | plaintext IMAP **and** SMTP password for `postmaster@minnecker.com`. `echo -n '<pw>' > /mnt/pve/nas/shared/secrets/mail/parsedmarc/imap-password && chmod 600`. Used by parsedmarc to read reports from IMAP and send the digest via our own submission. |
+| `rspamd/controller-password` / `controller-enable-password` | `mail-rspamd-password` oneshot | bcrypt hashes (`rspamadm pw`) read by the rspamd controller via `$file$`. Plaintext is written alongside as `*.plain` for the operator. |
+| `dkim/minnecker.com.private` + `dkim/minnecker.dns` | `mail-dkim-key` oneshot | DKIM/ARC signing key (2048-bit) and a ready-to-paste DNS hint file. |
+
+**Addressing (`recipient_delimiter = "+."`)**
+`user+tag@minnecker.com` and `user.tag@minnecker.com` both reach the same
+mailbox. A global `before` sieve auto-files them into `tags/<tag>/` (path
+traversal is sanitised). In Roundcube you'll see a `tags` folder.
+
+**Quarantine tier**
+Rspamd adds `X-Rspamd-Quarantine: yes` to mail scoring ≥ 12 (below `reject =
+40`). The routing sieve redirects that mail to `quarantine@minnecker.com` —
+an alias to `postmaster@` (managed in Kanidm) — which the same sieve files
+into the `Quarantine/` folder. Releasing a message = moving it out of
+`Quarantine/` in IMAP. The loop guard: mail addressed to the quarantine
+mailbox is filed into `Quarantine/` **before** the redirect rule, so a
+re-submitted quarantined message never gets redirected again.
+
+**Reports (DMARC / TLS-RPT)**
+Aggregate report mail addressed to `reports@minnecker.com` (alias →
+`postmaster@`, managed in Kanidm) is filed into the hidden `.Reports` folder.
+`parsedmarc` (running on `nixmail`) watches that folder over IMAP and emails a
+daily digest to `florian@minnecker.com`; raw reports are archived (not
+deleted). TLS-RPT requests point at `reports@` via `_smtp._tls`.
+
+**MTA-STS + TLS-RPT**
+`https://mta-sts.minnecker.com/.well-known/mta-sts.txt` serves the policy
+(`mx: riese.minnecker.com`, mode enforce). Records: `_mta-sts` TXT and
+`_smtp._tls` TXT (TLS-RPT) live in `nixnsd/zones/minnecker.com.forward`.
+
+**Rspamd WebUI**
+`https://rspamd.minnecker.com` proxies to the rspamd controller and is gated
+by the same nginx/LDAP auth as `ki.minnecker.com`. Scan history/graphs use the
+local Redis.
+
+**DKIM / ARC rotation**
+The `mail-dkim-key` oneshot generates/owns the key. To rotate: remove
+`minnecker.com.private`, let `mail-dkim-key` regenerate (or run it
+manually), then paste the `minnecker._domainkey` and `arc._domainkey` TXT
+records from `dkim/minnecker.dns` into the zone, bump the SOA serial, and
+`nixos-rebuild switch` on `nixnsd`. The published key must match the key file
+before cutting over. (The current in-zone key is 1024-bit and was hosted under
+the wrong owner name `minnecker.com._domainkey`; both are fixed in the zone
+source — a full rotation to 2048-bit should also be scheduled.)
+
+
 #### Shared SSL Certificates
 `nixnsd` runs ACME via DNS-01 challenge and writes the acquired wildcard
 certificates to `/var/lib/secrets/ssl/<domain>/` (`fullchain.pem` and

@@ -68,3 +68,5 @@ jobs:
           nix build .#vmTests.x86_64-linux.vm-nixforgejo --accept-flake-config -L --no-link
           nix build .#vmTests.x86_64-linux.vm-nixidm --accept-flake-config -L --no-link
           nix build .#vmTests.x86_64-linux.vm-nixmonitoring --accept-flake-config -L --no-link
+          nix build .#vmTests.x86_64-linux.vm-nixmail --accept-flake-config -L --no-link
+          nix build .#vmTests.x86_64-linux.vm-mail-roundtrip --accept-flake-config -L --no-link

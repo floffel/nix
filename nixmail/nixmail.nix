@@ -13,8 +13,10 @@
   # per-consumer config files from it.
   systemd.services.mail-ldap-config = {
     description = "Generate Dovecot/Postfix LDAP config from shared mail token";
-    wantedBy = [ "dovecot2.service" "postfix.service" ];
-    before = [ "dovecot2.service" "postfix.service" ];
+    # NOTE: the NixOS dovecot2 module names its unit "dovecot" (not
+    # "dovecot2"), see nixos/modules/services/mail/dovecot.nix.
+    wantedBy = [ "dovecot.service" "postfix.service" ];
+    before = [ "dovecot.service" "postfix.service" ];
     # No RemainAfterExit: the service must re-enter "inactive (dead)" after
     # running so the mail-ldap-config.path watcher can re-trigger it when the
     # shared token file rotates. Boot ordering is unaffected — `before`/`wantedBy`
@@ -162,6 +164,18 @@
 
         smtpd_milters = "inet:127.0.0.1:11332";
         non_smtpd_milters = "inet:127.0.0.1:11332";
+
+        # A flaky/dead milter must NEVER tempfail delivery of otherwise
+        # valid mail. If rspamd is slow or down, accept and deliver
+        # without spam headers rather than bouncing the sender.
+        milter_default_action = "accept";
+
+        # Greylisting via postscreen (port 25 only; submission/submissions
+        # bypass postscreen entirely, so authenticated mail is unaffected).
+        # Intervals: 1h -> 2h -> 4h doubling grace for returning senders.
+        postscreen_greylist_action = "enforce";
+        postscreen_greylist_intervals = "1h:2h:4h";
+        postscreen_dnsbl_sites = "zen.spamhaus.org=127.0.0.[2..11]*3,bl.spamcop.net=127.0.0.2*2";
 
         smtp_tls_security_level = "may";
 
@@ -388,33 +402,255 @@
         };
       };
 
-      "protocol lda" = { mail_plugins = "$mail_plugins sieve"; };
-      "protocol lmtp" = { mail_plugins = "$mail_plugins sieve"; };
-      "sieve_script spam-global" = {
+      "protocol lda" = { mail_plugins = "$mail_plugins sieve fts"; };
+      "protocol lmtp" = { mail_plugins = "$mail_plugins sieve fts"; };
+      # Full-text search on the IMAP side (flatcurve indexes on delivery via
+      # lmtp; searching happens over imap).
+      "protocol imap" = { mail_plugins = "$mail_plugins fts"; };
+
+      # Sieve 2.4 settings. Enable the extensions our routing script and
+      # user-facing vacation/notify scripts rely on.
+      sieve_extensions = [ "envelope" "notify" "vacation" ];
+      sieve_global_extensions = [ "envelope" "variables" "mailbox" ];
+
+      # FTS (flatcurve, bundled). Tuning keys confirmed against dovecot 2.4;
+      # adjust threads/token length after observing load in production.
+      plugin = {
+        fts = "flatcurve";
+        fts_autoindex = "yes";
+        fts_autoindex_exclude = "\\Junk";
+        fts_flatcurve_min_token_len = "2";
+        fts_flatcurve_max_threads = "2";
+      };
+
+      # Flatcurve indexing workers.
+      "service indexer" = { process_limit = "1"; };
+      "service indexer-worker" = { process_limit = "2"; };
+
+      # Global BEFORE sieve: routing (quarantine, spam->Junk, reports,
+      # +detail auto-folder). Order of rules matters (see routing.sieve).
+      "sieve_script routing" = {
         type = "before";
-        path = "/etc/dovecot/global-spam.sieve";
-        sieve_script_bin_path = "/var/lib/dovecot/global-spam.svbin";
+        path = "/etc/dovecot/routing.sieve";
+        sieve_script_bin_path = "/var/lib/dovecot/routing.svbin";
       };
       "sieve_script personal" = { active_path = "~/.dovecot.sieve"; driver = "file"; path = "~/sieve"; };
     };
   };
 
+  # Local Redis for rspamd: scan history (WebUI graphs) + bayes/statistics.
+  # Bound to loopback only; rspamd connects with no password.
+  services.redis.servers.rspamd = {
+    enable = true;
+    bind = "127.0.0.1";
+    port = 6379;
+    save = [ ];
+    openFirewall = false;
+  };
+
   # Rspamd configuration using module locals
   services.rspamd = {
     enable = true;
-    locals."dkim_signing.conf".text = ''
-      selector = "minnecker";
-      domain = "minnecker.com";
-      path = "/var/lib/secrets/mail/dkim/minnecker.com.private";
+
+    workers = {
+      # S0: make the production milter real. Postfix sends smtpd_milters to
+      # inet:127.0.0.1:11332, but the NixOS module only starts `normal` +
+      # `controller` workers by default (unix socket / 11334). Without this
+      # rspamd_proxy worker nothing listens on 11332 and every milter call
+      # fails/times out — so X-Spam-* headers (and hence the spam sieve and
+      # the quarantine flag) never appear in production. self_scan lets the
+      # proxy worker reuse the local `normal` worker.
+      rspamd_proxy = {
+        bindSockets = lib.mkForce [ "127.0.0.1:11332" ];
+        extraConfig = ''
+          upstream "local" {
+            default = yes;
+            self_scan = yes;
+          }
+        '';
+      };
+
+      # Controller/WebUI reachable from the nginx proxy container
+      # (10.20.20.14 / fd01::14) for rspamd.minnecker.com, in addition to
+      # loopback. secure_ip + password are set in local.d/worker-controller.inc.
+      controller = {
+        bindSockets = lib.mkForce [ "[::]:11334" ];
+      };
+    };
+
+    locals = {
+      "dkim_signing.conf".text = ''
+        selector = "minnecker";
+        domain = "minnecker.com";
+        path = "/var/lib/secrets/mail/dkim/minnecker.com.private";
+      '';
+
+      # ARC: sign with the same key under the `arc` selector so forwarded
+      # mail keeps an independent auth chain.
+      "arc.conf".text = ''
+        enabled = true;
+        selector = "arc";
+        domain = "minnecker.com";
+        path = "/var/lib/secrets/mail/dkim/minnecker.com.private";
+        sign_authenticated = true;
+        sign_local = true;
+        allow_envfrom_empty = true;
+      '';
+
+      # Point rspamd at the local Redis for history + stats.
+      "redis.conf".text = ''
+        servers = "127.0.0.1:6379";
+      '';
+      "history_redis.conf".text = ''
+        servers = "127.0.0.1:6379";
+      '';
+
+      # Score bands. add_header adds the X-Spam-* headers (drives the spam
+      # sieve); reject is raised well above the quarantine band so the
+      # quarantine tier (milter_headers below) catches borderline mail in a
+      # mailbox instead of bouncing it. Tune after observing real scores.
+      "actions.conf".text = ''
+        add_header = 6;
+        reject = 40;
+      '';
+
+      # Add the built-in spam header AND a custom quarantine flag header.
+      # Messages scoring >= 12 (but below reject=40) get
+      # X-Rspamd-Quarantine: yes, which the global routing sieve redirects to
+      # the quarantine mailbox. Do NOT define a `quarantine` action here: it
+      # maps to Postfix's hold queue, not a mailbox.
+      "milter_headers.conf".text = ''
+        use = ["spam-header" "quarantine-flag"];
+        extended_spam_headers = true;
+        custom {
+          quarantine-flag {
+            header = "X-Rspamd-Quarantine";
+            value = "yes";
+            score = 12;
+            condition = "default";
+          }
+        }
+      '';
+
+      # Controller auth: secure_ip addresses bypass auth for reads; other
+      # clients (e.g. the public internet via the LDAP-gated nginx vhost)
+      # still pass the nginx LDAP check, and write operations need the
+      # password anyway. Passwords are read at runtime from the rw secrets
+      # mount via rspamd's $file$ directive (hashes generated by rspamadm pw).
+      "worker-controller.inc".text = ''
+        secure_ip = ["127.0.0.1" "10.20.20.14" "fd01::14"];
+        password = "$file$/var/lib/secrets/mail/rspamd/controller-password";
+        enable_password = "$file$/var/lib/secrets/mail/rspamd/controller-enable-password";
+      '';
+
+      # Allow $file$ to read the controller passwords from the rw secrets
+      # mount (outside the read-only /etc/rspamd config directory).
+      "options.inc".text = ''
+        secure_config = false;
+      '';
+    };
+  };
+
+  # Provision the DKIM/ARC RSA key if it does not exist yet (2048-bit) and
+  # emit a ready-to-paste DNS hint file. Idempotent; runs before rspamd so
+  # the signing key exists at startup. The operator pastes the published
+  # records from /var/lib/secrets/mail/dkim/minnecker.dns into the zone and
+  # bumps the serial (see nixnsd).
+  systemd.services.mail-dkim-key = {
+    description = "Provision DKIM/ARC signing key + DNS hint for rspamd";
+    wantedBy = [ "rspamd.service" ];
+    before = [ "rspamd.service" ];
+    serviceConfig.Type = "oneshot";
+    path = [ pkgs.openssl pkgs.coreutils ];
+    script = ''
+      set -euo pipefail
+      D=/var/lib/secrets/mail/dkim
+      KEY="$D/minnecker.com.private"
+      HINT="$D/minnecker.dns"
+      install -d -m 0700 -o rspamd -g rspamd "$D"
+      if [ ! -s "$KEY" ]; then
+        echo "Generating new 2048-bit DKIM/ARC key..."
+        openssl genrsa -out "$KEY" 2048 2>/dev/null
+      fi
+      # Ensure rspamd (which runs as the rspamd user) can read the key.
+      chown rspamd:rspamd "$KEY"
+      chmod 600 "$KEY"
+      PUBKEY=$(openssl rsa -in "$KEY" -pubout -outform DER 2>/dev/null | base64 | tr -d '\n')
+      cat > "$HINT" <<EOF
+; DNS hint for minnecker.com (operator pastes into the zone, then bumps serial).
+; minnecker._domainkey
+minnecker._domainkey IN TXT ( "v=DKIM1; k=rsa; " "p=$PUBKEY" )
+; arc._domainkey (ARC uses the same key)
+arc._domainkey IN TXT ( "v=DKIM1; k=rsa; " "p=$PUBKEY" )
+EOF
+      chown rspamd:rspamd "$HINT"
+      chmod 640 "$HINT"
+    '';
+  };
+
+  # Generate rspamd controller passwords on first boot (bcrypt hashes via
+  # rspamadm pw) into the rw secrets mount. The WebUI operator finds the
+  # plaintext next to each hash (e.g. controller-password.plain).
+  systemd.services.mail-rspamd-password = {
+    description = "Provision rspamd controller passwords";
+    wantedBy = [ "rspamd.service" ];
+    before = [ "rspamd.service" ];
+    serviceConfig.Type = "oneshot";
+    path = [ pkgs.rspamd pkgs.openssl pkgs.coreutils ];
+    script = ''
+      set -euo pipefail
+      D=/var/lib/secrets/mail/rspamd
+      install -d -m 0750 -o rspamd -g rspamd "$D"
+      gen() {
+        local plain="$1" hash="$2"
+        if [ ! -s "$hash" ]; then
+          openssl rand -base64 18 > "$plain"
+          cat "$plain" | rspamadm pw > "$hash"
+          chmod 600 "$plain" "$hash"
+        fi
+        # rspamd reads the hash via $file$; it must be readable by the
+        # rspamd user.
+        chown rspamd:rspamd "$hash"
+        chmod 600 "$hash"
+      }
+      gen "$D/controller-password.plain" "$D/controller-password"
+      gen "$D/controller-enable-password.plain" "$D/controller-enable-password"
     '';
   };
 
 
   environment.systemPackages = [ pkgs.dovecot_pigeonhole ];
 
-  # Global Sieve script to automatically move spam to the Junk folder
-  environment.etc."dovecot/global-spam.sieve".text = ''
-    require ["fileinto", "mailbox"];
+  # Global BEFORE sieve. Runs for every delivered message, before the user's
+  # personal script. Rule ORDER is critical:
+  #   1. Mail expressly addressed to the quarantine mailbox -> Quarantine and
+  #      STOP. This MUST come first: a re-submitted (redirected) quarantined
+  #      message would otherwise hit rule 2 again and loop forever.
+  #   2. rspamd's quarantine verdict header -> redirect to the quarantine
+  #      mailbox (alias -> postmaster -> this script files it into Quarantine).
+  #   3. rspamd spam verdict headers -> Junk (consolidated from the previous
+  #      standalone spam-global script so ordering with quarantine is
+  #      deterministic).
+  #   4. DMARC/TLS-RPT aggregate reports (To/Cc reports@) -> hidden .Reports
+  #      mailbox that parsedmarc watches.
+  #   5. recipient-detail addressing (user+tag / user.tag) -> tags/<detail>.
+  # Prevents path traversal in the generated folder name.
+  environment.etc."dovecot/routing.sieve".text = ''
+    require ["fileinto", "mailbox", "envelope", "variables", "redirect"];
+
+    # 1. Quarantine loop guard / landing pad.
+    if envelope :localpart "to" "quarantine" {
+      fileinto :create "Quarantine";
+      stop;
+    }
+
+    # 2. rspamd quarantine verdict -> quarantine mailbox.
+    if header :contains "X-Rspamd-Quarantine" "yes" {
+      redirect "quarantine@minnecker.com";
+      stop;
+    }
+
+    # 3. Spam verdict -> Junk.
     if anyof (
       header :contains "X-Spam-Flag" "YES",
       header :contains "X-Spam" "Yes"
@@ -422,10 +658,122 @@
       fileinto :create "Junk";
       stop;
     }
+
+    # 4. DMARC / TLS-RPT aggregate reports -> .Reports (parsedmarc watches it).
+    if anyof (
+      header :contains "To" "reports@minnecker.com",
+      header :contains "Cc" "reports@minnecker.com"
+    ) {
+      fileinto :create ".Reports";
+      stop;
+    }
+
+    # 5. Auto-folder routing by recipient detail (user+tag / user.tag).
+    if envelope :detail :matches "to" "*" {
+      if allof (
+        not string :is "${1}" "",
+        not string :contains "${1}" "/",
+        not string :is "${1}" ".",
+        not string :is "${1}" ".."
+      ) {
+        fileinto :create "tags/${1}";
+        stop;
+      }
+    }
   '';
+
+  # Export Dovecot stats to Prometheus via the node_exporter textfile
+  # collector (already enabled globally, directory 0755 node-exporter).
+  # Runs every minute; writes dovecot.prom only on success (keeps the last
+  # good file on transient failures).
+  systemd.services.dovecot-stats-exporter = {
+    description = "Export Dovecot stats to Prometheus textfile";
+    serviceConfig.Type = "oneshot";
+    path = [ pkgs.dovecot pkgs.coreutils ];
+    script = ''
+      set -euo pipefail
+      OUT=/var/lib/node-exporter-textfile/dovecot.prom
+      TMP=$(mktemp)
+      # Prefer the native Prometheus format; fall back to parsing the
+      # classic key=value dump.
+      if ! doveadm stats dump --format prometheus > "$TMP" 2>/dev/null; then
+        doveadm stats dump 2>/dev/null | awk '{gsub(/\./, "_"); printf "dovecot_%s %s\n", $1, $2}' > "$TMP" || { rm -f "$TMP"; exit 0; }
+      fi
+      if [ -s "$TMP" ]; then
+        install -m 0644 -o node-exporter -g node-exporter "$TMP" "$OUT"
+      fi
+      rm -f "$TMP"
+    '';
+  };
+  systemd.timers.dovecot-stats-exporter = {
+    description = "Periodically export Dovecot stats";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:0/1";
+      Unit = "dovecot-stats-exporter.service";
+    };
+  };
 
 
 
   # Notes: Ensure DKIM private key remains outside the Nix store at
   # /var/lib/secrets/mail/dkim/minnecker.com.private and is readable by rspamd.
+
+  # DMARC + TLS-RPT report processing (parsedmarc).
+  #
+  # parsedmarc reads DMARC/TLS-RPT aggregate mail from the postmaster
+  # mailbox over IMAP (loopback, STARTTLS not required) and sends a daily
+  # digest via our own submission. It watches the hidden ".Reports" mailbox
+  # that the routing sieve files report mail into (NO Elasticsearch / Splunk /
+  # Redis — the digest + archived raw reports suffice; provision.* stays off
+  # because it conflicts with the LDAP virtual-mail flow).
+  #
+  # Runtime credentials are read from the rw secrets mount at start:
+  #   /var/lib/secrets/mail/parsedmarc/imap-password  (postmaster POSIX pw)
+  # which the operator provisions manually (echo -n '<pw>' > ...; chmod 600).
+  # reports@minnecker.com -> postmaster is a Kanidm alias managed by the
+  # operator, not a Postfix alias.
+  services.parsedmarc = {
+    enable = true;
+
+    provision = {
+      localMail.enable = false;
+      elasticsearch = false;
+      geoIp = false;
+      grafana.datasource = false;
+      grafana.dashboard = false;
+    };
+
+    settings = {
+      general = {
+        save_aggregate = false;
+        save_forensic = false;
+      };
+      mailbox = {
+        watch = true;
+        delete = false;
+      };
+      imap = {
+        host = "127.0.0.1";
+        port = 143;
+        ssl = false;
+        user = "postmaster@minnecker.com";
+        password = { _secret = "/var/lib/secrets/mail/parsedmarc/imap-password"; };
+      };
+      smtp = {
+        host = "127.0.0.1";
+        port = 587;
+        ssl = false;
+        user = "reports@minnecker.com";
+        from = "reports@minnecker.com";
+        to = [ "florian@minnecker.com" ];
+        password = { _secret = "/var/lib/secrets/mail/parsedmarc/imap-password"; };
+      };
+    };
+  };
+
+  # parsedmarc reads reports from the dovecot Maildir; ensure our dovecot
+  # (unit "dovecot.service", not the module-default 2.3 "dovecot2.service")
+  # is up first.
+  systemd.services.parsedmarc.after = [ "dovecot.service" ];
 }

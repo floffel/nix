@@ -25,6 +25,8 @@ test-config:
     nix build .#checks.x86_64-linux.routing-nixnginx --accept-flake-config --no-link
     nix build .#checks.x86_64-linux.services-nixnginx --accept-flake-config --no-link
     nix build .#checks.x86_64-linux.fail2ban-filters-nixnginx --accept-flake-config --no-link
+    nix build .#checks.x86_64-linux.mail-open-relay --accept-flake-config --no-link
+    nix build .#checks.x86_64-linux.unbound-open-resolver --accept-flake-config --no-link
     @echo "=== Config assertions passed ==="
 
 # VM integration tests — boots containers in QEMU VMs (requires KVM + x86_64-linux)
@@ -38,7 +40,9 @@ test-vm:
     nix build .#vmTests.x86_64-linux.vm-nixforgejo --accept-flake-config --no-link -L
     nix build .#vmTests.x86_64-linux.vm-nixidm --accept-flake-config --no-link -L
     nix build .#vmTests.x86_64-linux.vm-nixmonitoring --accept-flake-config --no-link -L
-    @echo "=== Core VM tests passed (nixnginx, nixpostgres, nixnsd, nixunbound, nixforgejo, nixidm, nixmonitoring) ==="
+    nix build .#vmTests.x86_64-linux.vm-nixmail --accept-flake-config --no-link -L
+    nix build .#vmTests.x86_64-linux.vm-mail-roundtrip --accept-flake-config --no-link -L
+    @echo "=== VM security tests passed (nixnginx, nixpostgres, nixnsd, nixunbound, nixforgejo, nixidm, nixmonitoring, nixmail, vm-mail-roundtrip) ==="
 
 # Full test suite (evaluation + config assertions + VM)
 test-full: test test-vm

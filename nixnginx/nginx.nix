@@ -153,6 +153,8 @@ in
       openwebui.servers = { "nixopenwebui:8080" = {}; };
       nixmonitoring.servers = { "nixmonitoring:3000" = {}; };
       idm.servers = { "nixidm:8443" = {}; };
+      # Rspamd controller (WebUI/history) on the mail host.
+      nixmail.servers = { "nixmail:11334" = {}; };
     };
 
     # 3. Virtual Hosts Configuration
@@ -429,6 +431,57 @@ in
             auth_ldap_servers mail_users;
             auth_delay 10s;
             js_content auth.granted;
+          '';
+        };
+      };
+
+      # rspamd.minnecker.com (Rspamd WebUI + scan history)
+      #
+      # Reverse proxy to the rspamd controller on nixmail (11334). Protected
+      # by the same nginx-LDAP auth as ki.minnecker.com (auth_ldap mail_users)
+      # since the controller itself only trusts the proxy's secure_ip and
+      # relies on nginx to gate access. WebSocket support lets the WebUI
+      # stream live scan events. WebUI content is served by the rspamd
+      # controller itself.
+      "rspamd.minnecker.com" = {
+        forceSSL = true;
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+        locations."/" = {
+          proxyPass = "http://nixmail";
+          proxyWebsockets = true;
+          extraConfig = ''
+            auth_ldap "Forbidden";
+            auth_ldap_servers mail_users;
+            auth_delay 1s;
+
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_redirect off;
+            proxy_buffering off;
+            chunked_transfer_encoding off;
+          '';
+        };
+        extraConfig = ''
+          charset utf-8;
+          client_max_body_size 5M;
+        '';
+      };
+
+      # mta-sts.minnecker.com (MTA-STS policy host)
+      #
+      # Serves the MTA-STS policy file. The host is reached via the wildcard
+      # CNAME to the nginx proxy; only this well-known path is needed.
+      # Policy must match the published MX (riese.minnecker.com).
+      "mta-sts.minnecker.com" = {
+        forceSSL = true;
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+        locations."= /.well-known/mta-sts.txt" = {
+          extraConfig = ''
+            default_type text/plain;
+            return 200 'version: STSv1\nmode: enforce\nmx: riese.minnecker.com\nmax_age: 86400\n';
           '';
         };
       };
@@ -798,6 +851,14 @@ in
         root = "/usr/share/webapps/www.minnecker.com";
         locations."/.well-known/matrix/server" = {
           extraConfig = "default_type application/json; return 200 '{ \"m.server\": \"matrix.minnecker.com:443\" }';";
+        };
+        # BIMI logo (pre-VMC stub). Referenced by default._bimi.
+        locations."/bimi-logo.svg" = {
+          alias = "${./bimi-logo.svg}";
+          extraConfig = ''
+            default_type image/svg+xml;
+            add_header Cache-Control "public, max-age=86400";
+          '';
         };
         locations."/.well-known/matrix/client" = {
           extraConfig = ''

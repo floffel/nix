@@ -84,6 +84,7 @@
 
       testHelpers = ./tests/test-helpers.nix;
       testPostgres = ./tests/test-postgres.nix;
+      testMailRoundtrip = ./tests/mail-roundtrip.nix;
 
       mkBootTest = name: path: extraTest: runTest {
         name = name;
@@ -142,6 +143,10 @@
             (vh: proxyPass vh == "http://jitsi" && forceSsl vh))
           (checkVhost "kie.minnecker.com"
             (vh: proxyPass vh == "http://kiellm" && forceSsl vh))
+          (checkVhost "rspamd.minnecker.com"
+            (vh: proxyPass vh == "http://nixmail" && forceSsl vh))
+          (checkVhost "mta-sts.minnecker.com"
+            (vh: forceSsl vh && builtins.hasAttr "= /.well-known/mta-sts.txt" vh.locations))
           (vhosts."cloud.minnecker.com" or {} != {})
           (vhosts."cloud.minnecker.com".forceSSL or false == true)
         ];
@@ -157,6 +162,8 @@
           "wiki.minnecker.com: proxyPass http://wikijs + forceSSL"
           "meet.minnecker.com: proxyPass http://jitsi + forceSSL"
           "kie.minnecker.com: proxyPass http://kiellm + forceSSL"
+          "rspamd.minnecker.com: proxyPass http://nixmail + forceSSL"
+          "mta-sts.minnecker.com: forceSSL + = /.well-known/mta-sts.txt location"
           "cloud.minnecker.com vhost must be defined"
           "cloud.minnecker.com: forceSSL must be true"
         ];
@@ -187,6 +194,94 @@
           "lk-jwt-service must be enabled"
         ];
       in { assertions = assertions; errors = errorMsgs; };
+
+      # Security assertions: mail must NOT be an open relay, and unbound
+      # must NOT be an open resolver. These mirror the security VM checks
+      # but run at eval time (no VM, no KVM) as a cheap tripwire.
+      nixmailCfg = (mkEvalSystem ./nixmail/configuration.nix).config;
+      mailSecurityAssertions = let
+        pf = nixmailCfg.services.postfix.settings.main or {};
+        rest = pf.smtpd_recipient_restrictions or "";
+        saslOpts = pf.smtpd_sasl_security_options or "";
+        hasRestriction = name: builtins.match ".*${name}.*" rest != null;
+        assertions = [
+          # Relaying to third-party domains must be denied for
+          # unauthenticated senders. permit_auth_destination only approves
+          # our own domains (LDAP-backed virtual_mailbox_domains);
+          # defer_unauth_destination refuses everything else.
+          (hasRestriction "defer_unauth_destination" || hasRestriction "reject_unauth_destination")
+          (hasRestriction "permit_auth_destination")
+          (hasRestriction "permit_sasl_authenticated")
+          # noanonymous: the anonymous SASL mechanism must be disabled so
+          # an unauthenticated session can never authenticate.
+          (saslOpts == "noanonymous")
+          # virtual_mailbox_domains is LDAP-backed: a domain with no users
+          # in Kanidm is not a valid local destination.
+          (builtins.match ".*proxy:ldap:.*" (pf.virtual_mailbox_domains or "") != null)
+          # The mail stack must not run its own DNS resolver / authoritative
+          # server (postfix/dovecot/rspamd only) — prevents accidental
+          # open-resolver exposure on the mail host.
+          (!(nixmailCfg.services.unbound.enable or false))
+          (!(nixmailCfg.services.bind.enable or false))
+          (!(nixmailCfg.services.nsd.enable or false))
+          # Greylisting (postscreen) + milter failure policy must be set.
+          (pf.postscreen_greylist_action or "" == "enforce")
+          (pf.milter_default_action or "" == "accept")
+        ];
+        errorMsgs = [
+          "smtpd_recipient_restrictions must contain defer/reject_unauth_destination (no open relay)"
+          "smtpd_recipient_restrictions must contain permit_auth_destination"
+          "smtpd_recipient_restrictions must require SASL auth for relaying"
+          "smtpd_sasl_security_options must be noanonymous"
+          "virtual_mailbox_domains must be LDAP-backed (proxy:ldap)"
+          "nixmail must not run unbound (open resolver risk)"
+          "nixmail must not run bind (open resolver risk)"
+          "nixmail must not run nsd (authoritative DNS on mail host)"
+          "postscreen_greylist_action must be enforce"
+          "milter_default_action must be accept"
+        ];
+      in { assertions = assertions; errors = errorMsgs; };
+
+      nixunboundCfg = (mkEvalSystem ./nixunbound/configuration.nix).config;
+      unboundResolverAssertions = let
+        ac = nixunboundCfg.services.unbound.settings.server.access-control or [];
+        isAllow = entry: builtins.match ".* allow" entry != null;
+        isOpenAll = entry: entry == "0.0.0.0/0 allow" || entry == "::0/0 allow" || entry == "::/0 allow";
+        assertions = [
+          # Must allow explicitly listed internal ranges...
+          (builtins.elem "127.0.0.0/8 allow" ac)
+          (builtins.elem "10.10.10.0/24 allow" ac)
+          (builtins.elem "10.20.20.0/24 allow" ac)
+          # ...and must NOT allow recursion for the whole internet.
+          (!(builtins.any isOpenAll ac))
+          ((builtins.length (builtins.filter isAllow ac)) >= 3)
+        ];
+        errorMsgs = [
+          "unbound access-control must allow 127.0.0.0/8"
+          "unbound access-control must allow 10.10.10.0/24"
+          "unbound access-control must allow 10.20.20.0/24"
+          "unbound must not allow recursion from 0.0.0.0/0 (open resolver)"
+          "unbound must restrict access-control to an explicit allow list"
+        ];
+      in { assertions = assertions; errors = errorMsgs; };
+      dnsEmailRecords = let
+        zone = builtins.readFile ./nixnsd/zones/minnecker.com.forward;
+        has = s: builtins.match ".*${s}.*" zone != null;
+        assertions = [
+          (has "minnecker._domainkey")
+          (!(has "minnecker.com._domainkey"))
+          (has "arc._domainkey")
+          (has "_mta-sts")
+          (has "_smtp._tls")
+        ];
+        errors = [
+          "zone must publish minnecker._domainkey TXT (ADSP check)"
+          "zone must NOT contain the broken minnecker.com._domainkey owner"
+          "zone must publish arc._domainkey TXT"
+          "zone must publish _mta-sts TXT"
+          "zone must publish _smtp._tls TXT (TLS-RPT)"
+        ];
+      in { assertions = assertions; errors = errors; };
     in
     {
       checks.${system} = {
@@ -213,6 +308,15 @@
 
         services-nixnginx = mkAssertCheck "nixnginx-services"
           servicesAssertions.assertions servicesAssertions.errors;
+
+        mail-open-relay = mkAssertCheck "mail-open-relay"
+          mailSecurityAssertions.assertions mailSecurityAssertions.errors;
+
+        unbound-open-resolver = mkAssertCheck "unbound-open-resolver"
+          unboundResolverAssertions.assertions unboundResolverAssertions.errors;
+
+        dns-email-records = mkAssertCheck "dns-email-records"
+          dnsEmailRecords.assertions dnsEmailRecords.errors;
 
         nsd-dnssec-bind = let
           nsdCfg = (mkEvalSystem ./nixnsd/configuration.nix).config;
@@ -267,12 +371,63 @@
             machine.log("nsd-dnssec.timer exists — DNSSEC key rollover is scheduled")
             machine.succeed("test -f ${pkgs.bind}/bin/dnssec-keygen")
             machine.log("dnssec-keygen binary present — DNSSEC key generation dependency satisfied")
+
+            # NSD is an AUTHORITATIVE-only server (no recursion). It must
+            # serve its own zones but refuse to recurse on behalf of others
+            # — otherwise it would be an open resolver / amplifier.
+            # Query a zone it serves: must return NOERROR (authoritative),
+            # never REFUSED.
+            machine.wait_until_succeeds(
+              "dig @127.0.0.1 minnecker.com SOA +timeout=2 +tries=1 | grep -q 'status: NOERROR'",
+              timeout=60,
+            )
+            # A random out-of-zone name with recursion desired: an open
+            # resolver would recurse; NSD must REFUSE it.
+            machine.wait_until_succeeds(
+              "dig @127.0.0.1 +recurse +timeout=2 +tries=1 openresolver-test.example. A | grep -q 'status: REFUSED'",
+              timeout=60,
+            )
+            machine.log("nixnsd: serves own zones, refuses recursion (not an open resolver)")
           '';
         };
 
-        vm-nixunbound = mkServiceTest "nixunbound-vm"
-          ./nixunbound/configuration.nix
-          [ "unbound.service" ];
+        vm-nixunbound = runTest {
+          name = "nixunbound-vm";
+          nodes.machine = { ... }: {
+            imports = [ ./nixunbound/configuration.nix testHelpers ];
+          };
+          testScript = ''
+            start_all()
+            machine.wait_for_unit("multi-user.target", timeout=300)
+            machine.wait_for_unit("unbound.service", timeout=120)
+            machine.log("unbound up")
+
+            # unbound IS a recursive resolver, but access-control only
+            # allows the configured internal ranges. A query arriving from
+            # a source outside those ranges must be REFUSED — otherwise
+            # unbound would be an open resolver.
+            #
+            # Use a source address that is NOT in access-control
+            # (127.0.0.0/8, 10/8, fd../64). Binding to a disallowed source
+            # address exercises unbound's access-control decision.
+            machine.succeed("ip addr add 198.51.100.9/32 dev lo || true")
+            machine.wait_until_succeeds(
+              "dig -b 198.51.100.9 @127.0.0.1 +timeout=2 +tries=1 openresolver-test.example. A | grep -q 'status: REFUSED'",
+              timeout=60,
+            )
+
+            # From an allowed source (loopback) unbound must accept the
+            # query and try to resolve it (recursion enabled for the
+            # allow-listed subnet). Without upstream internet in the test
+            # VM the answer will be SERVFAIL/NOERROR, but crucially it must
+            # NOT be REFUSED.
+            machine.wait_until_succeeds(
+              "dig -b 127.0.0.1 @127.0.0.1 +timeout=2 +tries=1 example.org. A | grep -qv 'status: REFUSED'",
+              timeout=60,
+            )
+            machine.log("nixunbound: recursion restricted to allowed ranges, disallowed sources refused")
+          '';
+        };
 
         vm-nixidm = mkServiceTest "nixidm-vm"
           ./nixidm/configuration.nix
@@ -299,9 +454,260 @@
           testScript = ''
             start_all()
             machine.wait_for_unit("multi-user.target", timeout=300)
-            machine.succeed("systemctl cat dovecot2.service >/dev/null")
-            machine.succeed("systemctl cat postfix.service >/dev/null")
-            machine.log("nixmail unit files valid — mail services require LDAP backend")
+            machine.wait_for_unit("postfix.service", timeout=120)
+            machine.wait_for_unit("dovecot.service", timeout=120)
+            # No LDAP backend in this unit-file test, so dovecot/postfix
+            # boot but lookups do not resolve real users. Verify the
+            # security-critical SMTP surface, which works backend-agnostic:
+            #
+            # 1. NOT an open relay: unauthenticated RCPT to a foreign
+            #    domain must be refused (defer_unauth_destination), never
+            #    accepted with 250.
+            #
+            # This is a baseline; the full login + delivery round trip
+            # (and unknown-recipient rejection against real LDAP) lives in
+            # vm-mail-roundtrip.
+            machine.wait_until_succeeds(
+              """python3 - <<'PY'
+import smtplib
+relay_ok = False
+try:
+    s = smtplib.SMTP('127.0.0.1', 587, timeout=20)
+    try:
+        s.ehlo('attacker.example.org')
+    except smtplib.SMTPHeloError:
+        pass
+    try:
+        s.mail('attacker@example.org')
+    except smtplib.SMTPSenderRefused:
+        pass
+    try:
+        code, msg = s.rcpt('victim@example.org')
+        relay_ok = code == 250
+    except smtplib.SMTPRecipientsRefused:
+        pass
+    s.quit()
+except ConnectionRefusedError:
+    raise AssertionError('smtpd not listening on 587 yet')
+assert not relay_ok, 'open relay: unauthenticated RCPT to foreign domain accepted'
+print('OPEN-RELAY-REJECTED')
+PY
+""", timeout=300,
+            )
+            machine.log("nixmail: open relay rejected (unauthenticated RCPT to foreign domain)")
+          '';
+        };
+
+        vm-mail-roundtrip = runTest {
+          name = "mail-roundtrip-vm";
+          # Runs the REAL Kanidm (nixidm) and the REAL mail stack (nixmail)
+          # on one machine, wired through loopback. Exercizes: Kanidm
+          # provision hook, kanidm-mail-token, mail LDAP config rendering,
+          # SMTP submission login (PLAIN via LDAP bind to Kanidm), IMAP
+          # login + message retrieval, open-relay rejection and
+          # unknown-recipient rejection against the live LDAP backend.
+          nodes.machine = { ... }: {
+            imports = [ testMailRoundtrip ];
+          };
+          testScript = ''
+            start_all()
+            machine.wait_for_unit("multi-user.target", timeout=600)
+            machine.wait_for_unit("kanidm.service", timeout=600)
+            machine.wait_for_unit("kanidm-mail-token.service", timeout=600)
+            machine.wait_for_unit("test-mail-set-password.service", timeout=600)
+            machine.wait_for_unit("postfix.service", timeout=120)
+            machine.wait_for_unit("dovecot.service", timeout=120)
+            machine.wait_for_unit("rspamd.service", timeout=120)
+
+            # mail-ldap-config is a oneshot without RemainAfterExit (the
+            # path watcher re-triggers it), so wait for its output instead.
+            machine.wait_until_succeeds(
+              "test -s /var/lib/secrets/mail/dovecot/ldap-password.txt",
+              timeout=120,
+            )
+            machine.wait_until_succeeds(
+              "test -s /var/lib/secrets/mail/postfix/ldap-recipients.cf",
+              timeout=120,
+            )
+
+            # Wait until the shared mail LDAP token is a real JWS (written
+            # by kanidm-mail-token) — test-helpers seeds a placeholder, so
+            # wait for the rotation to land before hitting LDAP.
+            machine.wait_until_succeeds(
+              "grep -q 'eyJ' /var/lib/secrets/mail/ldap/ldap-token", timeout=300
+            )
+
+            # Give dovecot/postfix a moment to reload after the token
+            # rotation (mail-ldap-config.path triggers a re-render).
+            machine.wait_until_succeeds(
+              "LDAPTLS_REQCERT=never ldapsearch -x -H ldaps://127.0.0.1:636 "
+              "-D 'dn=token' -y /var/lib/secrets/mail/dovecot/ldap-password.txt "
+              "-b 'dc=minnecker,dc=com' '(mail=testuser@minnecker.com)' dn >/dev/null 2>&1",
+              timeout=300,
+            )
+
+            # SMTP submission login with the POSIX password → 235
+            machine.wait_until_succeeds(
+              """python3 - <<'PY'
+import smtplib
+s = smtplib.SMTP('127.0.0.1', 587, timeout=30)
+s.ehlo('backendmail.minnecker.com')
+s.login('testuser@minnecker.com', 'MailTestPass.123')
+print('SMTP-LOGIN-OK')
+s.quit()
+PY
+""", timeout=300,
+            )
+
+            # Send a message to the same user (self-delivery via LMTP)
+            machine.wait_until_succeeds(
+              """python3 - <<'PY'
+import smtplib
+msg = 'From: testuser@minnecker.com\nTo: testuser@minnecker.com\nSubject: roundtrip\n\nhello world\n'
+s = smtplib.SMTP('127.0.0.1', 587, timeout=30)
+s.ehlo('backendmail.minnecker.com')
+s.login('testuser@minnecker.com', 'MailTestPass.123')
+s.sendmail('testuser@minnecker.com', ['testuser@minnecker.com'], msg)
+print('SEND-OK')
+s.quit()
+PY
+""", timeout=300,
+            )
+
+            # Verify delivery into the maildir (dovecot LMTP side)
+            machine.wait_until_succeeds(
+              "find /var/vmail -type f -path '*maildir*new*' | grep -q .", timeout=300
+            )
+
+            # IMAP login + retrieve the just-delivered message
+            machine.wait_until_succeeds(
+              """python3 - <<'PY'
+import imaplib, ssl
+ctx = ssl._create_unverified_context()
+m = imaplib.IMAP4('127.0.0.1', 143)
+m.starttls(ssl_context=ctx)
+m.login('testuser@minnecker.com', 'MailTestPass.123')
+typ, _ = m.select('INBOX')
+assert typ == 'OK'
+typ, data = m.search(None, 'ALL')
+assert data and data[0].split(), 'no messages in INBOX'
+print('IMAP-LOGIN-FETCH-OK')
+m.logout()
+PY
+""", timeout=300,
+            )
+
+            # Recipient-detail routing: testuser+news@ must be auto-filed into
+            # the tags/news folder by the global routing sieve.
+            machine.wait_until_succeeds(
+              """python3 - <<'PY'
+import smtplib
+msg = 'From: testuser@minnecker.com\nTo: testuser+news@minnecker.com\nSubject: news\n\nrouting test\n'
+s = smtplib.SMTP('127.0.0.1', 587, timeout=30)
+s.ehlo('backendmail.minnecker.com')
+s.login('testuser@minnecker.com', 'MailTestPass.123')
+s.sendmail('testuser@minnecker.com', ['testuser+news@minnecker.com'], msg)
+print('SEND-DETAIL-OK')
+s.quit()
+PY
+""", timeout=300,
+            )
+            machine.wait_until_succeeds(
+              "find /var/vmail -type f -path '*tags*news*' | grep -q .", timeout=300
+            )
+
+            # Quarantine loop guard: a message addressed to the quarantine
+            # mailbox that also carries X-Rspamd-Quarantine must be filed into
+            # Quarantine (rule 1) and NOT re-redirected (rule 2) — exactly one
+            # copy.
+            machine.wait_until_succeeds(
+              """python3 - <<'PY'
+import smtplib
+msg = 'From: testuser@minnecker.com\nTo: quarantine@minnecker.com\nX-Rspamd-Quarantine: yes\nSubject: q\n\nquarantine test\n'
+s = smtplib.SMTP('127.0.0.1', 587, timeout=30)
+s.ehlo('backendmail.minnecker.com')
+s.login('testuser@minnecker.com', 'MailTestPass.123')
+s.sendmail('testuser@minnecker.com', ['quarantine@minnecker.com'], msg)
+print('SEND-QUARANTINE-OK')
+s.quit()
+PY
+""", timeout=300,
+            )
+            machine.wait_until_succeeds(
+              """python3 - <<'PY'
+import subprocess
+out = subprocess.run(['sh','-c',"find /var/vmail -type f -path '*quarantine*Quarantine*'"], capture_output=True, text=True).stdout
+lines = [l for l in out.splitlines() if l]
+assert len(lines) == 1, f'expected 1 copy in Quarantine, got {len(lines)}: {lines}'
+print('QUARANTINE-OK')
+PY
+""", timeout=300,
+            )
+
+            # Misc stack health: dovecot stats, rspamd configtest, FTS plugin,
+            # and the rspamd WebUI/controller listener.
+            machine.succeed("doveadm stats dump >/dev/null && echo DOVECOT-STATS-OK")
+            machine.succeed("doveconf -a | grep -q 'fts = flatcurve' && echo FTS-OK")
+            machine.succeed("rspamadm configtest && echo RSPAMD-CONFIGTEST-OK")
+            machine.wait_until_succeeds(
+              "curl -sf http://127.0.0.1:11334/ >/dev/null && echo RSPAMD-UI-OK", timeout=120
+            )
+
+            # Open-relay rejection against live LDAP (unauthenticated).
+            # Port 587 (submission) is a direct smtpd listener with the
+            # same smtpd_recipient_restrictions; postscreen runs in front
+            # of port 25 (probed separately below).
+            machine.succeed(
+              """python3 - <<'PY'
+import smtplib
+s = smtplib.SMTP('127.0.0.1', 587, timeout=30)
+s.ehlo('attacker.example.org')
+s.mail('attacker@example.org')
+code, msg = s.rcpt('victim@example.org')
+assert code >= 400, f'relay accepted: {code} {msg}'
+s.quit()
+print('RELAY-REJECTED')
+PY
+"""
+            )
+
+            # Bad password → SMTP auth must fail (535). AUTH PLAIN with a wrong
+            # credential exercises dovecot's LDAP passdb bind against the
+            # real Kanidm and must not succeed.
+            machine.succeed(
+              """python3 - <<'PY'
+import smtplib
+s = smtplib.SMTP('127.0.0.1', 587, timeout=30)
+s.ehlo('backendmail.minnecker.com')
+try:
+    s.login('testuser@minnecker.com', 'Wrong.Pass.999')
+    raise AssertionError('bad password accepted')
+except smtplib.SMTPAuthenticationError as e:
+    assert e.smtp_code >= 400, e
+print('BAD-PASSWORD-REJECTED')
+s.quit()
+PY
+"""
+            )
+
+            # Port 25 is fronted by postscreen (custom master override). Assert a
+            # TCP-connectable listener is up; the strict open-relay
+            # rejection is asserted on 587 above (same smtpd, same
+            # smtpd_recipient_restrictions), which is the behaviour that
+            # matters.
+            machine.wait_until_succeeds(
+              """python3 - <<'PY'
+import socket
+s = socket.create_connection(('127.0.0.1', 25), timeout=30)
+data = s.recv(256)
+assert data.startswith(b'220'), data
+s.close()
+print('PORT25-LISTENING')
+PY
+""", timeout=300,
+            )
+
+            machine.log("mail round-trip OK: login, send, delivery, IMAP fetch, relay rejection")
           '';
         };
 

@@ -558,6 +558,15 @@ in
       "options.inc".text = ''
         secure_config = false;
       '';
+
+      # Disable rspamd's own greylist: it soft-rejects (SMFIR_TEMPFAIL ->
+      # Postfix 451) EVERY message, including authenticated submission, on top
+      # of postscreen's greylisting on port 25. Keeping rspamd greylist on
+      # would delay/fail delivery under the milter; postscreen is the single
+      # greylisting layer here.
+      "greylist.conf".text = ''
+        enabled = false;
+      '';
     };
   };
 

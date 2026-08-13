@@ -435,10 +435,12 @@ in
       "protocol lda" = { mail_plugins = { sieve = true; }; };
       "protocol lmtp" = { mail_plugins = { sieve = true; }; };
 
-      # Sieve 2.4 settings. Enable the extensions our routing script and
-      # user-facing vacation/notify scripts rely on.
-      sieve_extensions = [ "envelope" "notify" "vacation" ];
-      sieve_global_extensions = [ "envelope" "variables" "mailbox" ];
+      # Deliberately DO NOT set sieve_extensions / sieve_global_extensions:
+      # setting them restricts pigeonhole to ONLY the listed extensions. In
+      # 2.4 armed-with-defaults, all compiled extensions (fileinto, envelope
+      # incl. :detail, mailbox, variables, ...) become available. A
+      # restrictive list here is what broke the routing sieve ('unknown Sieve
+      # capability fileinto', 'unknown tagged argument :detail').
 
       # Global BEFORE sieve: routing (quarantine, spam->Junk, reports,
       # +detail auto-folder). Order of rules matters (see routing.sieve).

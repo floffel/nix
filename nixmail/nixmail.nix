@@ -526,7 +526,7 @@ in
       # the quarantine mailbox. Do NOT define a `quarantine` action here: it
       # maps to Postfix's hold queue, not a mailbox.
       "milter_headers.conf".text = ''
-        use = ["spam-header" "quarantine-flag"];
+        use = ["spam-header", "quarantine-flag"];
         extended_spam_headers = true;
         custom {
           quarantine-flag {

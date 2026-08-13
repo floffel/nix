@@ -18,6 +18,10 @@ let
       host = "127.0.0.1";
       port = 587;
       ssl = false;
+      # parsedmarc 9.x requires an smtp.user key even when no password is set.
+      # No password -> no AUTH; loopback submission is permitted by
+      # permit_mynetworks in Postfix, so the digest still goes out.
+      user = "reports@minnecker.com";
       from = "reports@minnecker.com";
       to = "florian@minnecker.com";
     };

@@ -720,16 +720,20 @@ EOF
 
   # DMARC + TLS-RPT report processing (parsedmarc).
   #
-  # parsedmarc reads DMARC/TLS-RPT aggregate mail from the postmaster
-  # mailbox over IMAP (loopback, STARTTLS not required) and sends a daily
-  # digest via our own submission. It watches the hidden ".Reports" mailbox
-  # that the routing sieve files report mail into (NO Elasticsearch / Splunk /
-  # Redis — the digest + archived raw reports suffice; provision.* stays off
-  # because it conflicts with the LDAP virtual-mail flow).
+  # parsedmarc reads DMARC/TLS-RPT aggregate mail DIRECTLY FROM DISK via
+  # its Maildir input — no IMAP, no POSIX password. The routing sieve
+  # files report mail into the hidden ".Reports" mailbox, which Dovecot
+  # stores on disk as postmaster's maildir subfolder:
   #
-  # Runtime credentials are read from the rw secrets mount at start:
-  #   /var/lib/secrets/mail/parsedmarc/imap-password  (postmaster POSIX pw)
-  # which the operator provisions manually (echo -n '<pw>' > ...; chmod 600).
+  #   /var/vmail/minnecker.com/postmaster/maildir/.Reports/
+  #
+  # parsedmarc runs as the dovecot mail user (see the systemd override
+  # below) so it can read that Maildir. Reports are deleted after parsing
+  # (raw aggregates aren't worth keeping once ingested). The digest is
+  # sent via our own submission on loopback WITHOUT authentication
+  # (permit_mynetworks covers 127.0.0.1 before any auth check), so there
+  # is NO operator-managed secret for parsedmarc at all.
+  #
   # reports@minnecker.com -> postmaster is a Kanidm alias managed by the
   # operator, not a Postfix alias.
   services.parsedmarc = {
@@ -748,31 +752,40 @@ EOF
         save_aggregate = false;
         save_forensic = false;
       };
-      mailbox = {
-        watch = true;
-        delete = false;
-      };
-      imap = {
-        host = "127.0.0.1";
-        port = 143;
-        ssl = false;
-        user = "postmaster@minnecker.com";
-        password = { _secret = "/var/lib/secrets/mail/parsedmarc/imap-password"; };
+      maildir = {
+        # The .Reports mailbox (postmaster maildir subfolder) that the
+        # routing sieve files aggregate reports into.
+        maildir_path = "/var/vmail/minnecker.com/postmaster/maildir/.Reports";
+        create = true;
+        delete = true;
       };
       smtp = {
+        # Localhost submission, no user/password -> authenticated by
+        # mynetworks, not by an account.
         host = "127.0.0.1";
         port = 587;
         ssl = false;
-        user = "reports@minnecker.com";
         from = "reports@minnecker.com";
         to = [ "florian@minnecker.com" ];
-        password = { _secret = "/var/lib/secrets/mail/parsedmarc/imap-password"; };
       };
     };
   };
 
-  # parsedmarc reads reports from the dovecot Maildir; ensure our dovecot
-  # (unit "dovecot.service", not the module-default 2.3 "dovecot2.service")
-  # is up first.
-  systemd.services.parsedmarc.after = [ "dovecot.service" ];
+  # parsedmarc must read postmaster's Maildir, so run it as the dovecot
+  # mail user (which owns /var/vmail) instead of the module's throwaway
+  # DynamicUser. Ensure dovecot (unit "dovecot.service", not the 2.3
+  # "dovecot2.service") and the LDA-delivery path are up first.
+  systemd.services.parsedmarc = {
+    after = [ "dovecot.service" "postfix.service" ];
+    serviceConfig = {
+      User = lib.mkForce "dovecot";
+      Group = lib.mkForce "dovecot";
+      DynamicUser = lib.mkForce false;
+      # A private user namespace would hide the dovecot UID and break reading
+      # /var/vmail — run in the host namespace so dovecot-owned Maildirs are
+      # accessible.
+      PrivateUsers = lib.mkForce false;
+      StateDirectory = lib.mkForce "parsedmarc";
+    };
+  };
 }

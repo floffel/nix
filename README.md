@@ -186,8 +186,7 @@ mount:
 
 | Path under `/var/lib/secrets/mail` | Provider | Purpose |
 | :--- | :--- | :--- |
-| `parsedmarc/imap-password` | Operator (one-time) | plaintext IMAP **and** SMTP password for `postmaster@minnecker.com`. `echo -n '<pw>' > /mnt/pve/nas/shared/secrets/mail/parsedmarc/imap-password && chmod 600`. Used by parsedmarc to read reports from IMAP and send the digest via our own submission. |
-| `rspamd/controller-password` / `controller-enable-password` | `mail-rspamd-password` oneshot | bcrypt hashes (`rspamadm pw`) read by the rspamd controller via `$file$`. Plaintext is written alongside as `*.plain` for the operator. |
+| `rspamd/controller-password` / `controller-enable-password` | `mail-rspamd-password` oneshot | plaintext controller passwords for the rspamd WebUI (note: `parsedmarc` needs **no** password — it reads reports from the postmaster Maildir on disk and sends the digest via unauthenticated localhost submission). |
 | `dkim/minnecker.com.private` + `dkim/minnecker.dns` | `mail-dkim-key` oneshot | DKIM/ARC signing key (2048-bit) and a ready-to-paste DNS hint file. |
 
 **Addressing (`recipient_delimiter = "+."`)**
@@ -207,9 +206,11 @@ re-submitted quarantined message never gets redirected again.
 **Reports (DMARC / TLS-RPT)**
 Aggregate report mail addressed to `reports@minnecker.com` (alias →
 `postmaster@`, managed in Kanidm) is filed into the hidden `.Reports` folder.
-`parsedmarc` (running on `nixmail`) watches that folder over IMAP and emails a
-daily digest to `florian@minnecker.com`; raw reports are archived (not
-deleted). TLS-RPT requests point at `reports@` via `_smtp._tls`.
+`parsedmarc` (running on `nixmail` as the dovecot user) reads that Maildir
+**directly from disk** — no IMAP/SMTP passwords — and emails a daily digest to
+`florian@minnecker.com` via unauthenticated localhost submission (loopback is
+in `mynetworks`). Processed reports are deleted. TLS-RPT requests point at
+`reports@` via `_smtp._tls`.
 
 **MTA-STS + TLS-RPT**
 `https://mta-sts.minnecker.com/.well-known/mta-sts.txt` serves the policy

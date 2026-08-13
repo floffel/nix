@@ -655,10 +655,14 @@ EOF
   #      deterministic).
   #   4. DMARC/TLS-RPT aggregate reports (To/Cc reports@) -> hidden .Reports
   #      mailbox that parsedmarc watches.
-  #   5. recipient-detail addressing (user+tag / user.tag) -> tags/<detail>.
-  # Prevents path traversal in the generated folder name.
+  #
+  # NOTE: recipient-detail autofolding (user+tag -> tags/<tag>) is intentionally
+  # OMITTED: pigeonhole 2.4 in this build does not implement the envelope
+  # :detail tagged argument, and Postfix already strips the +/. delimiter via
+  # recipient_delimiter before LMTP delivery anyway, so there is no detail left
+  # to route on. user+tag@ still reaches the same mailbox (landing in INBOX).
   environment.etc."dovecot/routing.sieve".text = ''
-    require ["fileinto", "mailbox", "envelope", "variables"];
+    require ["fileinto", "mailbox", "envelope"];
 
     # 1. Quarantine loop guard / landing pad.
     if envelope :localpart "to" "quarantine" {
@@ -688,19 +692,6 @@ EOF
     ) {
       fileinto :create ".Reports";
       stop;
-    }
-
-    # 5. Auto-folder routing by recipient detail (user+tag / user.tag).
-    if envelope :detail :matches "to" "*" {
-      if allof (
-        not string :is "''${1}" "",
-        not string :contains "''${1}" "/",
-        not string :is "''${1}" ".",
-        not string :is "''${1}" ".."
-      ) {
-        fileinto :create "tags/''${1}";
-        stop;
-      }
     }
   '';
 

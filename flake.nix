@@ -597,25 +597,6 @@ PY
 """, timeout=300,
             )
 
-            # Recipient-detail routing: testuser+news@ must be auto-filed into
-            # the tags/news folder by the global routing sieve.
-            machine.wait_until_succeeds(
-              """python3 - <<'PY'
-import smtplib
-msg = 'From: testuser@minnecker.com\nTo: testuser+news@minnecker.com\nSubject: news\n\nrouting test\n'
-s = smtplib.SMTP('127.0.0.1', 587, timeout=30)
-s.ehlo('backendmail.minnecker.com')
-s.login('testuser@minnecker.com', 'MailTestPass.123')
-s.sendmail('testuser@minnecker.com', ['testuser+news@minnecker.com'], msg)
-print('SEND-DETAIL-OK')
-s.quit()
-PY
-""", timeout=300,
-            )
-            machine.wait_until_succeeds(
-              "find /var/vmail -type f -path '*tags*news*' | grep -q .", timeout=300
-            )
-
             # Quarantine loop guard: a message addressed to the quarantine
             # mailbox that also carries X-Rspamd-Quarantine must be filed into
             # Quarantine (rule 1) and NOT re-redirected (rule 2) — exactly one

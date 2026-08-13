@@ -429,8 +429,11 @@ in
         };
       };
 
-      "protocol lda" = { mail_plugins = "$mail_plugins sieve"; };
-      "protocol lmtp" = { mail_plugins = "$mail_plugins sieve"; };
+      # Dovecot 2.4: `$mail_plugins` variable no longer exists (it is treated
+      # as a literal plugin name, fatally breaking delivery). Plugin lists in
+      # protocol sections use the attr-of-bool form instead.
+      "protocol lda" = { mail_plugins = { sieve = true; }; };
+      "protocol lmtp" = { mail_plugins = { sieve = true; }; };
 
       # Sieve 2.4 settings. Enable the extensions our routing script and
       # user-facing vacation/notify scripts rely on.

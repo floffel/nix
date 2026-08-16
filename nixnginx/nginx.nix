@@ -854,11 +854,15 @@ in
           extraConfig = "default_type application/json; return 200 '{ \"m.server\": \"matrix.minnecker.com:443\" }';";
         };
         # BIMI logo (pre-VMC stub). Referenced by default._bimi.
-        locations."/bimi-logo.svg" = {
+        # Exact-match location (not prefix) so the alias can't be traversed,
+        # and use expires instead of add_header so the parent-level headers
+        # (x-frame-options, x-content-type-options, x-xss-protection, ...)
+        # are not dropped by a nested add_header.
+        locations."= /bimi-logo.svg" = {
           alias = "${./bimi-logo.svg}";
           extraConfig = ''
             default_type image/svg+xml;
-            add_header Cache-Control "public, max-age=86400";
+            expires 1d;
           '';
         };
         locations."/.well-known/matrix/client" = {

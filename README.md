@@ -214,8 +214,12 @@ in `mynetworks`). Processed reports are deleted. TLS-RPT requests point at
 
 **MTA-STS + TLS-RPT**
 `https://mta-sts.minnecker.com/.well-known/mta-sts.txt` serves the policy
-(`mx: riese.minnecker.com`, mode enforce). Records: `_mta-sts` TXT and
-`_smtp._tls` TXT (TLS-RPT) live in `nixnsd/zones/minnecker.com.forward`.
+(`mx: mx.minnecker.com` primary + `mx: riese.minnecker.com` secondary during
+the mail migration, mode enforce). During the cutover both hosts are listed in
+the policy so STS-enforcing senders accept mail on either MX; once the
+migration completes the old `riese` entry and its `MX 20` record are removed.
+Records: `_mta-sts` TXT and `_smtp._tls` TXT (TLS-RPT) live in
+`nixnsd/zones/minnecker.com.forward`.
 
 **Rspamd WebUI**
 `https://rspamd.minnecker.com` proxies to the rspamd controller and is gated

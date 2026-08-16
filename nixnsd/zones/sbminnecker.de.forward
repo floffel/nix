@@ -1,6 +1,6 @@
 $TTL 7200
 @   IN SOA r.floffel.de. postmaster.sbminnecker.de. (
-    1781361001         ; serial
+    2026081501         ; serial
     14400       ; refresh
     3600        ; retry
     604800      ; expire
@@ -14,7 +14,9 @@ $TTL 7200
 @                        IN NS      robotns3.second-ns.com.
 
  
-@                        IN MX 10   riese.minnecker.com
+; Lowered TTL (300) for mail cutover; primary = new stack, secondary = old server.
+@                        300 IN MX 10   mx.minnecker.com.
+@                        300 IN MX 20   riese.minnecker.com.
 @                        IN TXT     "v=spf1 +a +mx ?all"
 @                        IN TXT     "v=spf1 a mx ptr -all"
 

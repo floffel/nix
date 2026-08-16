@@ -473,7 +473,8 @@ in
       #
       # Serves the MTA-STS policy file. The host is reached via the wildcard
       # CNAME to the nginx proxy; only this well-known path is needed.
-      # Policy must match the published MX (riese.minnecker.com).
+      # Policy must list EVERY published MX: the new stack (mx) as primary
+      # and the old server (riese) as secondary until migration completes.
       "mta-sts.minnecker.com" = {
         forceSSL = true;
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
@@ -481,7 +482,7 @@ in
         locations."= /.well-known/mta-sts.txt" = {
           extraConfig = ''
             default_type text/plain;
-            return 200 'version: STSv1\nmode: enforce\nmx: riese.minnecker.com\nmax_age: 86400\n';
+            return 200 'version: STSv1\nmode: enforce\nmx: mx.minnecker.com\nmx: riese.minnecker.com\nmax_age: 86400\n';
           '';
         };
       };

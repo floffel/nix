@@ -59,7 +59,21 @@ let
       chown nextcloud:nextcloud /var/lib/nextcloud-data/config/config.php
     fi
 
-    $OCC_BIN upgrade || true
+    # occ upgrade puts Nextcloud into maintenance mode for the duration and
+    # leaves it on if the upgrade fails. Report the failure instead of
+    # swallowing it (the old `|| true` left the instance bricked on every
+    # subsequent rebuild), then always clear maintenance mode so app
+    # commands (user_oidc in nextcloud-setup-oidc) work after setup.
+    set +e
+    upgrade_out=$($OCC_BIN upgrade 2>&1)
+    upgrade_rc=$?
+    set -e
+    if [ "$upgrade_rc" -ne 0 ]; then
+      echo "Warning: occ upgrade failed (rc=$upgrade_rc):" >&2
+      echo "$upgrade_out" >&2
+    fi
+    $OCC_BIN maintenance:mode --off 2>/dev/null || true
+
     $OCC_BIN config:system:delete trusted_domains 2>/dev/null || true
     $OCC_BIN config:system:set trusted_domains 0 --value="cloud.minnecker.com"
     echo "Done."
@@ -1147,6 +1161,12 @@ systemd.services.nextcloud-setup.unitConfig = { };
       discovery="https://idm.minnecker.com/oauth2/openid/nextcloud/.well-known/openid-configuration"
       secret_file="/var/lib/secrets/oauth2/nextcloud/secret"
       provider="kanidm"
+
+      # A failed occ upgrade in nextcloud-setup leaves maintenance mode on
+      # and no app commands loaded, which also breaks the probe below. The
+      # instance must come up out of maintenance; this mirrors the clear in
+      # nextcloud-setup and covers case where that unit wasn't restarted.
+      $occ maintenance:mode --off 2>/dev/null || true
 
       # Idempotency guard: `user_oidc:provider <id>` (no options) returns 0
       # when the provider exists and 255 when it doesn't. Once registered,

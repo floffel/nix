@@ -1117,16 +1117,18 @@ systemd.services.nextcloud-setup.unitConfig = { };
   # Registration fetches the OIDC discovery document from idm.minnecker.com,
   # which is only reachable once networking + DNS are fully up. The service is
   # therefore allowed to retry: a failed registration exits non-zero and
-  # systemd restarts it (Restart=on-failure) until it succeeds, at which
-  # point the idempotency guard skips re-registration on later boots.
+  # systemd restarts it (Restart=on-failure) until it succeeds. Once the
+  # provider exists the idempotency probe below exits 0 immediately, so
+  # rebuilds and reboots of an already-configured instance succeed cleanly
+  # instead of failing and restart-looping.
   systemd.services.nextcloud-setup-oidc = {
     description = "Configure Nextcloud OIDC Provider";
     after = [ "network-online.target" "nextcloud-setup.service" ];
     wants = [ "network-online.target" ];
     wantedBy = [ "multi-user.target" ];
 
-    # curl is used to probe the IdP discovery endpoint before registration.
-    path = [ pkgs.curl ];
+    # curl probes the IdP discovery endpoint; coreutils provides cat.
+    path = [ pkgs.curl pkgs.coreutils ];
 
     startLimitBurst = 10;
     startLimitIntervalSec = 300;
@@ -1143,30 +1145,58 @@ systemd.services.nextcloud-setup.unitConfig = { };
       set -euo pipefail
       occ="${config.services.nextcloud.occ}/bin/nextcloud-occ"
       discovery="https://idm.minnecker.com/oauth2/openid/nextcloud/.well-known/openid-configuration"
+      secret_file="/var/lib/secrets/oauth2/nextcloud/secret"
+      provider="kanidm"
 
-      # Ensure user_oidc app is enabled — always run, it's idempotent.
-      # The app:list check is unreliable (lists disabled apps too), which
-      # causes config:app:set and user_oidc:provider to fail because the
-      # app's commands aren't registered unless it's actually enabled.
-      $occ app:enable user_oidc
+      # Idempotency guard: `user_oidc:provider <id>` (no options) returns 0
+      # when the provider exists and 255 when it doesn't. Once registered,
+      # everything this service does is already in place, so succeed quietly
+      # instead of failing/restart-looping on every rebuild. Any other exit
+      # code (DB down, app command not registered) falls through to the full
+      # registration path below, which logs visibly and retries.
+      set +e
+      $occ user_oidc:provider "$provider" >/dev/null 2>&1
+      probe_rc=$?
+      set -e
+      if [ "$probe_rc" -eq 0 ]; then
+        echo "user_oidc provider '$provider' already registered — nothing to do."
+        exit 0
+      fi
+
+      # First-boot dependencies: the OAuth2 secrets mount and the IdP
+      # discovery endpoint. Bail non-zero so Restart=on-failure retries.
+      if [ ! -s "$secret_file" ]; then
+        echo "Error: $secret_file missing or empty (OAuth2 secrets mount not ready). Retrying." >&2
+        exit 1
+      fi
+
+      if ! curl -fsS --max-time 10 "$discovery" >/dev/null; then
+        echo "Error: IdM discovery endpoint unreachable at $discovery. Retrying." >&2
+        exit 1
+      fi
+
+      # user_oidc is installed via extraApps into the read-only Nix store;
+      # occ app:enable can fail here, but enabled-state lives in the DB and
+      # the app only needs enabling the first time. Log the failure and keep
+      # going — the provider command below fails loudly if the app really is
+      # disabled (its commands then aren't registered).
+      set +e
+      enable_out=$($occ app:enable user_oidc 2>&1)
+      enable_rc=$?
+      set -e
+      if [ "$enable_rc" -ne 0 ]; then
+        echo "Warning: occ app:enable user_oidc failed (rc=$enable_rc): $enable_out" >&2
+      fi
 
       # Make OIDC the default login method: hides the local login form and
       # auto-redirects to the IdP. Admins can still reach the native form via
       # https://cloud.minnecker.com/login?direct=1 as an escape hatch.
       $occ config:app:set --value=0 user_oidc allow_multiple_user_backends
 
-      if [ ! -f /var/lib/secrets/oauth2/nextcloud/secret ]; then
-        echo "Error: /var/lib/secrets/oauth2/nextcloud/secret not found. Retrying."
-        exit 1
-      fi
+      client_secret=$(cat "$secret_file")
 
-      if ! curl -fsS --max-time 10 "$discovery" >/dev/null; then
-        echo "Error: IdM discovery endpoint unreachable at $discovery. Retrying."
-        exit 1
-      fi
-
-      client_secret=$(cat /var/lib/secrets/oauth2/nextcloud/secret)
-      $occ user_oidc:provider kanidm \
+      set +e
+      provider_out=$($occ user_oidc:provider "$provider" \
         --clientid="nextcloud" \
         --clientsecret="$client_secret" \
         --discoveryuri="$discovery" \
@@ -1174,7 +1204,14 @@ systemd.services.nextcloud-setup.unitConfig = { };
         --mapping-uid="preferred_username" \
         --unique-uid=0 \
         --mapping-groups="groups" \
-        --group-provisioning=1
+        --group-provisioning=1 2>&1)
+      provider_rc=$?
+      set -e
+      if [ "$provider_rc" -ne 0 ]; then
+        echo "Error: occ user_oidc:provider failed (rc=$provider_rc):" >&2
+        echo "$provider_out" >&2
+        exit 1
+      fi
       echo "Kanidm OIDC provider registered/updated."
     '';
   };

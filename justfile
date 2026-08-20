@@ -1,18 +1,32 @@
 # NixOS configuration test suite
 #
 # Targets:
-#   just test         → all fast checks: evaluation + config assertions + lint
-#   just test-full    → everything including VM integration tests (slow, requires KVM)
-#   just test-eval    → NixOS module evaluation only
-#   just test-config  → config integrity assertions (routing, services, fail2ban)
-#   just test-vm      → VM integration tests (boots containers in QEMU)
-#   just lint         → static analysis (statix, deadnix, nixpkgs-fmt)
+#   just test           → all fast checks: evaluation + config assertions + lint
+#   just test-full      → everything including VM integration tests (slow, requires KVM)
+#   just test-eval      → NixOS module evaluation only
+#   just test-config    → config integrity assertions (routing, services, fail2ban)
+#   just test-vm        → VM integration tests (boots containers in QEMU)
+#   just lint           → static analysis (statix, deadnix, nixpkgs-fmt)
+#   just flake-update   → update flake.lock to the latest nixpkgs (runs nix in Docker)
 
 default: test
 
 # All fast checks (evaluation + config assertions + lint)
 test: test-eval lint
     @echo "=== All checks passed ==="
+
+# Update flake.lock to the latest nixpkgs (and any other inputs) without
+# installing nix locally: boot the official nix Docker image, update the lock
+# file in this repository, and exit.
+#   - docker pull nixos/nix   → always fetch the newest nix release
+#   - --extra-experimental-features 'nix-command flakes'
+#                             → the nix flake CLI is experimental and starts
+#                               disabled in a fresh container
+#   - --accept-flake-config   → same flag the local test commands use
+flake-update:
+    @echo "=== Updating flake.lock with nix Docker image ==="
+    @docker pull nixos/nix
+    @docker run --rm -v $(pwd):/workdir -w /workdir nixos/nix nix flake update --extra-experimental-features 'nix-command flakes' --accept-flake-config
 
 # NixOS module evaluation — catches option renames, type mismatches, missing imports
 test-eval:

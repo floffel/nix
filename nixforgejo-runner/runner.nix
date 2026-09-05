@@ -4,18 +4,27 @@
 let
   forgejoRunner = pkgs.forgejo-runner;
 
+  node20Bullseye = "node:20-bullseye@sha256:c0122351f25f04facee976f9db7214789eabadb489f4e4aea9cd00a0d6af77c4";
+
+  labels = [
+    "ubuntu-latest:docker://${node20Bullseye}"
+    "ubuntu-22.04:docker://${node20Bullseye}"
+    "ubuntu-20.04:docker://${node20Bullseye}"
+    "docker:docker://${node20Bullseye}"
+    "native:host"
+  ];
+
+  labelsYaml = lib.concatStringsSep "\n" (map (l: "        - ${l}") labels);
+
   baseConfig = pkgs.writeText "runner-base.yaml" ''
     runner:
       capacity: 4
       labels:
-        - ubuntu-latest:docker://node:20-bullseye
-        - ubuntu-22.04:docker://node:20-bullseye
-        - ubuntu-20.04:docker://node:20-bullseye
-        - docker:docker://node:20-bullseye
-        - native:host
+        ${labelsYaml}
 
     container:
       docker_host: automount
+      force_pull: true
 
     cache:
       enabled: true
@@ -45,8 +54,8 @@ in
   };
   virtualisation.docker.autoPrune = {
     enable = true;
-    dates = "weekly";
-    flags = [ "--all" "--filter" "until=168h" ];
+    dates = "daily";
+    flags = [ "--all" "--filter" "until=24h" ];
   };
 
   services.gitea-actions-runner = {
@@ -59,13 +68,7 @@ in
 
       tokenFile = "/var/lib/secrets/forgejo/runner-secrets";
 
-      labels = [
-        "ubuntu-latest:docker://node:20-bullseye"
-        "ubuntu-22.04:docker://node:20-bullseye"
-        "ubuntu-20.04:docker://node:20-bullseye"
-        "docker:docker://node:20-bullseye"
-        "native:host"
-      ];
+      labels = labels;
 
       settings = {
         container.docker_host = "automount";
@@ -77,5 +80,18 @@ in
     ExecStartPre = lib.mkForce [ "${mergeConfig}" ];
     ExecStart = lib.mkForce "${forgejoRunner}/bin/forgejo-runner daemon --config /var/lib/gitea-runner/default/config.yaml";
     WorkingDirectory = lib.mkForce "/var/lib/gitea-runner";
+  };
+
+  systemd.services.forgejo-cache-clean = {
+    description = "Purge stale Forgejo actions cache archives";
+    startAt = "weekly";
+    script = ''
+      if [ -d /var/lib/gitea-runner/cache ]; then
+        ${pkgs.findutils}/bin/find /var/lib/gitea-runner/cache -type f -mtime +14 -delete
+      fi
+    '';
+    serviceConfig = {
+      Type = "oneshot";
+    };
   };
 }

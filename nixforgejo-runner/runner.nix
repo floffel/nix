@@ -14,22 +14,20 @@ let
     "native:host"
   ];
 
-  labelsYaml = lib.concatStringsSep "\n" (map (l: "        - ${l}") labels);
-
-  baseConfig = pkgs.writeText "runner-base.yaml" ''
-    runner:
-      capacity: 4
-      labels:
-        ${labelsYaml}
-
-    container:
-      docker_host: automount
-      force_pull: true
-
-    cache:
-      enabled: true
-      dir: /var/lib/gitea-runner/cache
-  '';
+  baseConfig = pkgs.writeText "runner-base.yaml" (lib.concatLines ([
+    "  runner:"
+    "    capacity: 4"
+    "    labels:"
+  ] ++ (map (l: "      - ${l}") labels) ++ [
+    ""
+    "  container:"
+    "    docker_host: automount"
+    "    force_pull: true"
+    ""
+    "  cache:"
+    "    enabled: true"
+    "    dir: /var/lib/gitea-runner/cache"
+  ]));
 
   mergeConfig = pkgs.writeShellScript "forgejo-merge-config" ''
     set -euo pipefail
@@ -40,12 +38,12 @@ let
     token="$(printf '%s' "$RUNNER_TOKEN" | tr -cd 'A-Za-z0-9_-')"
 
     {
-      echo "server:"
-      echo "  connections:"
-      echo "    forgejo:"
-      printf '      url: "http://nixforgejo:3000"\n'
-      printf '      uuid: "%s"\n' "$uuid"
-      printf '      token: "%s"\n' "$token"
+      printf '  server:\n'
+      printf '    connections:\n'
+      printf '      forgejo:\n'
+      printf '        url: "http://nixforgejo:3000"\n'
+      printf '        uuid: "%s"\n' "$uuid"
+      printf '        token: "%s"\n' "$token"
     } > config.yaml
 
     cat ${baseConfig} >> config.yaml

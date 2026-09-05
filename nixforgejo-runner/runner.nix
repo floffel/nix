@@ -4,13 +4,13 @@
 let
   forgejoRunner = pkgs.forgejo-runner;
 
-  node20Bullseye = "node:20-bullseye@sha256:c0122351f25f04facee976f9db7214789eabadb489f4e4aea9cd00a0d6af77c4";
+  nodeBullseye = "docker.io/library/node:24-bullseye@sha256:25f3016fcdae6b5d65bd9bcb4064b7e4198ec8d49493fa40d73f9b463d04fb15";
 
   labels = [
-    "ubuntu-latest:docker://${node20Bullseye}"
-    "ubuntu-22.04:docker://${node20Bullseye}"
-    "ubuntu-20.04:docker://${node20Bullseye}"
-    "docker:docker://${node20Bullseye}"
+    "ubuntu-latest:docker://${nodeBullseye}"
+    "ubuntu-22.04:docker://${nodeBullseye}"
+    "ubuntu-20.04:docker://${nodeBullseye}"
+    "docker:docker://${nodeBullseye}"
     "native:host"
   ];
 

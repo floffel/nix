@@ -4,7 +4,7 @@
 let
   forgejoRunner = pkgs.forgejo-runner;
 
-  nodeBullseye = "docker.io/library/node:24-bullseye@sha256:25f3016fcdae6b5d65bd9bcb4064b7e4198ec8d49493fa40d73f9b463d04fb15";
+  nodeBullseye = "docker.io/library/node:26-bullseye@sha256:784b1bb050f6bf8ccfdc28d9d07ad07d15ab9d72eee5867f875ba219abec2611";
 
   labels = [
     "ubuntu-latest:docker://${nodeBullseye}"

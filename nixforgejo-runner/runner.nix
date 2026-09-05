@@ -36,8 +36,8 @@ let
     mkdir -p "$STATE_DIRECTORY/default"
     cd "$STATE_DIRECTORY/default"
 
-    uuid="$(printf '%s' "$RUNNER_UUID" | tr -d '\r\n')"
-    token="$(printf '%s' "$RUNNER_TOKEN" | tr -d '\r\n')"
+    uuid="$(printf '%s' "$RUNNER_UUID" | tr -cd 'A-Za-z0-9_-')"
+    token="$(printf '%s' "$RUNNER_TOKEN" | tr -cd 'A-Za-z0-9_-')"
 
     {
       echo "server:"

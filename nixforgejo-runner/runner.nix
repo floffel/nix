@@ -36,14 +36,18 @@ let
     mkdir -p "$STATE_DIRECTORY/default"
     cd "$STATE_DIRECTORY/default"
 
-    cat > config.yaml <<YAMLEOF
-    server:
-      connections:
-        forgejo:
-          url: "http://nixforgejo:3000"
-          uuid: "''${RUNNER_UUID}"
-          token: "''${RUNNER_TOKEN}"
-    YAMLEOF
+    uuid="$(printf '%s' "$RUNNER_UUID" | tr -d '\r\n')"
+    token="$(printf '%s' "$RUNNER_TOKEN" | tr -d '\r\n')"
+
+    {
+      echo "server:"
+      echo "  connections:"
+      echo "    forgejo:"
+      printf '      url: "http://nixforgejo:3000"\n'
+      printf '      uuid: "%s"\n' "$uuid"
+      printf '      token: "%s"\n' "$token"
+    } > config.yaml
+
     cat ${baseConfig} >> config.yaml
   '';
 in

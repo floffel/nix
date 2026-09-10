@@ -41,7 +41,7 @@ let
       printf '  server:\n'
       printf '    connections:\n'
       printf '      forgejo:\n'
-      printf '        url: "http://nixforgejo:3000"\n'
+      printf '        url: "https://git.minnecker.com"\n'
       printf '        uuid: "%s"\n' "$uuid"
       printf '        token: "%s"\n' "$token"
     } > config.yaml
@@ -66,7 +66,7 @@ in
     instances.default = {
       enable = true;
       name = "forgejo-runner";
-      url = "http://nixforgejo:3000";
+      url = "https://git.minnecker.com";
 
       tokenFile = "/var/lib/secrets/forgejo/runner-secrets";
 

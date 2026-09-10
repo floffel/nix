@@ -6,6 +6,7 @@ API_URL="https://api.domrobot.com/xmlrpc/"
 KEYDIR="/var/lib/nsd/dnssec"
 
 [ -f "$SECRETS_FILE" ] || { echo "ERROR: $SECRETS_FILE not found" >&2; exit 1; }
+# shellcheck disable=SC1090
 source "$SECRETS_FILE"
 
 inwx_call() {
@@ -25,6 +26,20 @@ inwx_call() {
 </methodCall>'
 }
 
+# Extract the DomRobot API result code from a response (1000 = success).
+api_code() {
+  sed -n 's/.*<name>code<\/name><value><int>\([0-9]*\)<\/int>.*/\1/p' | head -1
+}
+
+api_msg() {
+  sed -n 's/.*<name>msg<\/name><value><string>\([^<]*\).*/\1/p' | head -1
+}
+
+# Extract all <int> keytag values from a dnssec.list response.
+keytags() {
+  grep -oE '<name>keytag</name><value><int>[0-9]+' | grep -oE '[0-9]+$' || true
+}
+
 for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
   echo "=== ${zone} ==="
 
@@ -42,21 +57,62 @@ for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
     continue
   fi
 
+  keytag=$(basename "$ksk_file" | sed -E 's/^K.*\+([0-9]+)\.key$/\1/')
+  keytag=$((10#$keytag))
+
   dnskey_line=$(grep -v "^;" "$ksk_file" | head -1)
-  echo "  KeyFile: $(basename "$ksk_file")"
-  echo "  DNSKEY: ${dnskey_line}"
+  # Send only the RDATA (flags protocol algorithm base64) to DomRobot; the
+  # API wants the bare DNSKEY record data, not the full zonefile line.
+  dnskey_rdata=$(echo "$dnskey_line" | sed -E 's/^.*[[:space:]]DNSKEY[[:space:]]+//')
+  ds_line=$(dnssec-dsfromkey -2 "$ksk_file" | awk '{print $5, $6, $7, $8, $9}')
 
-  body="
-    <member><name>domainname</name><value><string>${zone}</string></value></member>
-    <member><name>dnskey</name><value><string>${dnskey_line}</string></value></member>"
+  echo "  KeyFile: $(basename "$ksk_file") (keytag ${keytag})"
+  echo "  DNSKEY: ${dnskey_rdata}"
+  echo "  DS:     ${ds_line}"
 
-  result=$(inwx_call "dnssec.adddnskey" "$body")
+  current=$(inwx_call "dnssec.list" \
+    "<member><name>domainname</name><value><string>${zone}</string></value></member>")
 
-  if echo "$result" | grep -q '<name>code</name><value><int>1000</int>'; then
-    echo "  -> OK"
-  else
-    msg=$(echo "$result" | sed -n 's/.*<name>msg<\/name><value><string>\([^<]*\).*/\1/p' || true)
-    echo "  -> FAILED: ${msg:-unknown}"
+  if [ "$(echo "$current" | api_code)" != "1000" ]; then
+    echo "  FAILED: dnssec.list: $(echo "$current" | api_msg)" >&2
+    exit 1
   fi
+
+  present=$(echo "$current" | keytags)
+  echo "  Keytags registered at INWX: ${present:-none}"
+
+  # 1) Make sure the CURRENT KSK is registered.
+  if ! echo "$present" | grep -qx "$keytag"; then
+    echo "  Adding DNSKEY for keytag ${keytag}..."
+    result=$(inwx_call "dnssec.adddnskey" "
+      <member><name>domainname</name><value><string>${zone}</string></value></member>
+      <member><name>dnskey</name><value><string>${dnskey_rdata}</string></value></member>")
+    if [ "$(echo "$result" | api_code)" != "1000" ]; then
+      echo "  FAILED: dnssec.adddnskey: $(echo "$result" | api_msg)" >&2
+      echo "  Add this DS manually at INWX (DNSSEC tab): ${zone}. ${ds_line}" >&2
+      exit 1
+    fi
+    echo "  -> added"
+  else
+    echo "  -> keytag ${keytag} already registered"
+  fi
+
+  # 2) Remove stale keytags (rotated-out KSKs). Only safe once the current
+  #    KSK is confirmed present above.
+  while read -r stale; do
+    [ -n "$stale" ] || continue
+    [ "$stale" = "$keytag" ] && continue
+    echo "  Removing stale keytag ${stale}..."
+    result=$(inwx_call "dnssec.removednskey" "
+      <member><name>domainname</name><value><string>${zone}</string></value></member>
+      <member><name>keytag</name><value><int>${stale}</int></value></member>")
+    if [ "$(echo "$result" | api_code)" != "1000" ]; then
+      echo "  FAILED: dnssec.removednskey (keytag ${stale}): $(echo "$result" | api_msg)" >&2
+      echo "  Remove keytag ${stale} manually at INWX (DNSSEC tab)" >&2
+      exit 1
+    fi
+    echo "  -> removed"
+  done <<< "$present"
+
   echo
 done

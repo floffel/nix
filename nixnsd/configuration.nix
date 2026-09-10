@@ -158,7 +158,7 @@ in
           strikes=$(( $(cat "${stateDir}/dnssec/ext-check-failures" 2>/dev/null || echo 0) + 1 ))
           echo "$strikes" > "${stateDir}/dnssec/ext-check-failures"
           if [ "$strikes" -ge 3 ]; then
-            echo "ERROR: external DNSSEC validation failed ${strikes} times in a row — check the DS at the registrar" >&2
+            echo "ERROR: external DNSSEC validation failed ''${strikes} times in a row — check the DS at the registrar" >&2
             exit 1
           fi
         else

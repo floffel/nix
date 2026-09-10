@@ -132,7 +132,7 @@ in
         /run/current-system/systemd/bin/systemctl kill -s SIGHUP nsd.service
         sleep 1
 
-        ${lib.concatStringsSep "\n" localChecks}
+        ${localChecks}
         echo "DNSSEC: local validation passed"
 
         # Keep the DS at the registrar (INWX) in sync with the published KSK.
@@ -153,7 +153,7 @@ in
         # End-to-end check through validating resolvers. Three consecutive
         # failures are a hard error (registrar DS almost certainly wrong).
         failures=0
-        ${lib.concatStringsSep "\n" externalChecks}
+        ${externalChecks}
         if [ "$failures" -gt 0 ]; then
           strikes=$(( $(cat "${stateDir}/dnssec/ext-check-failures" 2>/dev/null || echo 0) + 1 ))
           echo "$strikes" > "${stateDir}/dnssec/ext-check-failures"

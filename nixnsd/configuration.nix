@@ -105,7 +105,7 @@ in
             cd - >/dev/null
           fi
           dnssec-signzone -S -K "$KEYDIR" -o "${name}" -O full -N date "${stateDir}/zones/${name}"
-          dnssec-verify -K "$KEYDIR" -o "${name}" "${stateDir}/zones/${name}.signed" \
+          dnssec-verify -o "${name}" "${stateDir}/zones/${name}.signed" \
             || { echo "ERROR: ${name}: dnssec-verify failed — NOT replacing live zone" >&2; exit 1; }
           nsd-checkzone "${name}" "${stateDir}/zones/${name}.signed" \
             && mv -v "${stateDir}/zones/${name}.signed" "${stateDir}/zones/${name}"

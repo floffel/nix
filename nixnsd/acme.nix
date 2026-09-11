@@ -11,29 +11,37 @@ let
     VALUE=$3
     DOMAIN=$(echo "$FQDN" | sed -e 's/\.$//' -e 's/^_acme-challenge\.//')
     ZONE_FILE="/var/lib/nsd/zones/''${DOMAIN}"
+    KEYDIR="/var/lib/nsd/dnssec"
 
-    # Ensure zone files and directory are writable by root
-    chmod -R u+w /var/lib/nsd/zones
-
-    # Extract current serial and increment it to notify secondary nameservers
-    CURRENT_SERIAL=$(grep -o -E '[0-9]+[[:space:]]*;[[:space:]]*serial' "$ZONE_FILE" | grep -o -E '[0-9]+')
-    if [ -n "$CURRENT_SERIAL" ]; then
-      NEW_SERIAL=$((CURRENT_SERIAL + 1))
-      sed -i "s/''${CURRENT_SERIAL}\([[:space:]]*;[[:space:]]*serial\)/''${NEW_SERIAL}\1/" "$ZONE_FILE"
-    fi
+    # Bump the SOA serial and re-sign the modified zone. The zones are
+    # DNSSEC-signed, so an appended challenge record must be signed to keep
+    # the zone valid, and the serial must change or the AXFR secondaries
+    # (Hetzner) discard the transfer and the challenge never goes public.
+    resign_zone() {
+      SERIAL=$(awk '/[[:space:]]IN[[:space:]]+SOA[[:space:]]/ { print $7; exit }' "$ZONE_FILE")
+      if ! [ "$SERIAL" -gt 0 ] 2>/dev/null; then
+        SERIAL=$(date +%Y%m%d)00
+      fi
+      NEW_SERIAL=$((SERIAL + 1))
+      dnssec-signzone -S -K "$KEYDIR" -o "$DOMAIN" -O full -N "$NEW_SERIAL" "$ZONE_FILE" || {
+        echo "dns-hook: dnssec-signzone failed for $DOMAIN" >&2
+        exit 1
+      }
+      mv -f "$ZONE_FILE.signed" "$ZONE_FILE"
+      # Reload NSD to serve the challenge
+      /run/current-system/sw/bin/systemctl reload nsd
+    }
 
     if [ "$ACTION" = "present" ]; then
       # Append the TXT record to the zone file
       echo "_acme-challenge IN TXT \"$VALUE\"" >> "$ZONE_FILE"
-      # Reload NSD to serve the challenge
-      /run/current-system/sw/bin/systemctl reload nsd
+      resign_zone
       # Wait for Hetzner secondary DNS nameservers to sync via AXFR
       sleep 120
     elif [ "$ACTION" = "cleanup" ]; then
       # Remove the TXT record line
       sed -i "/_acme-challenge IN TXT/d" "$ZONE_FILE"
-      # Reload NSD
-      /run/current-system/sw/bin/systemctl reload nsd
+      resign_zone
       # Wait a bit before returning to ensure Let's Encrypt secondary validation is fully complete
       sleep 30
     fi
@@ -115,14 +123,14 @@ in
       {
         name = "acme-${domain}";
         value.serviceConfig = {
-          ReadWritePaths = [ "/var/lib/secrets/ssl" "/var/lib/nsd/zones" ];
+          ReadWritePaths = [ "/var/lib/secrets/ssl" "/var/lib/nsd/zones" "/var/lib/nsd/dnssec" ];
           CapabilityBoundingSet = [ "CAP_DAC_OVERRIDE" "CAP_KILL" ];
         };
       }
       {
         name = "acme-order-renew-${domain}";
         value.serviceConfig = {
-          ReadWritePaths = [ "/var/lib/secrets/ssl" "/var/lib/nsd/zones" ];
+          ReadWritePaths = [ "/var/lib/secrets/ssl" "/var/lib/nsd/zones" "/var/lib/nsd/dnssec" ];
           CapabilityBoundingSet = [ "CAP_DAC_OVERRIDE" "CAP_KILL" ];
         };
       }

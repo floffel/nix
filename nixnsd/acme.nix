@@ -18,16 +18,28 @@ let
     # the zone valid, and the serial must change or the AXFR secondaries
     # (Hetzner) discard the transfer and the challenge never goes public.
     resign_zone() {
-      SERIAL=$(awk '/[[:space:]]IN[[:space:]]+SOA[[:space:]]/ { print $7; exit }' "$ZONE_FILE")
+      # Operate on a work copy so a signing failure never leaves the live
+      # zone modified or half-signed.
+      WORK="''${ZONE_FILE}.acme-work"
+      cp -f "$ZONE_FILE" "$WORK"
+      SERIAL=$(awk '/[[:space:]]IN[[:space:]]+SOA[[:space:]]/ { print $7; exit }' "$WORK")
       if ! [ "$SERIAL" -gt 0 ] 2>/dev/null; then
         SERIAL=$(date +%Y%m%d)00
       fi
       NEW_SERIAL=$((SERIAL + 1))
-      dnssec-signzone -S -K "$KEYDIR" -o "$DOMAIN" -O full -N "$NEW_SERIAL" "$ZONE_FILE" || {
+      # Bump the SOA serial in the work copy: AXFR secondaries discard
+      # transfers whose serial is unchanged.
+      sed -i "/^[^;]*[[:space:]]IN[[:space:]]\+SOA[[:space:]]/s/[0-9]\{10\}/$NEW_SERIAL/" "$WORK"
+      # Re-sign the zone. signzone keeps the in-file serial (explicit -N
+      # numbers are rejected by this BIND build), so only the bump above
+      # matters.
+      dnssec-signzone -S -K "$KEYDIR" -o "$DOMAIN" -O full "$WORK" || {
+        rm -f "$WORK" "$WORK.signed"
         echo "dns-hook: dnssec-signzone failed for $DOMAIN" >&2
         exit 1
       }
-      mv -f "$ZONE_FILE.signed" "$ZONE_FILE"
+      mv -f "$WORK.signed" "$ZONE_FILE"
+      rm -f "$WORK"
       # Reload NSD to serve the challenge
       /run/current-system/sw/bin/systemctl reload nsd
     }

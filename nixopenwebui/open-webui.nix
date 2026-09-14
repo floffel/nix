@@ -40,7 +40,7 @@
       OAUTH_ADMIN_ROLES = "admin";
 
       # Default connection settings for the local LLM server
-      OPENAI_API_BASE_URL = "http://192.168.1.196:52415/v1";
+      OPENAI_API_BASE_URL = "http://192.168.1.196:8123/v1";
       OPENAI_API_KEY = "x";
       ENABLE_OLLAMA_API = "False"; # Disable local Ollama since we use remote OpenAI API
     };

@@ -163,7 +163,7 @@ in
       # OpenAI-compatible LLM endpoint on the same host as `ki` but on the
       # LLM API port (matches Open WebUI's OPENAI_API_BASE_URL). Gated by the
       # kie.minnecker.com vhost's bearer-token check (see kie-auth.js).
-      kiellm.servers = { "192.168.1.196:52415" = {}; };
+      kiellm.servers = { "192.168.1.196:8123" = {}; };
       openwebui.servers = { "nixopenwebui:8080" = {}; };
       nixmonitoring.servers = { "nixmonitoring:3000" = {}; };
       idm.servers = { "nixidm:8443" = {}; };
@@ -372,7 +372,7 @@ in
       # kie.minnecker.com (Token-Gated OpenAI LLM Proxy)
       #
       # Public, bearer-token-gated reverse proxy to the OpenAI-compatible LLM
-      # endpoint (192.168.1.196:52415, same backend Open WebUI uses). Clients
+      # endpoint (192.168.1.196:8123, same backend Open WebUI uses). Clients
       # authenticate with `Authorization: Bearer <token>`; the token is checked
       # via a map directive ($kie_token_ok) generated at runtime from
       # /var/lib/kie-proxy/token. The client's Authorization header is then

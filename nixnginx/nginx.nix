@@ -400,7 +400,7 @@ in
             proxy_set_header X-Forwarded-Proto $scheme;
             # Replace the client's bearer token with the upstream LLM's fixed
             # key — the proxy gate token must not reach the backend.
-            proxy_set_header Authorization "Bearer x";
+            proxy_set_header Authorization "Bearer 1234";
             proxy_buffering off;
             chunked_transfer_encoding off;
             proxy_read_timeout 600;

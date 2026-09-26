@@ -75,6 +75,12 @@
       # Enable Forgejo Actions (CI/CD)
       actions = {
         ENABLED = true;
+        # Retention for Action artifacts and logs (days). The built-in
+        # `cron.cleanup_actions` job (enabled by default, @midnight + at start)
+        # prunes expired artifacts and caches to keep the boot disk from filling.
+        # Lower than the 90/365 day defaults to keep the LXC bootdisk lean.
+        ARTIFACT_RETENTION_DAYS = 4;
+        LOG_RETENTION_DAYS = 14;
       };
 
       # Enable Prometheus metrics endpoint

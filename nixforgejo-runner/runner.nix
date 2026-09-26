@@ -12,6 +12,7 @@ let
     "ubuntu-20.04:docker://${nodeBullseye}"
     "docker:docker://${nodeBullseye}"
     "native:host"
+    "amd64"
   ];
 
   baseConfig = pkgs.writeText "runner-base.yaml" (lib.concatLines ([

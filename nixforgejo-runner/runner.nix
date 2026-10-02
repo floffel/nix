@@ -24,6 +24,16 @@ let
     "  container:"
     "    docker_host: automount"
     "    force_pull: true"
+    # Named docker volumes the CI jobs may mount (2026-10-02): the
+    # immosai ci.yml declares `volumes: [ci-sccache:/cache/sccache,
+    # ci-lambda-binaries:/ci-lambda-binaries]` so the compile + Lambda
+    # binary caches stay runner-local instead of being pulled back out
+    # of S3 on every job (~$38/mo egress). act_runner refuses
+    # job-declared volumes unless they are whitelisted here; without
+    # this the jobs fail at container create ("volume not allowed").
+    "    valid_volumes:"
+    "      - ci-sccache"
+    "      - ci-lambda-binaries"
     ""
     "  cache:"
     "    enabled: true"

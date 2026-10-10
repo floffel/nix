@@ -167,8 +167,12 @@ in
       '';
     unitConfig.OnFailure = [ "nsd-dnssec-alert.service" ];
     serviceConfig = {
+      # Deliberately NOT RemainAfterExit: a timer fires a *start* job, and a
+      # oneshot unit left "active (exited)" after its first run makes every
+      # subsequent start job a no-op — so the hourly timer would never re-sign
+      # and the 30-day RRSIGs would silently lapse (SERVFAIL on validators).
+      # Returning to "inactive" after each run lets the timer start it again.
       Type = "oneshot";
-      RemainAfterExit = true;
     };
   };
 

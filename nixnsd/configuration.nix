@@ -83,7 +83,10 @@ in
     description = "DNSSEC key rollover";
     wantedBy = [ "nsd.service" ];
     after = [ "nsd.service" ];
-    path = with pkgs; [ bind nsd curl bash coreutils gnused gnugrep gawk ];
+    # `bind` provides the dnssec-* signing tools; `dnsutils` is a separate
+    # output that carries dig/host/nslookup. Without it the localChecks below
+    # fail with "dig: command not found".
+    path = with pkgs; [ bind dnsutils nsd curl bash coreutils gnused gnugrep gawk ];
     script =
       let
         zoneScripts = lib.mapAttrsToList (name: zone: ''

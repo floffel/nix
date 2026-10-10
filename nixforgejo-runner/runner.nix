@@ -17,7 +17,7 @@ let
 
   baseConfig = pkgs.writeText "runner-base.yaml" (lib.concatLines ([
     "  runner:"
-    "    capacity: 4"
+    "    capacity: 2"
     "    labels:"
   ] ++ (map (l: "      - ${l}") labels) ++ [
     ""

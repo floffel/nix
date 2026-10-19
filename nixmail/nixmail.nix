@@ -443,7 +443,7 @@ in
       "protocol imap" = { mail_plugins = { imap_acl = true; }; };
       acl_driver = "vfile";
       "acl_sharing_map" = {
-        dict = { file = { path = "/var/lib/dovecot/db/shared-mailboxes.db"; }; };
+        "dict file" = { path = "/var/lib/dovecot/db/shared-mailboxes.db"; };
       };
 
       "namespace inbox" = {

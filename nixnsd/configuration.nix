@@ -12,6 +12,12 @@ let
   # Zones that should be DNSSEC-signed (as declared in ./nsd.nix)
   dnssecZones = lib.filterAttrs (_: zone: zone.dnssec or false) primaryZones;
 
+  # sbminni.de is served/signed here but its NS delegation is switched to us
+  # separately. Until that happens, public resolvers cannot answer for it, so
+  # exclude it from the external validation checks (local checks still apply).
+  # Remove the exclusion once the delegation is live.
+  externalCheckZones = lib.filterAttrs (name: _: name != "sbminni.de") dnssecZones;
+
   # Plain (unsigned) zone data from the git-tracked zone files. Used to seed
   # a fresh NSD host with the raw zone content before it gets signed. Conforms
   # to the zonefile path the nsd module serves from: ${stateDir}/zones/<name>.
@@ -151,7 +157,7 @@ in
             echo "WARN: ${name}: no external validating resolver returns NOERROR"
             failures=$((failures + 1))
           fi
-        '') dnssecZones);
+        '') externalCheckZones);
       in
       ''
         set -e

@@ -1031,8 +1031,8 @@ in
       $config['markasjunk_learning_driver'] = 'cmd_learn';
       $config['markasjunk_spam_mbox'] = 'Junk';
       $config['markasjunk_ham_mbox'] = 'INBOX';
-      $config['markasjunk_spam_cmd'] = 'rspamc -h nixmail:11334 learn_spam %f';
-      $config['markasjunk_ham_cmd'] = 'rspamc -h nixmail:11334 learn_ham %f';
+      $config['markasjunk_spam_cmd'] = 'rspamc -h [fd01::13]:11334 learn_spam %f';
+      $config['markasjunk_ham_cmd'] = 'rspamc -h [fd01::13]:11334 learn_ham %f';
       $config['markasjunk_move_spam'] = true;
       $config['markasjunk_move_ham'] = true;
 

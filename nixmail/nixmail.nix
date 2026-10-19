@@ -644,7 +644,7 @@ in
       # mount via rspamd's $file$ directive (plaintext, provisioned by the
       # mail-rspamd-password oneshot).
       "worker-controller.inc".text = ''
-        secure_ip = "127.0.0.1,10.20.20.14,fd01::14";
+        secure_ip = "127.0.0.1,10.20.20.1,fd01::1,10.20.20.14,fd01::14";
         password = "$file$/var/lib/secrets/mail/rspamd/controller-password";
         enable_password = "$file$/var/lib/secrets/mail/rspamd/controller-enable-password";
       '';

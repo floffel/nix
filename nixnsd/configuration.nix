@@ -41,6 +41,31 @@ let
   pushScript = pkgs.writeShellScript "push-dnssec-to-inwx"
     (builtins.readFile ../scratch/push-dnssec-to-inwx.sh);
 
+  # Replace the SOA serial with a strictly increasing value before signing.
+  # `dnssec-signzone -N date` can produce a lower serial than the zone already
+  # served by a secondary (it resets the per-day counter), which makes the
+  # secondary refuse the transfer. We therefore pin the serial ourselves and
+  # sign with -N keep.
+  serialHelpers = ''
+    bump_serial() {
+      local file="$1" newserial="$2" tmp
+      tmp="$file.serial.tmp"
+      awk -v s="$newserial" '
+        BEGIN { in_soa=0; replaced=0 }
+        /IN[[:space:]]+SOA/ { in_soa=1 }
+        {
+          if (in_soa && !replaced) {
+            for (i=1; i<=NF; i++) {
+              if ($i ~ /^[0-9]+$/) { $i=s; replaced=1; break }
+            }
+          }
+          print
+          if (in_soa && $0 ~ /\)/) { in_soa=0 }
+        }
+      ' "$file" > "$tmp" && mv "$tmp" "$file"
+    }
+  '';
+
 in
 {
   imports = [
@@ -132,7 +157,16 @@ in
             RESEED=1
           fi
 
-          dnssec-signzone -S -K "$KEYDIR" -o "${name}" -O full -N date "$INPUT"
+          LIVE_SERIAL=$(dig +short "@127.0.0.1" "${name}" SOA +time=3 +tries=1 2>/dev/null | awk '{print $3}' | head -1)
+          case "$LIVE_SERIAL" in ""|*[!0-9]*) LIVE_SERIAL=0 ;; esac
+          BASE=$(( $(date +%Y%m%d) * 100 + 99 ))
+          if [ "$LIVE_SERIAL" -ge "$BASE" ]; then
+            NEW_SERIAL=$((LIVE_SERIAL + 1))
+          else
+            NEW_SERIAL=$BASE
+          fi
+          bump_serial "$INPUT" "$NEW_SERIAL"
+          dnssec-signzone -S -K "$KEYDIR" -o "${name}" -O full -N keep "$INPUT"
           dnssec-verify -o "${name}" "$INPUT.signed" \
             || { echo "ERROR: ${name}: dnssec-verify failed — NOT replacing live zone" >&2; rm -f "$INPUT.signed"; [ "$RESEED" = 1 ] && rm -f "$INPUT"; exit 1; }
           nsd-checkzone "${name}" "$INPUT.signed" \
@@ -161,6 +195,7 @@ in
       in
       ''
         set -e
+        ${serialHelpers}
         ${lib.concatStringsSep "\n" zoneScripts}
         /run/current-system/systemd/bin/systemctl kill -s SIGHUP nsd.service
         sleep 1

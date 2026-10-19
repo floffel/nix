@@ -303,7 +303,7 @@ in
     # for recipients that are not found as a real virtual mailbox, so valid
     # users keep their recipient-delimiter detail (user.tag -> user) while
     # unknown recipients fall through to florian.
-    mapFiles."catchall" = ''
+    mapFiles."catchall" = pkgs.writeText "postfix-catchall" ''
       @minnecker.com florian@minnecker.com
       @floffel.de florian@minnecker.com
       @sbminnecker.de florian@minnecker.com

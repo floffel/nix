@@ -433,7 +433,7 @@ in
       auth_master_user_separator = "*";
       "passdb master" = {
         driver = "passwd-file";
-        passwd_file_path = "/run/dovecot/master-users";
+        passwd_file_path = "/run/dovecot-auth/master-users";
         master = true;
         result_success = "continue";
       };
@@ -461,7 +461,7 @@ in
       "namespace shared" = {
         type = "shared";
         separator = "/";
-        prefix = "shared/";
+        prefix = "shared/$user/";
         mail_path = "/var/vmail/%{owner_domain}/%{owner_username}/maildir";
         mail_index_private_path = "~/maildir/shared/%{owner_user}";
         subscriptions = false;
@@ -878,11 +878,11 @@ EOF
         echo "ERROR: $SECRET is missing; generate it on the NAS with 'openssl rand -hex 32'" >&2
         exit 1
       fi
-      install -d -m 0700 -o dovecot -g dovecot /run/dovecot
+      install -d -m 0750 -o dovecot2 -g dovecot2 /run/dovecot-auth
       PW=$(cat "$SECRET")
-      printf 'sieveadmin:{PLAIN}%s\n' "$PW" > /run/dovecot/master-users
-      chown dovecot:dovecot /run/dovecot/master-users
-      chmod 0600 /run/dovecot/master-users
+      printf 'sieveadmin:{PLAIN}%s\n' "$PW" > /run/dovecot-auth/master-users
+      chown dovecot2:dovecot2 /run/dovecot-auth/master-users
+      chmod 0600 /run/dovecot-auth/master-users
     '';
   };
 

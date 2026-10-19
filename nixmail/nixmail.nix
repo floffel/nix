@@ -808,14 +808,14 @@ EOF
       header :regex "To" ".*[+]([A-Za-z0-9_-]+)@.*",
       header :regex "Cc" ".*[+]([A-Za-z0-9_-]+)@.*"
     ) {
-      fileinto :create "${1}";
+      fileinto :create "''${1}";
       stop;
     }
     if anyof (
       header :regex "To" ".*[.]([A-Za-z0-9_-]+)@.*",
       header :regex "Cc" ".*[.]([A-Za-z0-9_-]+)@.*"
     ) {
-      fileinto :create "${1}";
+      fileinto :create "''${1}";
       stop;
     }
   '';
@@ -935,7 +935,11 @@ EOF
   systemd.timers.parsedmarc = {
     wantedBy = [ "timers.target" ];
     timerConfig = {
-      OnCalendar = "*:0/5";
+      # One digest per day instead of one every 5 minutes. Empty aggregate
+      # reports still produce an empty attachment; if the digest is not
+      # wanted at all, remove the [smtp] section from parsedmarcIni.
+      OnCalendar = "*-*-* 06:00:00";
+      RandomizedDelaySec = "15m";
       Persistent = true;
     };
   };

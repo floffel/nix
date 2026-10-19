@@ -8,6 +8,12 @@
     ./nginx.nix
   ];
 
+  # Enigma PGP support in Roundcube.
+  systemd.tmpfiles.rules = [
+    "d /var/lib/roundcube/enigma 0700 nginx nginx -"
+  ];
+  systemd.services.phpfpm-roundcube.path = [ pkgs.gnupg ];
+
   # Fail2ban — brute-force and scan protection in front of all public vhosts.
   # Jails monitor nginx error logs for OAuth2 token abuse, general auth
   # failures, and known exploit probes. Uses iptables-multiport which works

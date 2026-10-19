@@ -1019,16 +1019,22 @@ in
       // every login; required/recommended when oauth_config_uri is set).
       $config['oauth_cache']     = 'db';
       $config['oauth_cache_ttl'] = 600;
+
+      // Enigma PGP: writable GnuPG homedir. gnupg is added to the PHP-FPM
+      // service PATH and the directory is created by tmpfiles in
+      // nixnginx/configuration.nix.
+      $config['enigma_pgp_homedir'] = '/var/lib/roundcube/enigma';
     '';
 
     # Plugins used in original Roundcube installation.
-    # enigma: requires an unconfigured PGP homedir and logged PHP errors.
+    # enigma: configured with a writable PGP homedir and gnupg in the FPM path.
     # managesieve: Net_Sieve does not support XOAUTH2, and with OAuth-only
-    # logins it would try localhost:4190 / a PLAIN password; the routing
-    # sieve is managed server-side in nixmail instead.
+    # logins it cannot authenticate; the routing sieve is managed server-side
+    # in nixmail. Enable later with a master user if the UI is wanted.
     plugins = [
       "additional_message_headers"
       "attachment_reminder"
+      "enigma"
       "identity_select"
       "newmail_notifier"
       "show_additional_headers"

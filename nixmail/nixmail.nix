@@ -865,8 +865,12 @@ EOF
   # Dovecot approach and avoids the shared-namespace owner_* variables that
   # this 2.4 build does not expand. eltern@ is mounted for sabine/bodo;
   # travel@ for florian/helena. Idempotent and re-created on every boot.
+  # Shared mailboxes are driven entirely by Kanidm groups named
+  # mail_shared_<owner>. The owner mailbox is <owner>@minnecker.com; group
+  # members get a per-user Maildir symlink and an ACL. The public repo only
+  # contains the prefix, never personal names.
   systemd.services.mail-shared-mailboxes = {
-    description = "Create shared mailbox symlinks for eltern/travel";
+    description = "Sync Kanidm mail_shared_* groups into Dovecot shared mailboxes";
     wantedBy = [ "multi-user.target" ];
     after = [ "dovecot.service" ];
     requires = [ "dovecot.service" ];
@@ -874,20 +878,54 @@ EOF
       Type = "oneshot";
       RemainAfterExit = true;
     };
-    path = with pkgs; [ dovecot coreutils ];
+    path = with pkgs; [ dovecot coreutils openldap gawk ];
     script = ''
       set -euo pipefail
-      for u in eltern travel sabine bodo florian helena; do
-        doveadm mailbox create -u "$u@minnecker.com" INBOX 2>/dev/null || true
+      TOKEN=$(cat /var/lib/secrets/mail/ldap/ldap-token)
+      LDAPSEARCH=${pkgs.openldap}/bin/ldapsearch
+      MEMBERS=$(mktemp)
+      EXPECTED=$(mktemp)
+      trap 'rm -f "$MEMBERS" "$EXPECTED"' EXIT
+
+      "$LDAPSEARCH" -LLL -x -H ldaps://ldap -D dn=token -w "$TOKEN" \
+        -b dc=minnecker,dc=com \
+        '(&(objectClass=groupOfNames)(cn=mail_shared_*))' cn member 2>/dev/null |
+      awk '$1 == "cn:" && $2 ~ /^mail_shared_/ { o=substr($2,13); next }
+           $1 == "member:" && o != "" { print o "\t" $2 }' > "$MEMBERS" || true
+
+      while IFS=$'\t' read -r owner member_dn; do
+        [ -n "$owner" ] || continue
+        owner_mail="$owner@minnecker.com"
+        member_mail=$("$LDAPSEARCH" -LLL -x -H ldaps://ldap -D dn=token -w "$TOKEN" \
+          -b "$member_dn" -s base mail 2>/dev/null |
+          awk '/^mail: / { sub(/^mail: /, ""); print; exit }')
+        [ -n "$member_mail" ] || continue
+        member_user=''${member_mail%%@*}
+        member_domain=''${member_mail#*@}
+        owner_path="/var/vmail/minnecker.com/$owner/maildir"
+        member_path="/var/vmail/$member_domain/$member_user/maildir"
+        doveadm mailbox create -u "$owner_mail" INBOX >/dev/null 2>&1 || true
+        doveadm mailbox create -u "$member_mail" INBOX >/dev/null 2>&1 || true
+        ln -sfn "$owner_path" "$member_path/.mail_shared.$owner"
+        doveadm acl set -u "$owner_mail" INBOX user="$member_mail" \
+          lookup read write write-seen write-deleted insert create delete expunge >/dev/null 2>&1 || true
+        printf '%s\t%s\n' "$owner" "$member_mail" >> "$EXPECTED"
+      done < "$MEMBERS"
+
+      # Prune shares for removed members or deleted groups.
+      find /var/vmail -type l -name '.mail_shared.*' 2>/dev/null | while read -r link; do
+        owner=''${link##*/.mail_shared.}
+        member_path=''${link%/.mail_shared.*}
+        member_domain=''${member_path#/var/vmail/}
+        member_domain=''${member_domain%%/*}
+        member_user=''${member_path#/var/vmail/*/}
+        member_user=''${member_user%%/*}
+        member_mail="$member_user@$member_domain"
+        if ! grep -qxF "$owner"$'\t'"$member_mail" "$EXPECTED" 2>/dev/null; then
+          rm -f "$link"
+          doveadm acl delete -u "$owner@minnecker.com" INBOX user="$member_mail" >/dev/null 2>&1 || true
+        fi
       done
-      ln -sfn /var/vmail/minnecker.com/eltern/maildir /var/vmail/minnecker.com/sabine/maildir/.eltern
-      ln -sfn /var/vmail/minnecker.com/eltern/maildir /var/vmail/minnecker.com/bodo/maildir/.eltern
-      ln -sfn /var/vmail/minnecker.com/travel/maildir /var/vmail/minnecker.com/florian/maildir/.travel
-      ln -sfn /var/vmail/minnecker.com/travel/maildir /var/vmail/minnecker.com/helena/maildir/.travel
-      doveadm acl set -u eltern@minnecker.com INBOX user=sabine@minnecker.com lookup read write write-seen write-deleted insert create delete expunge 2>/dev/null || true
-      doveadm acl set -u eltern@minnecker.com INBOX user=bodo@minnecker.com lookup read write write-seen write-deleted insert create delete expunge 2>/dev/null || true
-      doveadm acl set -u travel@minnecker.com INBOX user=florian@minnecker.com lookup read write write-seen write-deleted insert create delete expunge 2>/dev/null || true
-      doveadm acl set -u travel@minnecker.com INBOX user=helena@minnecker.com lookup read write write-seen write-deleted insert create delete expunge 2>/dev/null || true
     '';
   };
 

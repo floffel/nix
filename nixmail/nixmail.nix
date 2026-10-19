@@ -315,12 +315,15 @@ in
       ssl_server_key_file = "/var/lib/secrets/ssl/minnecker.com/key.pem";
 
       auth_allow_cleartext = true;
-      # Verbose auth logging for debugging XOAUTH2 + userdb lookup failures.
+      # Keep verbose failed-auth logging (brute-force visibility), but turn
+      # off debug: the XOAUTH2 login path has been verified end-to-end, and
+      # debug only adds LDAP dumps plus benign "SSL stream closed" idle
+      # messages from the Kanidm userinfo HTTP client.
       auth_verbose = true;
-      auth_debug = true;
-      # Advertise XOAUTH2 alongside PLAIN/LOGIN. The oauth2 passdb below
-      # validates OAuth2 access tokens issued by Kanidm; PLAIN falls through
-      # to the LDAP passdb (POSIX password) for legacy/webmail clients.
+      auth_debug = false;
+      # Advertise XOAUTH2 alongside PLAIN/LOGIN. The oauth2 mechanism
+      # validates Kanidm access tokens via the global oauth2 filter; PLAIN
+      # falls through to the LDAP passdb (POSIX password) for legacy clients.
       auth_mechanisms = [ "plain" "login" "xoauth2" ];
 
       # The nginx mail proxy is removed — clients connect directly. Keep

@@ -215,7 +215,7 @@ in
         smtpd_helo_required = "yes";
         biff = "no";
 
-        virtual_alias_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-aliases.cf, proxy:ldap:/var/lib/secrets/mail/postfix/ldap-catchalls.cf";
+        virtual_alias_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-aliases.cf, hash:/etc/postfix/catchall";
         virtual_mailbox_domains = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-domains.cf";
         virtual_mailbox_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-recipients.cf";
         smtpd_sender_login_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-senders.cf";
@@ -297,6 +297,18 @@ in
 
     extraAliases = ''
       root: florian@minnecker.com
+    '';
+
+    # Postfix-native domain catch-all. The @domain form is only consulted
+    # for recipients that are not found as a real virtual mailbox, so valid
+    # users keep their recipient-delimiter detail (user.tag -> user) while
+    # unknown recipients fall through to florian.
+    mapFiles."catchall" = ''
+      @minnecker.com florian@minnecker.com
+      @floffel.de florian@minnecker.com
+      @sbminnecker.de florian@minnecker.com
+      @substitution.art florian@minnecker.com
+      @sbminni.de florian@minnecker.com
     '';
   };
 

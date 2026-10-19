@@ -475,9 +475,13 @@ in
       # Global BEFORE sieve: routing (quarantine, spam->Junk, reports,
       # +detail auto-folder). Order of rules matters (see routing.sieve).
       "sieve_script routing" = {
-        type = "before";
+        # Dovecot 2.4 named block: the setting is sieve_script_type, not
+        # `type` (which the NixOS module does not render here). Without
+        # "before" the script defaults to personal and is never executed.
+        sieve_script_type = "before";
         path = "/etc/dovecot/routing.sieve";
-        sieve_script_bin_path = "/var/lib/dovecot/routing.svbin";
+        # This setting is a DIRECTORY, not a file.
+        sieve_script_bin_path = "/var/lib/dovecot/sieve-bin";
       };
       "sieve_script personal" = { active_path = "~/.dovecot.sieve"; driver = "file"; path = "~/sieve"; };
     };
@@ -803,6 +807,7 @@ EOF
   # Make the state directory writable by dovecot before the service starts.
   systemd.services.dovecot.preStart = lib.mkAfter ''
     install -d -m 0750 -o dovecot -g dovecot /var/lib/dovecot
+    install -d -m 0750 -o dovecot -g dovecot /var/lib/dovecot/sieve-bin
     chown -R dovecot:dovecot /var/lib/dovecot
   '';
 

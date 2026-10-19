@@ -43,7 +43,7 @@ keytags() {
   grep -oE '<name>keyTag</name><value><(string|int)>[0-9]+' | grep -oE '[0-9]+$' | grep -v '^0$' || true
 }
 
-for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
+for zone in minnecker.com floffel.de sbminnecker.de substitution.art sbminni.de; do
   echo "=== ${zone} ==="
 
   ksk_file=""

@@ -786,12 +786,15 @@ EOF
       stop;
     }
 
-    # 4. DMARC / TLS-RPT aggregate reports -> .Reports (parsedmarc watches it).
+    # 4. DMARC / TLS-RPT aggregate reports -> Reports mailbox.
+    # Use the IMAP mailbox name "Reports" (no leading dot): Dovecot rejects
+    # '.Reports' as an invalid Sieve mailbox name, but stores it on disk as
+    # the Maildir folder .Reports, which is what parsedmarc watches.
     if anyof (
       header :contains "To" "reports@minnecker.com",
       header :contains "Cc" "reports@minnecker.com"
     ) {
-      fileinto :create ".Reports";
+      fileinto :create "Reports";
       stop;
     }
   '';

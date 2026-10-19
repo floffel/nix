@@ -887,19 +887,24 @@ EOF
       EXPECTED=$(mktemp)
       trap 'rm -f "$MEMBERS" "$EXPECTED"' EXIT
 
+      # The LDAP token can read mail users (and their memberOf), but not the
+      # group entries themselves. Derive owner/member pairs from each user's
+      # memberOf values: spn=mail_shared_<owner>@minnecker.com.
       "$LDAPSEARCH" -LLL -x -H ldaps://ldap -D dn=token -w "$TOKEN" \
-        -b dc=minnecker,dc=com \
-        '(&(objectClass=groupOfNames)(cn=mail_shared_*))' cn member 2>/dev/null |
-      awk '$1 == "cn:" && $2 ~ /^mail_shared_/ { o=substr($2,13); next }
-           $1 == "member:" && o != "" { print o "\t" $2 }' > "$MEMBERS" || true
+        -b dc=minnecker,dc=com '(&(objectClass=person)(mail=*))' mail memberOf 2>/dev/null |
+      awk '
+        /^dn: / { mail=""; next }
+        /^mail: / && mail == "" { mail=substr($0,7) }
+        /^memberof: spn=mail_shared_/ {
+          g=substr($0, index($0,"spn=mail_shared_")+4);
+          sub(/@.*/,"",g); sub(/^mail_shared_/,"",g);
+          if (mail != "") print g "\t" mail
+        }
+      ' > "$MEMBERS" || true
 
-      while IFS=$'\t' read -r owner member_dn; do
-        [ -n "$owner" ] || continue
+      while IFS=$'\t' read -r owner member_mail; do
+        [ -n "$owner" ] && [ -n "$member_mail" ] || continue
         owner_mail="$owner@minnecker.com"
-        member_mail=$("$LDAPSEARCH" -LLL -x -H ldaps://ldap -D dn=token -w "$TOKEN" \
-          -b "$member_dn" -s base mail 2>/dev/null |
-          awk '/^mail: / { sub(/^mail: /, ""); print; exit }')
-        [ -n "$member_mail" ] || continue
         member_user=''${member_mail%%@*}
         member_domain=''${member_mail#*@}
         owner_path="/var/vmail/minnecker.com/$owner/maildir"

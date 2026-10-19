@@ -462,6 +462,7 @@ in
         type = "public";
         separator = "/";
         prefix = "shared/";
+        mail_driver = "maildir";
         mail_path = "/var/vmail/shared";
         mail_index_private_path = "~/maildir/shared/index";
         subscriptions = false;

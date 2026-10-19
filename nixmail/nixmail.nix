@@ -462,8 +462,8 @@ in
         type = "shared";
         separator = "/";
         prefix = "shared/$user/";
-        mail_path = "/var/vmail/$domain/$username/maildir";
-        mail_index_private_path = "~/maildir/shared/$user";
+        mail_path = "/var/vmail/%{owner_domain}/%{owner_username}/maildir";
+        mail_index_private_path = "~/maildir/shared/%{owner_user}";
         subscriptions = false;
         list = "children";
       };

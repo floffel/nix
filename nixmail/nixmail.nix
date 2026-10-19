@@ -454,21 +454,6 @@ in
         "mailbox \"Sent Messages\"" = { special_use = "\\Sent"; };
       };
 
-      # The Dovecot 2.4 shared-namespace owner_* variables are not available
-      # in this build. Use a public namespace over /var/vmail/shared with
-      # per-mailbox symlinks to the owner maildirs; access is controlled by
-      # the ACL plugin (dovecot-acl in the owner mailbox).
-      "namespace public" = {
-        type = "public";
-        separator = "/";
-        prefix = "shared/";
-        mail_driver = "maildir";
-        mail_path = "/var/vmail/shared";
-        mail_index_private_path = "~/maildir/shared/index";
-        subscriptions = false;
-        list = "children";
-      };
-
       "service imap-login" = {
         "inet_listener imap" = { port = 143; };
         # Listener used by the nginx mail proxy (PROXY protocol). auth.js
@@ -862,6 +847,33 @@ EOF
     install -d -m 0750 -o dovecot -g dovecot /var/lib/dovecot/db
     chown -R dovecot:dovecot /var/lib/dovecot
   '';
+
+
+  # Shared mailboxes via per-user Maildir symlinks. This is the documented
+  # Dovecot approach and avoids the shared-namespace owner_* variables that
+  # this 2.4 build does not expand. eltern@ is mounted for sabine/bodo;
+  # travel@ for florian/helena. Idempotent and re-created on every boot.
+  systemd.services.mail-shared-mailboxes = {
+    description = "Create shared mailbox symlinks for eltern/travel";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "dovecot.service" ];
+    requires = [ "dovecot.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    path = with pkgs; [ dovecot coreutils ];
+    script = ''
+      set -euo pipefail
+      for u in eltern travel sabine bodo florian helena; do
+        doveadm mailbox create -u "$u@minnecker.com" INBOX 2>/dev/null || true
+      done
+      ln -sfn /var/vmail/minnecker.com/eltern/maildir /var/vmail/minnecker.com/sabine/maildir/.eltern
+      ln -sfn /var/vmail/minnecker.com/eltern/maildir /var/vmail/minnecker.com/bodo/maildir/.eltern
+      ln -sfn /var/vmail/minnecker.com/travel/maildir /var/vmail/minnecker.com/florian/maildir/.travel
+      ln -sfn /var/vmail/minnecker.com/travel/maildir /var/vmail/minnecker.com/helena/maildir/.travel
+    '';
+  };
 
   # ManageSieve master user for Roundcube. The password is generated once in
   # the shared secrets tree; only the derived passwd-file is written to /run.

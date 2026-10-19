@@ -872,6 +872,10 @@ EOF
       ln -sfn /var/vmail/minnecker.com/eltern/maildir /var/vmail/minnecker.com/bodo/maildir/.eltern
       ln -sfn /var/vmail/minnecker.com/travel/maildir /var/vmail/minnecker.com/florian/maildir/.travel
       ln -sfn /var/vmail/minnecker.com/travel/maildir /var/vmail/minnecker.com/helena/maildir/.travel
+      doveadm acl set -u eltern@minnecker.com INBOX user=sabine@minnecker.com lookup read write insert create delete expunge 2>/dev/null || true
+      doveadm acl set -u eltern@minnecker.com INBOX user=bodo@minnecker.com lookup read write insert create delete expunge 2>/dev/null || true
+      doveadm acl set -u travel@minnecker.com INBOX user=florian@minnecker.com lookup read write insert create delete expunge 2>/dev/null || true
+      doveadm acl set -u travel@minnecker.com INBOX user=helena@minnecker.com lookup read write insert create delete expunge 2>/dev/null || true
     '';
   };
 

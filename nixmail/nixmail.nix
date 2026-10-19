@@ -751,13 +751,12 @@ EOF
   #   4. DMARC/TLS-RPT aggregate reports (To/Cc reports@) -> hidden .Reports
   #      mailbox that parsedmarc watches.
   #
-  # NOTE: recipient-detail autofolding (user+tag -> tags/<tag>) is intentionally
-  # OMITTED: pigeonhole 2.4 in this build does not implement the envelope
-  # :detail tagged argument, and Postfix already strips the +/. delimiter via
-  # recipient_delimiter before LMTP delivery anyway, so there is no detail left
-  # to route on. user+tag@ still reaches the same mailbox (landing in INBOX).
+  # NOTE: recipient-detail routing (user+tag / user.tag -> tag mailbox) is
+  # done from the preserved To/Cc header, not from the envelope: pigeonhole
+  # 2.4 here lacks the envelope :detail tagged argument, and Postfix's
+  # alias/catch-all expansion strips the detail before LMTP.
   environment.etc."dovecot/routing.sieve".text = ''
-    require ["fileinto", "mailbox", "envelope"];
+    require ["fileinto", "mailbox", "envelope", "variables", "regex"];
 
     # 1. Mail expressly addressed to the quarantine mailbox -> Quarantine.
     # quarantine@ is an alias for florian@minnecker.com, so the final
@@ -798,6 +797,25 @@ EOF
       header :contains "Cc" "reports@minnecker.com"
     ) {
       fileinto :create "Reports";
+      stop;
+    }
+
+    # 5. Address tags: user+tag@ and user.tag@ -> mailbox "tag".
+    # Postfix strips the envelope detail, but the To/Cc header still contains
+    # the original address. Tags are restricted to [A-Za-z0-9_-] so a tag
+    # cannot create a nested/special mailbox. Bcc-only tags are not visible.
+    if anyof (
+      header :regex "To" ".*[+]([A-Za-z0-9_-]+)@.*",
+      header :regex "Cc" ".*[+]([A-Za-z0-9_-]+)@.*"
+    ) {
+      fileinto :create "${1}";
+      stop;
+    }
+    if anyof (
+      header :regex "To" ".*[.]([A-Za-z0-9_-]+)@.*",
+      header :regex "Cc" ".*[.]([A-Za-z0-9_-]+)@.*"
+    ) {
+      fileinto :create "${1}";
       stop;
     }
   '';

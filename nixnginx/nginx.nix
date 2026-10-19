@@ -1021,13 +1021,15 @@ in
       $config['oauth_cache_ttl'] = 600;
     '';
 
-    # Plugins used in original Roundcube installation
+    # Plugins used in original Roundcube installation.
+    # enigma: requires an unconfigured PGP homedir and logged PHP errors.
+    # managesieve: Net_Sieve does not support XOAUTH2, and with OAuth-only
+    # logins it would try localhost:4190 / a PLAIN password; the routing
+    # sieve is managed server-side in nixmail instead.
     plugins = [
       "additional_message_headers"
       "attachment_reminder"
-      "enigma"
       "identity_select"
-      "managesieve"
       "newmail_notifier"
       "show_additional_headers"
     ];

@@ -1024,18 +1024,39 @@ in
       // service PATH and the directory is created by tmpfiles in
       // nixnginx/configuration.nix.
       $config['enigma_pgp_homedir'] = '/var/lib/roundcube/enigma';
+
+      // Mark as spam/ham -> move + learn into rspamd Bayes. rspamc is
+      // installed system-wide in nixnginx and reaches the rspamd controller
+      // on the internal nixmail address (secure_ip includes nixnginx).
+      $config['markasjunk_learning_driver'] = 'cmd_learn';
+      $config['markasjunk_spam_mbox'] = 'Junk';
+      $config['markasjunk_ham_mbox'] = 'INBOX';
+      $config['markasjunk_spam_cmd'] = 'rspamc -h nixmail:11334 learn_spam %f';
+      $config['markasjunk_ham_cmd'] = 'rspamc -h nixmail:11334 learn_ham %f';
+      $config['markasjunk_move_spam'] = true;
+      $config['markasjunk_move_ham'] = true;
+
+      // ManageSieve via the Dovecot master user. Net_Sieve has no XOAUTH2,
+      // so the plugin authenticates as sieveadmin with a master password
+      // read from the shared secrets mount and acts as the logged-in user.
+      $config['managesieve_host'] = 'tls://mx.minnecker.com:4190';
+      $config['managesieve_auth_type'] = 'PLAIN';
+      $config['managesieve_auth_cid'] = 'sieveadmin';
+      $config['managesieve_auth_pw'] = trim(@file_get_contents('/var/lib/secrets/ssl/minnecker.com/managesieve-master-password'));
     '';
 
     # Plugins used in original Roundcube installation.
     # enigma: configured with a writable PGP homedir and gnupg in the FPM path.
-    # managesieve: Net_Sieve does not support XOAUTH2, and with OAuth-only
-    # logins it cannot authenticate; the routing sieve is managed server-side
-    # in nixmail. Enable later with a master user if the UI is wanted.
+    # managesieve: uses the Dovecot master user above.
+    # acl: shared mailbox permissions (eltern@/travel@ etc.).
     plugins = [
+      "acl"
       "additional_message_headers"
       "attachment_reminder"
       "enigma"
       "identity_select"
+      "managesieve"
+      "markasjunk"
       "newmail_notifier"
       "show_additional_headers"
     ];

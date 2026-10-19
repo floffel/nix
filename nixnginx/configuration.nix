@@ -8,8 +8,8 @@
     ./nginx.nix
   ];
 
-  # GnuPG for the Roundcube Enigma plugin (gpg/gpgconf in the FPM PATH).
-  environment.systemPackages = [ pkgs.gnupg ];
+  # GnuPG for the Roundcube Enigma plugin; rspamc for markasjunk learning.
+  environment.systemPackages = [ pkgs.gnupg pkgs.rspamd ];
 
   # Enigma PGP support in Roundcube.
   systemd.tmpfiles.rules = [

@@ -426,6 +426,26 @@ in
         userdb_ldap_filter = "(&(|(mail=%{user})(uid=%{user}))(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))";
       };
 
+      # ManageSieve master user: Roundcube's managesieve plugin cannot do
+      # XOAUTH2, so it authenticates with a master password (from a shared
+      # secret file) and acts as the logged-in user. The passwd file is
+      # generated from the secret before dovecot starts.
+      auth_master_user_separator = "*";
+      "passdb master" = {
+        driver = "passwd-file";
+        passwd_file_path = "/run/dovecot/master-users";
+        master = true;
+        result_success = "continue";
+      };
+
+      # Shared mailboxes (eltern@/travel@ and per-user sharing).
+      "mail_plugins" = { acl = true; };
+      "protocol imap" = { mail_plugins = { imap_acl = true; }; };
+      acl_driver = "vfile";
+      "acl_sharing_map" = {
+        dict = { file = { path = "/var/lib/dovecot/db/shared-mailboxes.db"; }; };
+      };
+
       "namespace inbox" = {
         inbox = true;
         separator = "/";
@@ -436,6 +456,16 @@ in
         "mailbox Trash" = { special_use = "\\Trash"; };
         "mailbox Sent" = { special_use = "\\Sent"; };
         "mailbox \"Sent Messages\"" = { special_use = "\\Sent"; };
+      };
+
+      "namespace shared" = {
+        type = "shared";
+        separator = "/";
+        prefix = "shared/";
+        mail_path = "/var/vmail/%{owner_domain}/%{owner_username}/maildir";
+        mail_index_private_path = "~/maildir/shared/%{owner_user}";
+        subscriptions = false;
+        list = "children";
       };
 
       "service imap-login" = {
@@ -756,7 +786,7 @@ EOF
   # 2.4 here lacks the envelope :detail tagged argument, and Postfix's
   # alias/catch-all expansion strips the detail before LMTP.
   environment.etc."dovecot/routing.sieve".text = ''
-    require ["fileinto", "mailbox", "envelope", "variables", "regex"];
+    require ["fileinto", "mailbox", "envelope", "variables", "subaddress"];
 
     # 1. Mail expressly addressed to the quarantine mailbox -> Quarantine.
     # quarantine@ is an alias for florian@minnecker.com, so the final
@@ -801,19 +831,15 @@ EOF
     }
 
     # 5. Address tags: user+tag@ and user.tag@ -> mailbox "tag".
-    # Postfix strips the envelope detail, but the To/Cc header still contains
-    # the original address. Tags are restricted to [A-Za-z0-9_-] so a tag
-    # cannot create a nested/special mailbox. Bcc-only tags are not visible.
+    # The address test's :detail (subaddress extension) is the correct Sieve
+    # mechanism; envelope :detail is not supported by this pigeonhole and the
+    # envelope detail is stripped by Postfix anyway. The preserved To/Cc
+    # header still has the original address. Tags are restricted to
+    # [A-Za-z0-9_-] so a tag cannot create a nested/special mailbox.
+    # Bcc-only tags are not visible in To/Cc.
     if anyof (
-      header :regex "To" ".*[+]([A-Za-z0-9_-]+)@.*",
-      header :regex "Cc" ".*[+]([A-Za-z0-9_-]+)@.*"
-    ) {
-      fileinto :create "''${1}";
-      stop;
-    }
-    if anyof (
-      header :regex "To" ".*[.]([A-Za-z0-9_-]+)@.*",
-      header :regex "Cc" ".*[.]([A-Za-z0-9_-]+)@.*"
+      address :detail :matches "to" "?*",
+      address :detail :matches "cc" "?*"
     ) {
       fileinto :create "''${1}";
       stop;
@@ -832,8 +858,33 @@ EOF
   systemd.services.dovecot.preStart = lib.mkAfter ''
     install -d -m 0750 -o dovecot -g dovecot /var/lib/dovecot
     install -d -m 0750 -o dovecot -g dovecot /var/lib/dovecot/sieve-bin
+    install -d -m 0750 -o dovecot -g dovecot /var/lib/dovecot/db
     chown -R dovecot:dovecot /var/lib/dovecot
   '';
+
+  # ManageSieve master user for Roundcube. The password is generated once in
+  # the shared secrets tree; only the derived passwd-file is written to /run.
+  # Roundcube reads the same secret from the shared mount.
+  systemd.services.managesieve-master-user = {
+    description = "Generate Dovecot master passwd for ManageSieve";
+    wantedBy = [ "dovecot.service" ];
+    before = [ "dovecot.service" ];
+    serviceConfig.Type = "oneshot";
+    path = with pkgs; [ openssl coreutils ];
+    script = ''
+      set -euo pipefail
+      SECRET=/var/lib/secrets/ssl/minnecker.com/managesieve-master-password
+      if [ ! -s "$SECRET" ]; then
+        echo "ERROR: $SECRET is missing; generate it on the NAS with 'openssl rand -hex 32'" >&2
+        exit 1
+      fi
+      install -d -m 0700 -o dovecot -g dovecot /run/dovecot
+      PW=$(cat "$SECRET")
+      printf 'sieveadmin:{PLAIN}%s\n' "$PW" > /run/dovecot/master-users
+      chown dovecot:dovecot /run/dovecot/master-users
+      chmod 0600 /run/dovecot/master-users
+    '';
+  };
 
   systemd.services.dovecot-stats-exporter = {
     description = "Export Dovecot stats to Prometheus textfile";

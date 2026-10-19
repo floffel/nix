@@ -961,6 +961,7 @@ in
     # stock package and add our small ManageSieve master-auth plugin.
     package = pkgs.runCommand "roundcube-with-sieve-master" { } ''
       cp -r ${pkgs.roundcube}/. $out/
+      chmod -R u+w $out/plugins
       mkdir -p $out/plugins/sieve_master
       cp ${./sieve_master.php} $out/plugins/sieve_master/sieve_master.php
     '';

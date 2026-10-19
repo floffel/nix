@@ -956,6 +956,14 @@ in
   services.roundcube = {
     enable = true;
     hostName = "mail.minnecker.com";
+
+    # The NixOS module only supports plugins shipped with Roundcube. Wrap the
+    # stock package and add our small ManageSieve master-auth plugin.
+    package = pkgs.runCommand "roundcube-with-sieve-master" { } ''
+      cp -r ${pkgs.roundcube}/. $out/
+      mkdir -p $out/plugins/sieve_master
+      cp ${./sieve_master.php} $out/plugins/sieve_master/sieve_master.php
+    '';
     configureNginx = false;
     
     # We do not run a local database, it resides on nixpostgres
@@ -1044,9 +1052,6 @@ in
       $config['managesieve_auth_cid'] = 'sieveadmin';
       $config['managesieve_auth_pw'] = trim(@file_get_contents('/var/lib/secrets/ssl/minnecker.com/managesieve-master-password'));
 
-      // Include the custom plugin which forces PLAIN/master for ManageSieve
-      // (the core OAuth hook otherwise overrides auth_type with XOAUTH2).
-      $config['plugins_dir'] = ['/etc/roundcube/plugins', '/var/lib/roundcube/plugins'];
     '';
 
     # Plugins used in original Roundcube installation.

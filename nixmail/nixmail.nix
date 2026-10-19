@@ -14,23 +14,6 @@ let
       create = true;
       delete = true;
     };
-    smtp = {
-      host = "127.0.0.1";
-      port = 587;
-      ssl = false;
-      # parsedmarc 9.x requires both smtp.user and smtp.password keys. An empty
-      # password means mailsuite skips AUTH entirely; the local reports
-      # recipient passes reject_unauth_destination and is resolved by the
-      # alias/catch-all maps, so the digest still goes out without credentials.
-      user = "reports@minnecker.com";
-      password = "";
-      # The loopback submission endpoint presents the minnecker.com
-      # certificate, which does not cover 127.0.0.1. Skip verification for
-      # this local hop only.
-      skip_certificate_verification = true;
-      from = "reports@minnecker.com";
-      to = "florian@minnecker.com";
-    };
   };
 in
 {

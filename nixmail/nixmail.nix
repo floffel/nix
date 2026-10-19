@@ -541,7 +541,14 @@ in
         selector = "minnecker";
         path = "/var/lib/secrets/mail/dkim/$domain.$selector.key";
         domain {
-          "minnecker.com" { path = "/var/lib/secrets/mail/dkim/minnecker.com-2048.private"; selector = "minnecker2"; }
+          "minnecker.com" {
+            # Dual-sign during the 2048-bit rotation: the old selector is
+            # already propagated, the new one may still be in resolver caches.
+            selectors [
+              { path = "/var/lib/secrets/mail/dkim/minnecker.com.private"; selector = "minnecker"; }
+              { path = "/var/lib/secrets/mail/dkim/minnecker.com-2048.private"; selector = "minnecker2"; }
+            ];
+          }
           "floffel.de" { path = "/var/lib/secrets/mail/dkim/floffel.de.private"; selector = "minnecker"; }
           "sbminnecker.de" { path = "/var/lib/secrets/mail/dkim/sbminnecker.de.private"; selector = "minnecker"; }
           "substitution.art" { path = "/var/lib/secrets/mail/dkim/substitution.art.private"; selector = "minnecker"; }
@@ -553,9 +560,11 @@ in
       # mail keeps an independent auth chain.
       "arc.conf".text = ''
         enabled = true;
-        selector = "arc2";
+        # Keep ARC on the already-propagated legacy selector during the DKIM
+        # rotation; move to arc2 once minnecker2 is broadly cached.
+        selector = "arc";
         domain = "minnecker.com";
-        path = "/var/lib/secrets/mail/dkim/minnecker.com-2048.private";
+        path = "/var/lib/secrets/mail/dkim/minnecker.com.private";
         sign_authenticated = true;
         sign_local = true;
         allow_envfrom_empty = true;
@@ -879,6 +888,16 @@ EOF
       PrivateUsers = false;
       ProtectHome = true;
       ProtectSystem = false;
+    };
+  };
+
+  # parsedmarc's Maildir input is a one-shot scan (no IMAP watch), so run it
+  # periodically instead of only once at boot.
+  systemd.timers.parsedmarc = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:0/5";
+      Persistent = true;
     };
   };
 }

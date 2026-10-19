@@ -52,10 +52,14 @@ let
       tmp="$file.serial.tmp"
       awk -v s="$newserial" '
         BEGIN { in_soa=0; replaced=0 }
-        /IN[[:space:]]+SOA/ { in_soa=1 }
         {
+          start=1
+          if (!in_soa && $0 ~ /IN[[:space:]]+SOA/) {
+            in_soa=1
+            for (i=1; i<=NF; i++) if ($i == "SOA") { start=i+1; break }
+          }
           if (in_soa && !replaced) {
-            for (i=1; i<=NF; i++) {
+            for (i=start; i<=NF; i++) {
               if ($i ~ /^[0-9]+$/) { $i=s; replaced=1; break }
             }
           }

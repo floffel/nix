@@ -442,10 +442,6 @@ in
       "mail_plugins" = { acl = true; };
       "protocol imap" = { mail_plugins = { imap_acl = true; }; };
       acl_driver = "vfile";
-      "acl_sharing_map" = {
-        "dict file" = { path = "/var/lib/dovecot/db/shared-mailboxes.db"; };
-      };
-
       "namespace inbox" = {
         inbox = true;
         separator = "/";
@@ -458,12 +454,16 @@ in
         "mailbox \"Sent Messages\"" = { special_use = "\\Sent"; };
       };
 
-      "namespace shared" = {
-        type = "shared";
+      # The Dovecot 2.4 shared-namespace owner_* variables are not available
+      # in this build. Use a public namespace over /var/vmail/shared with
+      # per-mailbox symlinks to the owner maildirs; access is controlled by
+      # the ACL plugin (dovecot-acl in the owner mailbox).
+      "namespace public" = {
+        type = "public";
         separator = "/";
-        prefix = "shared/$user/";
-        mail_path = "/var/vmail/%{owner_domain}/%{owner_username}/maildir";
-        mail_index_private_path = "~/maildir/shared/%{owner_user}";
+        prefix = "shared/";
+        mail_path = "/var/vmail/shared";
+        mail_index_private_path = "~/maildir/shared/index";
         subscriptions = false;
         list = "children";
       };

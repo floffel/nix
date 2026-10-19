@@ -796,6 +796,16 @@ EOF
   # collector (already enabled globally, directory 0755 node-exporter).
   # Runs every minute; writes dovecot.prom only on success (keeps the last
   # good file on transient failures).
+  # Dovecot compiles the global routing sieve to /var/lib/dovecot/routing.svbin.
+  # The NixOS module leaves /var/lib/dovecot root-owned, so the dovecot user
+  # cannot write the compiled script and LMTP logs
+  # "mkdir_parents_chgrp(...) failed: Permission denied" on every delivery.
+  # Make the state directory writable by dovecot before the service starts.
+  systemd.services.dovecot.preStart = lib.mkAfter ''
+    install -d -m 0750 -o dovecot -g dovecot /var/lib/dovecot
+    chown -R dovecot:dovecot /var/lib/dovecot
+  '';
+
   systemd.services.dovecot-stats-exporter = {
     description = "Export Dovecot stats to Prometheus textfile";
     serviceConfig.Type = "oneshot";

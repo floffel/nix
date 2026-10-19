@@ -881,6 +881,7 @@ EOF
     path = with pkgs; [ dovecot coreutils openldap gawk ];
     script = ''
       set -euo pipefail
+      export LDAPTLS_REQCERT=never
       TOKEN=$(cat /var/lib/secrets/mail/ldap/ldap-token)
       LDAPSEARCH=${pkgs.openldap}/bin/ldapsearch
       MEMBERS=$(mktemp)

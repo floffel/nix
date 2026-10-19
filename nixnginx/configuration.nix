@@ -8,6 +8,28 @@
     ./nginx.nix
   ];
 
+  # Force ManageSieve to authenticate with the Dovecot master PLAIN
+  # credentials. Roundcube's core OAuth hook otherwise overwrites auth_type
+  # with XOAUTH2 (correct for IMAP/SMTP, invalid for ManageSieve here).
+  environment.etc."roundcube/plugins/sieve_master/sieve_master.php".text = ''
+    <?php
+    class sieve_master extends rcube_plugin {
+      public $task = 'settings';
+
+      function init() {
+        $this->add_hook('managesieve_connect', [$this, 'managesieve_connect']);
+      }
+
+      function managesieve_connect($args) {
+        unset($_SESSION['oauth_token']['auth_type']);
+        $args['auth_type'] = 'PLAIN';
+        $args['auth_cid'] = 'sieveadmin';
+        $args['auth_pw'] = trim(@file_get_contents('/var/lib/secrets/ssl/minnecker.com/managesieve-master-password'));
+        return $args;
+      }
+    }
+  '';
+
   # GnuPG for the Roundcube Enigma plugin; rspamc for markasjunk learning.
   environment.systemPackages = [ pkgs.gnupg pkgs.rspamd ];
 

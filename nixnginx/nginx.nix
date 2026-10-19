@@ -501,6 +501,29 @@ in
         };
       };
 
+      # autoconfig.minnecker.com (Thunderbird autoconfig)
+      #
+      # autoconfig.minnecker.com is a CNAME to mail/px. Serve the standard
+      # Thunderbird autoconfig XML for both well-known paths with OAuth2
+      # against the Kanidm `mail` client.
+      "autoconfig.minnecker.com" = {
+        forceSSL = true;
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+        locations."= /mail/config-v1.1.xml" = {
+          extraConfig = ''
+            default_type application/xml;
+            return 200 '<?xml version="1.0" encoding="UTF-8"?><clientConfig version="1.1"><emailProvider id="minnecker.com"><domain>minnecker.com</domain><displayName>Minnecker Mail</displayName><displayShortName>Minnecker</displayShortName><incomingServer type="imap"><hostname>mx.minnecker.com</hostname><port>993</port><socketType>SSL</socketType><authentication>OAuth2</authentication><username>%EMAILADDRESS%</username></incomingServer><outgoingServer type="smtp"><hostname>mx.minnecker.com</hostname><port>465</port><socketType>SSL</socketType><authentication>OAuth2</authentication><username>%EMAILADDRESS%</username></outgoingServer></emailProvider></clientConfig>';
+          '';
+        };
+        locations."= /.well-known/autoconfig/mail/config-v1.1.xml" = {
+          extraConfig = ''
+            default_type application/xml;
+            return 200 '<?xml version="1.0" encoding="UTF-8"?><clientConfig version="1.1"><emailProvider id="minnecker.com"><domain>minnecker.com</domain><displayName>Minnecker Mail</displayName><displayShortName>Minnecker</displayShortName><incomingServer type="imap"><hostname>mx.minnecker.com</hostname><port>993</port><socketType>SSL</socketType><authentication>OAuth2</authentication><username>%EMAILADDRESS%</username></incomingServer><outgoingServer type="smtp"><hostname>mx.minnecker.com</hostname><port>465</port><socketType>SSL</socketType><authentication>OAuth2</authentication><username>%EMAILADDRESS%</username></outgoingServer></emailProvider></clientConfig>';
+          '';
+        };
+      };
+
       # mail.minnecker.com (Roundcube)
       "mail.minnecker.com" = {
         forceSSL = true;
@@ -951,8 +974,12 @@ in
       $des_key = rtrim(file_get_contents('/var/lib/secrets/nginx/roundcube-des-key.txt'));
       $config['des_key'] = $des_key;
 
-      $config['imap_host'] = 'nixmail:143';
-      $config['smtp_host'] = 'nixmail:587';
+      // Use the public mail hostname so Roundcube's STARTTLS verification
+      // matches the *.minnecker.com certificate (connecting to the bare
+      // "nixmail" name fails with a peer-name mismatch). hosts.nix maps
+      // mx.minnecker.com to nixmail internally.
+      $config['imap_host'] = 'mx.minnecker.com:143';
+      $config['smtp_host'] = 'mx.minnecker.com:587';
       $config['auto_create_user'] = true;
       $config['product_name'] = 'Mail';
       $config['language'] = 'de_DE';

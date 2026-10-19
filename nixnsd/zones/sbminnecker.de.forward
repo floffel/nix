@@ -17,8 +17,9 @@ $TTL 7200
 ; Lowered TTL (300) for mail cutover; primary = new stack, secondary = old server.
 @                        300 IN MX 10   mx.minnecker.com.
 @                        300 IN MX 20   riese.minnecker.com.
-@                        IN TXT     "v=spf1 +a +mx ?all"
-@                        IN TXT     "v=spf1 a mx ptr -all"
+@                        IN TXT     "v=spf1 a mx -all"
+_dmarc                   IN TXT     "v=DMARC1; p=reject; sp=reject; rua=mailto:reports@minnecker.com"
+minnecker._domainkey     IN TXT     ( "v=DKIM1; k=rsa; " "p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtuhXTRcBdxH0EjSl0FCCVxaHrGhgAtcDOtlKuEE6nQ+Azh0ilVuhQOggkWJipIjdhoiwBjGSaoEW0ERd8Qc7BU1x9pBI7FXkUDsDos597EIeZB7hahpSXvXaAr7HK8ncbS7DB2dF" "Z4Kv1BH7QUDixP2Iu6DyuNzflXcCznAQfDmLc0951DmPrNk8p/8udgnW/DwGJfnM0JT77+Ljjp8O3DiFZjttcFI+R0fNVrUnM1kRpfBCYyqgZ0sGkV6tkQ71LSIEycAVMEG+jOiMIiwrkj76Fq3Glul+BdHDLbteewfit0BIO0N1KLZ++JdY2dnH8uaJQgi5vWu0ECVDPr3d1wIDAQAB" )
 
 @                        IN A       65.21.216.246
 @                        IN AAAA    2a01:4f9:fff1:63::1
@@ -27,6 +28,6 @@ sbminnecker.de.           IN CAA 0   issue "letsencrypt.org"
 
 mail                     IN CNAME   px.minnecker.com
 autoconfig               IN CNAME   mail
-_autodiscover._tcp       IN SRV     0 100 443 px.minnecker.com.
+_autodiscover._tcp       IN SRV     0 100 443 mx.minnecker.com.
 
 www                      IN CNAME   px.minnecker.com.

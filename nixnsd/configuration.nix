@@ -92,13 +92,16 @@ in
         zoneScripts = lib.mapAttrsToList (name: zone: ''
           echo "DNSSEC: signing ${name}"
           KEYDIR="${stateDir}/dnssec"
+          ZONEFILE="${stateDir}/zones/${name}"
+          SOURCE="${plainZonesDir}/${name}"
+          HASHFILE="${stateDir}/dnssec/${name}.source.sha256"
           mkdir -p "$KEYDIR"
           if ! ls "$KEYDIR"/K"${name}".*.key >/dev/null 2>&1; then
             # Refuse to mint fresh keys while the zone still carries DNSSEC
             # records: silently regenerating keys orphans the chain (new
             # DNSKEY, stale DS at the registrar, old RRSIGs). Restore the
             # keys from backup /var/lib/nsd instead.
-            if grep -qE '[[:space:]]IN[[:space:]]+DNSKEY[[:space:]]' "${stateDir}/zones/${name}"; then
+            if grep -qE '[[:space:]]IN[[:space:]]+DNSKEY[[:space:]]' "$ZONEFILE"; then
               echo "ERROR: ${name}: zone is signed but key material is missing in $KEYDIR — restore the keys from backup, do NOT regenerate" >&2
               exit 1
             fi
@@ -107,11 +110,32 @@ in
             dnssec-keygen -a 13 -P now -A now "${name}"
             cd - >/dev/null
           fi
-          dnssec-signzone -S -K "$KEYDIR" -o "${name}" -O full -N date "${stateDir}/zones/${name}"
-          dnssec-verify -o "${name}" "${stateDir}/zones/${name}.signed" \
-            || { echo "ERROR: ${name}: dnssec-verify failed — NOT replacing live zone" >&2; exit 1; }
-          nsd-checkzone "${name}" "${stateDir}/zones/${name}.signed" \
-            && mv -v "${stateDir}/zones/${name}.signed" "${stateDir}/zones/${name}"
+
+          # Re-seed when the git-tracked plain zone changed. The new source is
+          # signed in a temporary file and only replaces the live zone after
+          # both dnssec-verify and nsd-checkzone succeed, so a broken zone
+          # edit cannot take the live zone down.
+          NEWSHA=$(sha256sum "$SOURCE" | cut -d' ' -f1)
+          OLDSHA=$(cat "$HASHFILE" 2>/dev/null || true)
+          INPUT="$ZONEFILE"
+          RESEED=0
+          if [ "$NEWSHA" != "$OLDSHA" ]; then
+            echo "DNSSEC: ${name}: zone source changed, re-seeding from git"
+            INPUT="${stateDir}/zones/${name}.source"
+            cp -L "$SOURCE" "$INPUT"
+            RESEED=1
+          fi
+
+          dnssec-signzone -S -K "$KEYDIR" -o "${name}" -O full -N date "$INPUT"
+          dnssec-verify -o "${name}" "$INPUT.signed" \
+            || { echo "ERROR: ${name}: dnssec-verify failed — NOT replacing live zone" >&2; rm -f "$INPUT.signed"; [ "$RESEED" = 1 ] && rm -f "$INPUT"; exit 1; }
+          nsd-checkzone "${name}" "$INPUT.signed" \
+            || { echo "ERROR: ${name}: nsd-checkzone failed — NOT replacing live zone" >&2; rm -f "$INPUT.signed"; [ "$RESEED" = 1 ] && rm -f "$INPUT"; exit 1; }
+          mv -v "$INPUT.signed" "$ZONEFILE"
+          if [ "$RESEED" = 1 ]; then
+            echo "$NEWSHA" > "$HASHFILE"
+            rm -f "$INPUT"
+          fi
         '') dnssecZones;
 
         localChecks = lib.concatStringsSep "\n" (lib.mapAttrsToList (name: zone: ''

@@ -35,9 +35,12 @@ api_msg() {
   sed -n 's/.*<name>msg<\/name><value><string>\([^<]*\).*/\1/p' | head -1
 }
 
-# Extract all <int> keytag values from a dnssec.list response.
+# Extract all keyTag values from a dnssec.listkeys response. The API returns
+# <name>keyTag</name><value><string>30646</string></value>, not the lowercase
+# integer form used by older DomRobot documentation. INWX also leaves a
+# DELAYED placeholder entry with keyTag 0 after a failed submission; ignore it.
 keytags() {
-  grep -oE '<name>keytag</name><value><int>[0-9]+' | grep -oE '[0-9]+$' || true
+  grep -oE '<name>keyTag</name><value><(string|int)>[0-9]+' | grep -oE '[0-9]+$' | grep -v '^0$' || true
 }
 
 for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
@@ -70,12 +73,15 @@ for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
   echo "  DNSKEY: ${dnskey_rdata}"
   echo "  DS:     ${ds_line}"
 
-  current=$(inwx_call "dnssec.list" \
+  current=$(inwx_call "dnssec.listkeys" \
     "<member><name>domainname</name><value><string>${zone}</string></value></member>")
 
   if [ "$(echo "$current" | api_code)" != "1000" ]; then
-    echo "  FAILED: dnssec.list: $(echo "$current" | api_msg)" >&2
-    exit 1
+    # Not every signed zone has to be registered at INWX (e.g. a domain at
+    # another registrar). Skip it; the external DNSSEC checks will still
+    # catch a genuinely missing DS for zones that are supposed to be here.
+    echo "  WARNING: dnssec.listkeys failed for ${zone}: $(echo "$current" | api_msg) — skipping (not an INWX zone?)" >&2
+    continue
   fi
 
   present=$(echo "$current" | keytags)
@@ -98,20 +104,13 @@ for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
   fi
 
   # 2) Remove stale keytags (rotated-out KSKs). Only safe once the current
-  #    KSK is confirmed present above.
+  #    KSK is confirmed present above. The current INWX API exposes
+  #    dnssec.adddnskey but no removal method, so warn instead of failing the
+  #    whole run (otherwise the hourly nsd-dnssec unit fails forever).
   while read -r stale; do
     [ -n "$stale" ] || continue
     [ "$stale" = "$keytag" ] && continue
-    echo "  Removing stale keytag ${stale}..."
-    result=$(inwx_call "dnssec.removednskey" "
-      <member><name>domainname</name><value><string>${zone}</string></value></member>
-      <member><name>keytag</name><value><int>${stale}</int></value></member>")
-    if [ "$(echo "$result" | api_code)" != "1000" ]; then
-      echo "  FAILED: dnssec.removednskey (keytag ${stale}): $(echo "$result" | api_msg)" >&2
-      echo "  Remove keytag ${stale} manually at INWX (DNSSEC tab)" >&2
-      exit 1
-    fi
-    echo "  -> removed"
+    echo "  WARNING: stale keytag ${stale} still registered at INWX; remove it manually (the current API has no removednskey method)" >&2
   done <<< "$present"
 
   echo

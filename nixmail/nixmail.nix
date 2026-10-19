@@ -10,7 +10,7 @@ let
       save_forensic = false;
     };
     maildir = {
-      maildir_path = "/var/vmail/minnecker.com/postmaster/maildir/.Reports";
+      maildir_path = "/var/vmail/minnecker.com/florian/maildir/.Reports";
       create = true;
       delete = true;
     };
@@ -18,10 +18,16 @@ let
       host = "127.0.0.1";
       port = 587;
       ssl = false;
-      # parsedmarc 9.x requires an smtp.user key even when no password is set.
-      # No password -> no AUTH; loopback submission is permitted by
-      # permit_mynetworks in Postfix, so the digest still goes out.
+      # parsedmarc 9.x requires both smtp.user and smtp.password keys. An empty
+      # password means mailsuite skips AUTH entirely; the local reports
+      # recipient passes reject_unauth_destination and is resolved by the
+      # alias/catch-all maps, so the digest still goes out without credentials.
       user = "reports@minnecker.com";
+      password = "";
+      # The loopback submission endpoint presents the minnecker.com
+      # certificate, which does not cover 127.0.0.1. Skip verification for
+      # this local hop only.
+      skip_certificate_verification = true;
       from = "reports@minnecker.com";
       to = "florian@minnecker.com";
     };
@@ -102,7 +108,11 @@ in
       write_cf ldap-recipients.cf  '(&(mail=%s)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))' mail -
       write_cf ldap-aliases.cf     '(&(mail=%s)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))' uid '%s@minnecker.com'
       write_cf ldap-senders.cf      '(&(mail=%s)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))' uid -
-      write_cf ldap-catchalls.cf   '(&(mail=*@%d)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))' uid '%s@minnecker.com'
+      # Escape the asterisk: an LDAP filter value of *@domain is a wildcard
+      # that matches every mail_users member, so any unknown recipient would
+      # resolve to all users. \2a matches the literal catch-all alias address
+      # (*@domain) that an operator sets explicitly on one Kanidm account.
+      write_cf ldap-catchalls.cf   '(&(mail=\2a@%d)(memberof=cn=mail_users,ou=groups,dc=minnecker,dc=com))' uid '%s@minnecker.com'
       write_cf ldap-domains.cf      '(mail=*@%s)' mail -
 
       if id postfix >/dev/null 2>&1; then
@@ -158,7 +168,12 @@ in
     # Use module settings for main.cf
     settings = {
       main = {
-        myhostname = "backendmail.minnecker.com";
+        # Outbound HELO/rDNS identity: PTR for both public addresses is
+        # px.minnecker.com, and px also has matching A/AAAA records. The MX
+        # and client-facing name is mx.minnecker.com (same IP). Keeping the
+        # HELO on px avoids an external rDNS change and gives forward-
+        # confirmed reverse DNS.
+        myhostname = "px.minnecker.com";
         mydomain = "minnecker.com";
         compatibility_level = "3.10";
         recipient_delimiter = "+.";
@@ -178,7 +193,24 @@ in
         smtpd_sasl_path = "private/auth";
         smtpd_sasl_security_options = "noanonymous";
 
-        smtpd_recipient_restrictions = "permit_sasl_authenticated, permit_auth_destination, defer_unauth_destination, reject_rbl_client sbl-xbl.spamhaus.org, reject_rbl_client bl.spamcop.net, reject_unknown_recipient_domain, smtpd_reject_unlisted_recipient";
+        # Order matters: permit_auth_destination would stop evaluation for
+        # every recipient in a virtual domain, making later checks
+        # unreachable. reject_unauth_destination only rejects relay to
+        # foreign domains and lets the remaining checks run.
+        #
+        # reject_unlisted_recipient is intentionally NOT used: the mail
+        # domains have explicit catch-all aliases (*@domain -> florian@)
+        # in Kanidm, and Postfix's unlisted check only consults
+        # virtual_mailbox_maps, which would reject those addresses before
+        # the catch-all alias map is reached.
+        #
+        # Do NOT add reject_rbl_client here: the upstream resolver returns
+        # Spamhaus' 127.255.255.254 "open resolver / query refused" answer,
+        # which Postfix treats as a listing (rejecting every message).
+        # Rspamd's rbl module handles that return code explicitly
+        # (RBL_SPAMHAUS_BLOCKED_OPENRESOLVER weight 0) and does the DNSBL
+        # filtering for us.
+        smtpd_recipient_restrictions = "permit_sasl_authenticated, reject_unauth_destination, reject_unknown_recipient_domain";
         smtpd_helo_restrictions = "permit_sasl_authenticated, reject_invalid_hostname, reject_unknown_hostname, reject_non_fqdn_hostname";
         smtpd_helo_required = "yes";
         biff = "no";
@@ -197,11 +229,13 @@ in
         # without spam headers rather than bouncing the sender.
         milter_default_action = "accept";
 
-        # Greylisting via postscreen (port 25 only; submission/submissions
-        # bypass postscreen entirely, so authenticated mail is unaffected).
-        # Intervals: 1h -> 2h -> 4h doubling grace for returning senders.
-        postscreen_greylist_action = "enforce";
-        postscreen_greylist_intervals = "1h:2h:4h";
+        # postscreen runs on port 25 only (submission/submissions bypass it,
+        # so authenticated mail is unaffected). Postfix 3.11 postscreen has
+        # no built-in greylisting; the former postscreen_greylist_* options
+        # were unknown parameters and silently ignored. Add postgrey/rspamd
+        # greylisting separately if desired.
+        # The Spamhaus site pattern deliberately matches only 127.0.0.2..11,
+        # so Spamhaus' 127.255.255.254 "open resolver" answer is not a hit.
         postscreen_dnsbl_sites = "zen.spamhaus.org=127.0.0.[2..11]*3,bl.spamcop.net=127.0.0.2*2";
 
         smtp_tls_security_level = "may";
@@ -358,17 +392,13 @@ in
         username_attribute = "email";
       };
 
-      # The XOAUTH2 mechanism reads the global `oauth2 { }` filter above.
-      # This passdb exists only so that the post-token credential lookup
-      # (auth_request_lookup_credentials, run after a successful XOAUTH2
-      # token validation) hits a passdb that re-validates the token and
-      # returns OK, instead of falling through to the LDAP passdb (which
-      # would try to LDAP-bind with the OAuth2 token as a password and
-      # fail). It inherits the introspection_* settings from the global
-      # filter, so no nested `oauth2 { }` block is needed here.
-      "passdb oauth2" = {
-        driver = "oauth2";
-      };
+      # Dovecot 2.4's XOAUTH2/OAUTHBEARER mechanisms read the global
+      # `oauth2 { }` filter above directly and deliberately do NOT use a
+      # passdb for token validation. A `passdb oauth2` here would only add
+      # the Password Grant path, which is not configured (no grant_url) and
+      # makes every PLAIN/LOGIN attempt log
+      # "Password grant failed: Invalid HTTP URL: Relative HTTP URL not
+      # allowed" before falling through to the LDAP passdb. Leave it out.
 
       "passdb ldap" = {
         driver = "ldap";
@@ -495,18 +525,37 @@ in
 
     locals = {
       "dkim_signing.conf".text = ''
+        enabled = true;
+        allow_envfrom_empty = true;
+        # Users authenticate as @minnecker.com but may send as an alias in
+        # another hosted domain, so do not require the auth user/envelope
+        # domain to match the header From domain.
+        allow_hdrfrom_mismatch = true;
+        allow_username_mismatch = true;
+        sign_authenticated = true;
+        sign_local = true;
+        use_domain = "header";
+        use_esld = false;
+        # Never sign a domain we have no key for with the minnecker key.
+        try_fallback = false;
         selector = "minnecker";
-        domain = "minnecker.com";
-        path = "/var/lib/secrets/mail/dkim/minnecker.com.private";
+        path = "/var/lib/secrets/mail/dkim/$domain.$selector.key";
+        domain {
+          "minnecker.com" { path = "/var/lib/secrets/mail/dkim/minnecker.com-2048.private"; selector = "minnecker2"; }
+          "floffel.de" { path = "/var/lib/secrets/mail/dkim/floffel.de.private"; selector = "minnecker"; }
+          "sbminnecker.de" { path = "/var/lib/secrets/mail/dkim/sbminnecker.de.private"; selector = "minnecker"; }
+          "substitution.art" { path = "/var/lib/secrets/mail/dkim/substitution.art.private"; selector = "minnecker"; }
+          "sbminni.de" { path = "/var/lib/secrets/mail/dkim/sbminni.de.private"; selector = "minnecker"; }
+        }
       '';
 
       # ARC: sign with the same key under the `arc` selector so forwarded
       # mail keeps an independent auth chain.
       "arc.conf".text = ''
         enabled = true;
-        selector = "arc";
+        selector = "arc2";
         domain = "minnecker.com";
-        path = "/var/lib/secrets/mail/dkim/minnecker.com.private";
+        path = "/var/lib/secrets/mail/dkim/minnecker.com-2048.private";
         sign_authenticated = true;
         sign_local = true;
         allow_envfrom_empty = true;
@@ -535,14 +584,10 @@ in
       # the quarantine mailbox. Do NOT define a `quarantine` action here: it
       # maps to Postfix's hold queue, not a mailbox.
       "milter_headers.conf".text = ''
-        use = ["spam-header", "quarantine-flag"];
+        use = ["spam-header"];
         extended_spam_headers = true;
         custom {
-          quarantine-flag {
-            header = "X-Rspamd-Quarantine";
-            value = "yes";
-            score = 12;
-          }
+          "X-Rspamd-Quarantine" = "return function(task, common_headers) if task:get_score() >= 12 then return 'yes' end return nil end";
         }
       '';
 
@@ -564,51 +609,85 @@ in
         secure_config = false;
       '';
 
-      # Disable rspamd's own greylist: it soft-rejects (SMFIR_TEMPFAIL ->
-      # Postfix 451) EVERY message, including authenticated submission, on top
-      # of postscreen's greylisting on port 25. Keeping rspamd greylist on
-      # would delay/fail delivery under the milter; postscreen is the single
-      # greylisting layer here.
+      # Adaptive greylisting in rspamd (Redis-backed). Authenticated and
+      # local mail is never greylisted, so submission is unaffected; only
+      # unknown inbound senders get the temporary 451 and retry.
       "greylist.conf".text = ''
-        enabled = false;
+        enabled = true;
+        expire = 1d;
+        timeout = 5m;
+        key_prefix = "rg";
+        max_data_len = 10k;
+        message = "Try again later";
+        symbol = "GREYLIST";
+        action = "soft reject";
+        check_local = false;
+        check_authed = false;
       '';
     };
   };
 
-  # Provision the DKIM/ARC RSA key if it does not exist yet (2048-bit) and
-  # emit a ready-to-paste DNS hint file. Idempotent; runs before rspamd so
-  # the signing key exists at startup. The operator pastes the published
-  # records from /var/lib/secrets/mail/dkim/minnecker.dns into the zone and
-  # bumps the serial (see nixnsd).
+  # Provision one 2048-bit DKIM key per hosted sending domain if missing,
+  # and emit ready-to-paste DNS hint files. Idempotent; runs before rspamd
+  # so every signing key exists at startup. The operator pastes the records
+  # from /var/lib/secrets/mail/dkim/<domain>.dns into the zone and bumps the
+  # serial (see nixnsd).
   systemd.services.mail-dkim-key = {
-    description = "Provision DKIM/ARC signing key + DNS hint for rspamd";
+    description = "Provision DKIM signing keys + DNS hints for rspamd";
     wantedBy = [ "rspamd.service" ];
     before = [ "rspamd.service" ];
     serviceConfig.Type = "oneshot";
-    path = [ pkgs.openssl pkgs.coreutils ];
+    path = with pkgs; [ openssl coreutils util-linux ];
     script = ''
       set -euo pipefail
       D=/var/lib/secrets/mail/dkim
-      KEY="$D/minnecker.com.private"
-      HINT="$D/minnecker.dns"
-      install -d -m 0700 -o rspamd -g rspamd "$D"
-      if [ ! -s "$KEY" ]; then
-        echo "Generating new 2048-bit DKIM/ARC key..."
-        openssl genrsa -out "$KEY" 2048 2>/dev/null
-      fi
-      # Ensure rspamd (which runs as the rspamd user) can read the key.
-      chown rspamd:rspamd "$KEY"
-      chmod 600 "$KEY"
-      PUBKEY=$(openssl rsa -in "$KEY" -pubout -outform DER 2>/dev/null | base64 | tr -d '\n')
-      cat > "$HINT" <<EOF
+      install -d -m 0700 -o rspamd -g rspamd "$D" 2>/dev/null || true
+
+      gen_key() {
+        local d="$1" key="$D/$1.private"
+        if [ ! -s "$key" ]; then
+          echo "Generating new 2048-bit DKIM key for $d..."
+          runuser -u rspamd -- ${pkgs.openssl}/bin/openssl genrsa -out "$key" 2048 2>/dev/null \
+            || ${pkgs.openssl}/bin/openssl genrsa -out "$key" 2048 2>/dev/null
+        fi
+        # The secrets mount may be root-squashed, so tolerate chgrp failure;
+        # the rspamd group can read 0640 files created by the rspamd user.
+        chgrp rspamd "$key" 2>/dev/null || true
+        chmod 0640 "$key" 2>/dev/null || true
+      }
+
+      pubkey() {
+        ${pkgs.openssl}/bin/openssl rsa -in "$D/$1.private" -pubout -outform DER 2>/dev/null \
+          | base64 | tr -d '\n'
+      }
+
+      for d in minnecker.com floffel.de sbminnecker.de substitution.art sbminni.de; do
+        gen_key "$d"
+      done
+      gen_key "minnecker.com-2048"
+
+      PUBKEY=$(pubkey minnecker.com-2048)
+      OLDPUB=$(pubkey minnecker.com)
+      cat > "$D/minnecker.dns" <<EOF
 ; DNS hint for minnecker.com (operator pastes into the zone, then bumps serial).
-; minnecker._domainkey
-minnecker._domainkey IN TXT ( "v=DKIM1; k=rsa; " "p=$PUBKEY" )
-; arc._domainkey (ARC uses the same key)
-arc._domainkey IN TXT ( "v=DKIM1; k=rsa; " "p=$PUBKEY" )
+; active 2048-bit rotation key
+minnecker2._domainkey IN TXT ( "v=DKIM1; k=rsa; " "p=$PUBKEY" )
+arc2._domainkey IN TXT ( "v=DKIM1; k=rsa; " "p=$PUBKEY" )
+; legacy 1024-bit key (keep while old signatures are still verified)
+minnecker._domainkey IN TXT ( "v=DKIM1; k=rsa; " "p=$OLDPUB" )
+arc._domainkey IN TXT ( "v=DKIM1; k=rsa; " "p=$OLDPUB" )
 EOF
-      chown rspamd:rspamd "$HINT"
-      chmod 640 "$HINT"
+
+      for d in floffel.de sbminnecker.de substitution.art sbminni.de; do
+        PUBKEY=$(pubkey "$d")
+        cat > "$D/$d.dns" <<EOF
+; DNS hint for $d
+minnecker._domainkey IN TXT ( "v=DKIM1; k=rsa; " "p=$PUBKEY" )
+EOF
+      done
+
+      chgrp rspamd "$D"/*.dns 2>/dev/null || true
+      chmod 0640 "$D"/*.dns 2>/dev/null || true
     '';
   };
 
@@ -648,8 +727,8 @@ EOF
   #   1. Mail expressly addressed to the quarantine mailbox -> Quarantine and
   #      STOP. This MUST come first: a re-submitted (redirected) quarantined
   #      message would otherwise hit rule 2 again and loop forever.
-  #   2. rspamd's quarantine verdict header -> redirect to the quarantine
-  #      mailbox (alias -> postmaster -> this script files it into Quarantine).
+  #   2. rspamd's quarantine verdict header -> the recipient's Quarantine
+  #      mailbox (filed directly; no redirect, so no re-injection loop).
   #   3. rspamd spam verdict headers -> Junk (consolidated from the previous
   #      standalone spam-global script so ordering with quarantine is
   #      deterministic).
@@ -664,15 +743,24 @@ EOF
   environment.etc."dovecot/routing.sieve".text = ''
     require ["fileinto", "mailbox", "envelope"];
 
-    # 1. Quarantine loop guard / landing pad.
-    if envelope :localpart "to" "quarantine" {
+    # 1. Mail expressly addressed to the quarantine mailbox -> Quarantine.
+    # quarantine@ is an alias for florian@minnecker.com, so the final
+    # envelope localpart is florian; match the original To header as well.
+    if anyof (
+      envelope :localpart "to" "quarantine",
+      header :contains "To" "quarantine@minnecker.com"
+    ) {
       fileinto :create "Quarantine";
       stop;
     }
 
-    # 2. rspamd quarantine verdict -> quarantine mailbox.
+    # 2. rspamd quarantine verdict -> the recipient's Quarantine mailbox.
+    # File directly instead of redirecting to quarantine@: the live
+    # pigeonhole build has no editheader extension for a loop marker, and
+    # a redirect would be re-delivered with the X-Rspamd-Quarantine header
+    # and loop forever.
     if header :contains "X-Rspamd-Quarantine" "yes" {
-      redirect "quarantine@minnecker.com";
+      fileinto :create "Quarantine";
       stop;
     }
 
@@ -737,19 +825,20 @@ EOF
   # parsedmarc reads DMARC/TLS-RPT aggregate mail DIRECTLY FROM DISK via
   # its Maildir input — no IMAP, no POSIX password. The routing sieve
   # files report mail into the hidden ".Reports" mailbox, which Dovecot
-  # stores on disk as postmaster's maildir subfolder:
+  # stores on disk as florian's maildir subfolder:
   #
-  #   /var/vmail/minnecker.com/postmaster/maildir/.Reports/
+  #   /var/vmail/minnecker.com/florian/maildir/.Reports/
   #
   # parsedmarc runs as the dovecot mail user (see the systemd override
   # below) so it can read that Maildir. Reports are deleted after parsing
   # (raw aggregates aren't worth keeping once ingested). The digest is
   # sent via our own submission on loopback WITHOUT authentication
-  # (permit_mynetworks covers 127.0.0.1 before any auth check), so there
-  # is NO operator-managed secret for parsedmarc at all.
+  # (the recipient is a local virtual address, so reject_unauth_destination
+  # passes and the alias/catch-all maps resolve it), so there is NO
+  # operator-managed secret for parsedmarc at all.
   #
-  # reports@minnecker.com -> postmaster is a Kanidm alias managed by the
-  # operator, not a Postfix alias.
+  # postmaster@, reports@, quarantine@ and the *@domain catch-alls are
+  # Kanidm mail attributes on florian, not Postfix aliases.
   services.parsedmarc = {
     enable = true;
 

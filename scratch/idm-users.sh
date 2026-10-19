@@ -280,11 +280,12 @@ cmd_user() {
       ;;
     add-mail)
       # Merge new addresses into the existing mail list (kanidm --mail is
-      # replace-semantics, so read current addresses first and re-apply the union).
+      # replace-semantics). Use the JSON output, not the text output: the
+      # text output sorts mail values and would lose the primary address.
       local username="${1:-}"; shift || true
       [ -n "$username" ] && [ "$#" -ge 1 ] || die "usage: user add-mail <username> <addr> [<addr> ...]"
       local current
-      current="$(k person get "$username" 2>/dev/null | sed -n 's/^ *mail: *//p' | sort -u)" || current=""
+      current="$(k person get "$username" -o json 2>/dev/null | jq -r '.attrs.mail[]?' 2>/dev/null)" || current=""
       declare -A seen=()
       local args=() a
       while IFS= read -r a; do [ -n "$a" ] && seen["$a"]=1 && args+=(--mail "$a"); done <<< "$current"
@@ -304,7 +305,7 @@ cmd_user() {
       local username="${1:-}"; shift || true
       [ -n "$username" ] && [ "$#" -ge 1 ] || die "usage: user del-mail <username> <addr> [<addr> ...]"
       local current
-      current="$(k person get "$username" 2>/dev/null | sed -n 's/^ *mail: *//p' | sort -u)" || current=""
+      current="$(k person get "$username" -o json 2>/dev/null | jq -r '.attrs.mail[]?' 2>/dev/null)" || current=""
       declare -A drop=(); for a in "$@"; do drop["$a"]=1; done
       local args=() a
       while IFS= read -r a; do

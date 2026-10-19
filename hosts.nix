@@ -24,8 +24,8 @@
       fd01::11 nixnsd.hosts.local.minnecker.com nixnsd
       10.20.20.12 nixforgejo.hosts.local.minnecker.com nixforgejo
       fd01::12 nixforgejo.hosts.local.minnecker.com nixforgejo
-      10.20.20.13 nixmail.hosts.local.minnecker.com nixmail
-      fd01::13 nixmail.hosts.local.minnecker.com nixmail
+      10.20.20.13 nixmail.hosts.local.minnecker.com nixmail mx.minnecker.com
+      fd01::13 nixmail.hosts.local.minnecker.com nixmail mx.minnecker.com
       10.20.20.14 nixnginx.hosts.local.minnecker.com nixnginx proxy
       fd01::14 nixnginx.hosts.local.minnecker.com nixnginx proxy
       10.20.20.15 nixidm.hosts.local.minnecker.com nixidm ldap

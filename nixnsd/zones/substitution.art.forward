@@ -14,7 +14,12 @@ $TTL 7200
 @                        300 IN MX 10   mx.minnecker.com.
 @                        300 IN MX 20   riese.minnecker.com.
 @                        IN TXT     "v=spf1 a mx -all"
-@                        IN TXT     "v=DMARC1; p=reject; sp=reject; rua=mailto:postmaster@minnecker.com"
+
+; DMARC must live at _dmarc, not on the apex.
+_dmarc                    IN TXT     "v=DMARC1; p=reject; sp=reject; rua=mailto:reports@minnecker.com"
+; New 2048-bit key for the new mail stack (selector: minnecker). The old
+; substitution.art._domainkey record below belongs to the legacy server.
+minnecker._domainkey      IN TXT     ( "v=DKIM1; k=rsa; " "p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAql+dmjNKnlXmDnqJRJkLBS3Uw3FFi1Enyc0SlD3yWmcfZYhFlz7AsgSO0lp0Hg4P6tC0ZKyIiJylYYu8dCIXhv/AeuQ3lv8ox3cwPmJeytheEmFFLC396Lx77w+CIYzcdJ0InpVD" "XuOXhAcOEhBn5XKNpKL4H0SwelguZzKmxddZVBLxO0M3nsBmzsjmfkYi43a/WBTFFsyCkmXqU0R3Tbp6CoTW+sGw04YpdIW7aUh1x2/Z3ZZaB5JrfxbyiSy8KFEXs3Sw02LNTSYLCagpoBZEGDVguGdW0/Zc8Zk4WPx7XrctrdHQMQa2q7XzIgY8tzVE5atIktJekzqgV8iA8QIDAQAB" )
 
 substitution.art.		 IN CAA	0   issue "letsencrypt.org"
 
@@ -22,7 +27,7 @@ substitution.art._domainkey IN TXT     ( "v=DKIM1; k=rsa; "
 	"p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC/CJG+JldHRHctxRdKz5RfaCOfqSXEYyvbVDsBoEgdgU2vU7dpQu8iIi0IvLm2ImGMmp1duxQPxp1oec5fltHdNKK39GK2aoVinIr+wcBkJwjNzZUSngeqIlzXRXXe72mNKpFVAxs9qgIHMQyjz9V/VhjcKxE2CwbEkgumGV9aKQIDAQAB" )  ; ----- DKIM key minnecker.com
 
 autoconfig               IN CNAME   mail.minnecker.com.
-_autodiscover._tcp       IN SRV     0 100 443 mail.minnecker.com.
+_autodiscover._tcp       IN SRV     0 100 443 mx.minnecker.com.
 
 @                        IN A       178.63.124.242
 @                        IN AAAA    2a01:4f8:fff2:7d::1

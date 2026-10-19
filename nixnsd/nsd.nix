@@ -75,6 +75,13 @@ in
         dnssec = true;
         dnssecPolicy.algorithm = "ECDSAP256SHA256";
       };
+      "sbminni.de" = {
+        provideXFR = commonProvideXFR;
+        notify = commonNotify;
+        data = builtins.readFile ./zones/sbminni.de.forward;
+        dnssec = true;
+        dnssecPolicy.algorithm = "ECDSAP256SHA256";
+      };
       "substitution.art" = {
         provideXFR = commonProvideXFR;
         notify = commonNotify;

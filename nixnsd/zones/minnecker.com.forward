@@ -19,7 +19,6 @@ $TTL 7200
 @                        300 IN MX 10   mx
 @                        300 IN MX 20   riese
 @                        IN TXT     "v=spf1 a mx -all"
-@                        IN TXT     "v=DMARC1; p=reject; sp=reject; rua=mailto:postmaster@minnecker.com"
 
 minnecker.com.		 IN CAA	0   issue "letsencrypt.org"
 
@@ -29,14 +28,23 @@ minnecker._domainkey IN TXT     ( "v=DKIM1; k=rsa; "
 arc._domainkey               IN TXT     ( "v=DKIM1; k=rsa; "
 	"p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC/CJG+JldHRHctxRdKz5RfaCOfqSXEYyvbVDsBoEgdgU2vU7dpQu8iIi0IvLm2ImGMmp1duxQPxp1oec5fltHdNKK39GK2aoVinIr+wcBkJwjNzZUSngeqIlzXRXXe72mNKpFVAxs9qgIHMQyjz9V/VhjcKxE2CwbEkgumGV9aKQIDAQAB" )  ; ----- ARC key (same key as DKIM)
 
+; 2048-bit rotation key (active). Keep the 1024-bit minnecker/arc selectors
+; above for verifying messages signed before the rotation.
+minnecker2._domainkey IN TXT     ( "v=DKIM1; k=rsa; " "p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2YLw5BMN6FPewVWin2mVxn3ZwB/ekYuE0aezAB8B0snnVU8OoKoB1jWkaUrzeuI7Xi1YZoE9Km0WL5oJX04Pk5W0ddQJgpLBIFwU37uZXx4XovLA3zMzZlTqNcd1kLDf+029dQ63" "Q9en3ElHhLU2T8KAZaIVeSLNNtDpjSoftASDaU1vqhLHYSid+sBsMtOLWbruObiqsAWkyAcvCQ7DbjRKH/6lnAJcOfy4dKWSwp0/iCmGjU+S4EMmFux1kQlDa34t/aVGR4ilh8hiErnMfRWlNSetw8rcQ1+WZsAAXVfhVBei8/C2OIZAxPC+yZ32FVg8C/gNefOucx0/7ZkQKQIDAQAB" )
+arc2._domainkey       IN TXT     ( "v=DKIM1; k=rsa; " "p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2YLw5BMN6FPewVWin2mVxn3ZwB/ekYuE0aezAB8B0snnVU8OoKoB1jWkaUrzeuI7Xi1YZoE9Km0WL5oJX04Pk5W0ddQJgpLBIFwU37uZXx4XovLA3zMzZlTqNcd1kLDf+029dQ63" "Q9en3ElHhLU2T8KAZaIVeSLNNtDpjSoftASDaU1vqhLHYSid+sBsMtOLWbruObiqsAWkyAcvCQ7DbjRKH/6lnAJcOfy4dKWSwp0/iCmGjU+S4EMmFux1kQlDa34t/aVGR4ilh8hiErnMfRWlNSetw8rcQ1+WZsAAXVfhVBei8/C2OIZAxPC+yZ32FVg8C/gNefOucx0/7ZkQKQIDAQAB" )
+
 _mta-sts                     IN TXT     "v=STSv1; id=2026081501"
 _smtp._tls                   IN TXT     "v=TLSRPTv1; rua=mailto:reports@minnecker.com"
+; DMARC must live at _dmarc, not on the apex. Reports go to reports@ because
+; parsedmarc watches florian's .Reports folder and the routing sieve files
+; To/Cc: reports@ there.
+_dmarc                       IN TXT     "v=DMARC1; p=reject; sp=reject; rua=mailto:reports@minnecker.com"
 mta-sts                      IN CNAME   px
 default._bimi                IN TXT     "v=BIMI1; l=https://www.minnecker.com/bimi-logo.svg"
 
 
 autoconfig               IN CNAME   mail
-_autodiscover._tcp       IN SRV     0 100 443 turing.minnecker.com.
+_autodiscover._tcp       IN SRV     0 100 443 mx.minnecker.com.
 
 @                        IN A       178.63.124.242
 @                        IN AAAA    2a01:4f8:fff2:7d::1
@@ -58,10 +66,12 @@ local		0        IN A 127.0.0.1
 vault		0	 IN A 10.20.20.14
 vault		0	 IN AAAA fd01::14
 
-backendmail		 IN CNAME  riese
-_acme-challenge          IN A       127.0.0.1
+backendmail		 IN CNAME  px
 *			 IN CNAME  px
-mail		 IN CNAME  riese
+mail		 IN CNAME  px
+; Temporary access to the old server during/after the MX switch.
+; Delete this record once the old mailboxes have been migrated.
+oldmail		 IN CNAME  riese
 matrix		 IN CNAME  px
 livekit		 IN CNAME  px
 kie		 IN CNAME  px

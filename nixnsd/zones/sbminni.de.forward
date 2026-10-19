@@ -1,0 +1,24 @@
+; sbminni.de — mail-only zone for bodo@/sabine@ addresses.
+; NS delegation is switched to px separately; this file is ready for signing.
+$TTL 7200
+@   IN SOA r.floffel.de. postmaster.minnecker.com. (
+        2026101901 ; serial (dnssec-signzone -N date overrides this)
+        7200       ; refresh
+        3600       ; retry
+        1209600    ; expire
+        3600       ; minimum
+)
+@                        IN NS      r.floffel.de.
+@                        IN NS      ns2.minnecker.com.
+@                        IN NS      ns1.first-ns.de.
+@                        IN NS      robotns2.second-ns.de.
+@                        IN NS      robotns3.second-ns.com.
+
+@                        300 IN MX 10   mx.minnecker.com.
+@                        300 IN MX 20   riese.minnecker.com.
+
+@                        IN TXT     "v=spf1 mx -all"
+_dmarc                   IN TXT     "v=DMARC1; p=reject; sp=reject; rua=mailto:reports@minnecker.com"
+minnecker._domainkey     IN TXT     ( "v=DKIM1; k=rsa; " "p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAs+vX9kKJcjwlejZ5KkdldjMH/qpWG18V1PErKEU4zV+E1GdFbUQbiZ4ASYAm4I7Q2vwg7pcBtkThfMUp5+i59Mo3VdIA6ZhhE7EvLjAIg4NmTTxuUNOV2wPl1ytJorQRr7/eTLs9" "Y+kK3ClBizdSxzH6OFdCR9EdFmQbwUX9vvE0UVYDJ5HkmQPiGYzfBPlgNR3vWbPZZKr6tQYiqZ4LfOOw3e7s2PcEsxf7sXl/t5XVbZZ9y6ogCJQ+OLeAnM9TUi1CA5nFaXGWrjp998SH76DJWUp194ub1J8OYSAJ/cxSMUjoVNRW4m0ulMH7ZP85Fu6gLQxEJr42eJzrwuElLQIDAQAB" )
+
+_autodiscover._tcp       IN SRV     0 100 443 mx.minnecker.com.

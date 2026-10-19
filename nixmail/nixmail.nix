@@ -935,6 +935,14 @@ EOF
     '';
   };
 
+  systemd.timers.mail-shared-mailboxes = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:0/5";
+      Persistent = true;
+    };
+  };
+
   # ManageSieve master user for Roundcube. The password is generated once in
   # the shared secrets tree; only the derived passwd-file is written to /run.
   # Roundcube reads the same secret from the shared mount.

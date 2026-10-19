@@ -13,8 +13,8 @@ $TTL 7200
 
 
 ; Lowered TTL (300) for mail cutover; primary = new stack, secondary = old server.
-@                        300 IN MX 10   mx.minnecker.com
-@                        300 IN MX 20   riese.minnecker.com
+@                        300 IN MX 10   mx.minnecker.com.
+@                        300 IN MX 20   riese.minnecker.com.
 @                        IN TXT     "v=spf1 a mx -all"
 _dmarc                   IN TXT     "v=DMARC1; p=reject; sp=reject; rua=mailto:reports@minnecker.com"
 minnecker._domainkey     IN TXT     ( "v=DKIM1; k=rsa; " "p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAufuD2ER1rCnOfP5ETij1J3rXiRtpkPx02EwZknPtH79ppP44yZWjqUM7kBgZPfwOcx97d+c63nqWvyY7oYrf5anhQXp39vatAGF1vBpNIhgcQD6IYsgN5rBJyDoX4MUvSYoOTtpE" "NilEa7Zhxc6N/zFmN8gUxRVcoqSsdQMVOh3RafLwg6WWNpyl/02gvElqrg36fh2Rp59Vh8MsQGdNKctA4qM587DRLEgTIWKIAnk6hG7hZd0OPpp3d8btgrwuYqftBZBShoA6rtBrC1F9V1I7fdhOn5kqkUDjth8CDTpuaA8Lve3CNG3FBgOgK52ciboF/vPgfw/XfiU8aVlQwwIDAQAB" )

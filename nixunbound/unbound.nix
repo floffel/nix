@@ -50,6 +50,7 @@
           "floffel.de."
           "sbminnecker.de."
           "substitution.art."
+          "sbminni.de."
         ];
       };
 
@@ -70,16 +71,9 @@
           name = "substitution.art.";
           stub-addr = "10.20.20.11";
         }
-      ];
-
-      forward-zone = [
         {
-          name = ".";
-          forward-addr = [
-            "1.1.1.1"
-            "1.0.0.1"
-            "8.8.8.8"
-          ];
+          name = "sbminni.de.";
+          stub-addr = "10.20.20.11";
         }
       ];
     };

@@ -827,7 +827,7 @@ EOF
       address :detail :matches "to" "?*",
       address :detail :matches "cc" "?*"
     ) {
-      fileinto :create "''${1}";
+      fileinto :create "''${1}''${2}";
       stop;
     }
   '';

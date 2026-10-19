@@ -43,7 +43,11 @@ keytags() {
   grep -oE '<name>keyTag</name><value><(string|int)>[0-9]+' | grep -oE '[0-9]+$' | grep -v '^0$' || true
 }
 
-for zone in minnecker.com floffel.de sbminnecker.de substitution.art sbminni.de; do
+# sbminni.de is intentionally not in this list: it is not registered in the
+# INWX account (adddnskey: "domain does not seem to exist"). It is signed and
+# served by nsd, but its DS must be added at whichever registrar it is
+# registered with when the delegation is switched to px.
+for zone in minnecker.com floffel.de sbminnecker.de substitution.art; do
   echo "=== ${zone} ==="
 
   ksk_file=""

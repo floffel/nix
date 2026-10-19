@@ -8,6 +8,9 @@
     ./nginx.nix
   ];
 
+  # GnuPG for the Roundcube Enigma plugin (gpg/gpgconf in the FPM PATH).
+  environment.systemPackages = [ pkgs.gnupg ];
+
   # Enigma PGP support in Roundcube.
   systemd.tmpfiles.rules = [
     "d /var/lib/roundcube/enigma 0700 nginx nginx -"

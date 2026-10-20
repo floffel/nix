@@ -115,6 +115,32 @@
     };
   };
 
+  # CrowdSec: parses nginx access/error logs from journald and blocks the
+  # offending source IP at the firewall. This complements fail2ban (which
+  # only sees a few error-log patterns) and uses the CrowdSec community
+  # scenarios for scanners, probes and HTTP abuse.
+  services.crowdsec = {
+    enable = true;
+    hub.collections = [ "crowdsecurity/nginx" ];
+    settings.general.api.server.enable = true;
+    settings.general.api.server.listen_uri = "127.0.0.1:8080";
+    # Expose CrowdSec's Prometheus endpoint on the service LAN for scraping.
+    settings.general.prometheus.listen_addr = "0.0.0.0";
+    localConfig.acquisitions = [
+      {
+        source = "journalctl";
+        journalctl_filter = [ "_SYSTEMD_UNIT=nginx.service" ];
+        labels = { type = "nginx"; };
+      }
+    ];
+  };
+  services.crowdsec-firewall-bouncer = {
+    enable = true;
+    # Registers the bouncer against the local CrowdSec LAPI and manages the
+    # iptables/ipset rules (networking.nftables is disabled in this repo).
+    registerBouncer.enable = true;
+  };
+
   environment.etc."fail2ban/filter.d/nginx-oauth2-brute-force.conf".text = ''
     [Definition]
     failregex = ^\s*\[\w+\] \d+#\d+: \*\d+ access forbidden by rule, client: <ADDR>.*request: "POST .*/(?:token|authorize|device_authorization)"
@@ -142,7 +168,7 @@
       enable = true;
       # 9100 is node_exporter, scraped by nixmonitoring. It is not forwarded
       # from the Proxmox host, so this only opens the service LAN.
-      allowedTCPPorts = [ 80 443 9100 ];
+      allowedTCPPorts = [ 80 443 9100 6060 ];
       allowedUDPPorts = [ 3478 5349 ];
       allowedUDPPortRanges = [ { from = 49152; to = 65535; } { from = 40000; to = 41000; } ];
     };

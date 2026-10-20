@@ -95,6 +95,15 @@
           }
         ];
       }
+      # CrowdSec agent/LAPI metrics (nginx for now; mail added when deployed).
+      {
+        job_name = "crowdsec";
+        static_configs = [
+          {
+            targets = [ "nixnginx:6060" ];
+          }
+        ];
+      }
     ];
   };
 
@@ -170,6 +179,20 @@
       d=/var/lib/secrets/influxdb
       mkdir -p "$d"
 
+      # The influx CLI in this version has no --org flag for `bucket update`;
+      # set the 90-day retention through the HTTP API instead.
+      set_retention() {
+        tok="$1"
+        id=$(curl -sf -H "Authorization: Token $tok" \
+          "http://127.0.0.1:8086/api/v2/buckets?name=proxmox" | ${pkgs.jq}/bin/jq -r '.buckets[0].id')
+        if [ -n "$id" ] && [ "$id" != "null" ]; then
+          curl -sf -X PATCH -H "Authorization: Token $tok" \
+            -H "Content-Type: application/json" \
+            -d '{"retentionRules":[{"type":"expire","everySeconds":7776000}]}' \
+            "http://127.0.0.1:8086/api/v2/buckets/$id" >/dev/null || true
+        fi
+      }
+
       # Wait for InfluxDB HTTP API to accept connections.
       for i in {1..30}; do
         if curl -sf http://127.0.0.1:8086/health >/dev/null 2>&1; then break; fi
@@ -185,8 +208,7 @@
         if curl -sf -H "Authorization: Token $(cat "$d/token")" \
              "http://127.0.0.1:8086/api/v2/buckets?name=proxmox" >/dev/null 2>&1; then
           ADMIN_TOKEN="$(cat "$d/admin-token" 2>/dev/null || cat "$d/token")"
-          influx bucket update --org minnecker --name proxmox --retention 2160h \
-            --token "$ADMIN_TOKEN" >/dev/null 2>&1 || true
+          set_retention "$ADMIN_TOKEN"
           exit 0
         fi
         echo "Token invalid, re-initializing..."
@@ -231,8 +253,7 @@
         printf '%s' "$TOKEN" > "$d/admin-token"
         chmod 644 "$d/admin-token"
       fi
-      influx bucket update --org minnecker --name proxmox --retention 2160h \
-        --token "$(cat "$d/admin-token" 2>/dev/null || echo "$TOKEN")" >/dev/null 2>&1 || true
+      set_retention "$(cat "$d/admin-token" 2>/dev/null || echo "$TOKEN")"
       echo "InfluxDB initialized: org=minnecker bucket=proxmox token=$d/token"
     '';
   };

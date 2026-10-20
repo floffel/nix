@@ -56,7 +56,8 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "unit": "short",
+          "noValue": "0"
         },
         "overrides": []
       },
@@ -70,7 +71,7 @@
       },
       "targets": [
         {
-          "expr": "sum(crowdsec_retained_alerts)",
+          "expr": "sum(crowdsec_retained_alerts) or vector(0)",
           "refId": "A"
         }
       ]
@@ -126,7 +127,8 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short"
+          "unit": "short",
+          "noValue": "0"
         },
         "overrides": []
       },

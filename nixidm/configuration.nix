@@ -21,7 +21,7 @@
     };
   };
   environment.systemPackages = with pkgs; [
-    kanidm_1_10
+    kanidm_1_11
     curl
     jq
   ];

@@ -163,6 +163,31 @@
     (pkgs.formats.yaml { }).generate "crowdsec.yaml"
       config.services.crowdsec.settings.general;
 
+  # Export active CrowdSec decisions (IP, reason/scenario, origin and
+  # remaining duration) for the Grafana security dashboard.
+  systemd.services.crowdsec-decisions-exporter = {
+    description = "Export active CrowdSec decisions to Prometheus textfile";
+    serviceConfig.Type = "oneshot";
+    path = [ pkgs.crowdsec pkgs.python3 pkgs.coreutils ];
+    script = ''
+      set -euo pipefail
+      OUT=/var/lib/node-exporter-textfile/crowdsec.prom
+      TMP=$(mktemp)
+      ${pkgs.crowdsec}/bin/cscli -c /etc/crowdsec/config.yaml decisions list -o json 2>/dev/null \
+        | ${pkgs.python3}/bin/python3 ${../nixmonitoring/crowdsec-decisions.py} > "$TMP" || true
+      install -m 0644 -o node-exporter -g node-exporter "$TMP" "$OUT"
+      rm -f "$TMP"
+    '';
+  };
+  systemd.timers.crowdsec-decisions-exporter = {
+    description = "Periodically export CrowdSec decisions";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:0/1";
+      Unit = "crowdsec-decisions-exporter.service";
+    };
+  };
+
   environment.etc."fail2ban/filter.d/nginx-oauth2-brute-force.conf".text = ''
     [Definition]
     failregex = ^\s*\[\w+\] \d+#\d+: \*\d+ access forbidden by rule, client: <ADDR>.*request: "POST .*/(?:token|authorize|device_authorization)"

@@ -379,5 +379,6 @@
     "L+ /var/lib/grafana/dashboards/system-mail.json - - - - ${./dashboards/system-mail.json}"
     "L+ /var/lib/grafana/dashboards/mail-ops.json - - - - ${./dashboards/mail-ops.json}"
     "L+ /var/lib/grafana/dashboards/ai-usage.json - - - - ${./dashboards/ai-usage.json}"
+    "L+ /var/lib/grafana/dashboards/security.json - - - - ${./dashboards/security.json}"
   ];
 }

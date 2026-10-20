@@ -623,7 +623,7 @@ in
       "classifier-bayes.conf".text = ''
         min_learns = 20;
         autolearn {
-          spam_threshold = 6.0;
+          spam_threshold = 5.0;
           ham_threshold = -0.5;
           check_balance = true;
           min_balance = 0.9;
@@ -633,9 +633,12 @@ in
       # Score bands. add_header adds the X-Spam-* headers (drives the spam
       # sieve); reject is raised well above the quarantine band so the
       # quarantine tier (milter_headers below) catches borderline mail in a
-      # mailbox instead of bouncing it. Tune after observing real scores.
+      # mailbox instead of bouncing it. 5.0 (instead of rspamd's default 6)
+      # means a confident Bayes verdict plus one weak signal already files
+      # mail into Junk; false positives are recoverable with "Not junk" in
+      # Roundcube, which feeds learn_ham.
       "actions.conf".text = ''
-        add_header = 6;
+        add_header = 5.0;
         reject = 40;
       '';
 

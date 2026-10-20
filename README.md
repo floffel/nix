@@ -56,6 +56,13 @@ sudo nix-channel --update
 sudo nixos-rebuild switch --upgrade
 ```
 
+> **Upgrading all containers:** take snapshots, build every container first
+> (`nix-channel --update`, then `nixos-rebuild build`), and only then switch
+> in dependency order. Do not run `nixos-rebuild switch --upgrade` on every
+> container blindly. See [UPGRADE.md](UPGRADE.md) for the full procedure,
+> pitfalls (Kanidm EOL upgrades, Open WebUI build memory, Postfix transport)
+> and verification commands.
+
 ---
 
 ## 🚀 2. Deploying Git Configurations (Consolidated Flow)

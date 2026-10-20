@@ -1,5 +1,5 @@
 # NixOS Server Configuration for the Nginx Reverse Proxy Container (nixnginx)
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 
 {
   imports = [
@@ -143,6 +143,22 @@
     # iptables/ipset rules (networking.nftables is disabled in this repo).
     registerBouncer.enable = true;
   };
+
+  # NixOS 26.05's crowdsec module runs its two stateful units as DynamicUser
+  # while sharing /var/lib/crowdsec; the second unit then cannot write the
+  # first unit's machine credentials. Run both as the static crowdsec user.
+  systemd.services.crowdsec.serviceConfig.DynamicUser = lib.mkForce false;
+  systemd.services.crowdsec-firewall-bouncer-register.serviceConfig.DynamicUser =
+    lib.mkForce false;
+  systemd.services.crowdsec-firewall-bouncer-register.serviceConfig.User =
+    lib.mkForce "crowdsec";
+  systemd.services.crowdsec-firewall-bouncer-register.serviceConfig.Group =
+    lib.mkForce "crowdsec";
+  # The module's bouncer registration calls the raw cscli binary, which
+  # defaults to /etc/crowdsec/config.yaml; expose the generated config there.
+  environment.etc."crowdsec/config.yaml".source =
+    (pkgs.formats.yaml { }).generate "crowdsec.yaml"
+      config.services.crowdsec.settings.general;
 
   environment.etc."fail2ban/filter.d/nginx-oauth2-brute-force.conf".text = ''
     [Definition]

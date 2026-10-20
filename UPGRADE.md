@@ -28,6 +28,11 @@ containers in this repository. It is written from the procedure used for the
 
 ## 0. Preparation
 
+> **Never stop or reboot `nixwireguard` (CT 100) from a remote session.** It
+> is the network edge and the path to the host/NAS storage. Applying LXC
+> mount changes by stopping it can deadlock storage and lock you out. Use an
+> out-of-band console and run edge restarts detached; see `AGENTS.md`.
+
 Work from the Proxmox host (the `pct` commands below are host commands).
 
 ```bash

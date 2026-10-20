@@ -4,6 +4,24 @@ This repository contains a unified NixOS configuration for running services (suc
 
 ---
 
+## ⚠️ Never stop CT 100 (`nixwireguard`) from a remote session
+
+CT 100 is the WireGuard gateway **and** the network path used to reach the
+Proxmox host and the SMB/NFS storage that many containers and the host depend
+on. Running `pct stop`, `pct reboot`, `pct shutdown`, or `pct reset` on CT 100
+over a remote SSH session can cut **all** access and deadlock storage mounts;
+the host may then appear completely unreachable. Only use an out-of-band
+console and a planned maintenance window.
+
+Never add a mount entry to CT 100 whose source is only reachable through
+CT 100. Mount changes are applied on container start and can create a boot
+deadlock. If CT 100 is already down, see the recovery steps in
+[`AGENTS.md`](AGENTS.md#if-ct-100-is-already-down). Any start/stop/reboot that
+can affect the edge must be run detached with `systemd-run`, never in the SSH
+session that the edge provides.
+
+---
+
 ## 🧰 1. Starting Configuration for a New Proxmox LXC Container
 
 When you create a new Proxmox container for NixOS, use the following starting configuration as a minimal base. Edit (or create) `/etc/nixos/configuration.nix` inside the container and paste the block below.

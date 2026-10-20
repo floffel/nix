@@ -215,7 +215,8 @@ cmd_user() {
       [ -n "$username" ] && [ -n "$display" ] || die "usage: user create <username> \"<Display Name>\" [primary_mail] [alias_mail ...]"
       k person create "$username" "$display"
       if [ "$#" -gt 0 ]; then
-        k person update "$username" --mail "$@"
+        local mail_args=(); for a in "$@"; do mail_args+=(--mail "$a"); done
+        k person update "$username" "${mail_args[@]}"
       fi
       echo
       echo "User '$username' created. Issue a reset token so they can set their own password:"

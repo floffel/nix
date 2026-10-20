@@ -896,7 +896,10 @@ EOF
     requires = [ "dovecot.service" ];
     serviceConfig = {
       Type = "oneshot";
-      RemainAfterExit = true;
+      # No RemainAfterExit: the unit must return to inactive so the
+      # mail-shared-mailboxes timer can start it again every 5 minutes.
+      # With RemainAfterExit the unit stays "active (exited)" and timer
+      # starts become no-ops, so group changes were only seen after a boot.
     };
     path = with pkgs; [ dovecot coreutils openldap gawk ];
     script = ''
@@ -933,6 +936,9 @@ EOF
         doveadm mailbox create -u "$owner_mail" INBOX >/dev/null 2>&1 || true
         doveadm mailbox create -u "$member_mail" INBOX >/dev/null 2>&1 || true
         ln -sfn "$owner_path" "$member_path/.mail_shared.$owner"
+        # Subscribe the shared folder so clients that hide unsubscribed
+        # mailboxes (mobile IMAP, some desktop clients) still show it.
+        doveadm mailbox subscribe -u "$member_mail" "mail_shared/$owner" >/dev/null 2>&1 || true
         doveadm acl set -u "$owner_mail" INBOX user="$member_mail" \
           lookup read write write-seen write-deleted insert create delete expunge >/dev/null 2>&1 || true
         printf '%s\t%s\n' "$owner" "$member_mail" >> "$EXPECTED"
@@ -948,6 +954,7 @@ EOF
         member_user=''${member_user%%/*}
         member_mail="$member_user@$member_domain"
         if ! grep -qxF "$owner"$'\t'"$member_mail" "$EXPECTED" 2>/dev/null; then
+          doveadm mailbox unsubscribe -u "$member_mail" "mail_shared/$owner" >/dev/null 2>&1 || true
           rm -f "$link"
           doveadm acl delete -u "$owner@minnecker.com" INBOX user="$member_mail" >/dev/null 2>&1 || true
         fi

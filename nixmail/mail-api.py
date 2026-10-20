@@ -32,6 +32,7 @@ OPEN_WEBUI_AUTH_URL = os.environ.get(
     "MAIL_API_OPENWEBUI_AUTH_URL", "http://[fd01::24]:8080/api/v1/auths/"
 )
 MAX_BODY = 20000
+MAX_ATTACHMENT = 10 * 1024 * 1024
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 50
 
@@ -180,6 +181,9 @@ def read_attachment(user: str, mailbox: str, uid: str, index: int) -> dict:
             "size": len(payload),
             "text": None,
         }
+        if len(payload) > MAX_ATTACHMENT:
+            result["note"] = "attachment too large to extract"
+            return result
         if ctype.startswith("text/") or ctype in (
             "application/json",
             "application/xml",

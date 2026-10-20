@@ -144,12 +144,19 @@
     description = "Create f2b-nginx iptables chain for fail2ban";
     wantedBy = [ "fail2ban.service" ];
     before = [ "fail2ban.service" ];
+    after = [ "firewall.service" ];
+    wants = [ "firewall.service" ];
     serviceConfig.Type = "oneshot";
     path = [ pkgs.iptables ];
     script = ''
       if ! iptables -L f2b-nginx -n >/dev/null 2>&1; then
         iptables -N f2b-nginx
         iptables -A f2b-nginx -j RETURN
+      fi
+      # The jail actions only insert rules into f2b-nginx. Without this jump
+      # the chain has zero references and every ban is a no-op.
+      if ! iptables -C INPUT -j f2b-nginx >/dev/null 2>&1; then
+        iptables -I INPUT 1 -j f2b-nginx
       fi
     '';
   };
@@ -164,7 +171,9 @@
     # Firewall required by fail2ban (iptables rules managed manually via oneshot)
     firewall = {
       enable = true;
-      allowedTCPPorts = [ 80 443 ];
+      # 9100 is node_exporter, scraped by nixmonitoring. It is not forwarded
+      # from the Proxmox host, so this only opens the service LAN.
+      allowedTCPPorts = [ 80 443 9100 ];
       allowedUDPPorts = [ 3478 5349 ];
       allowedUDPPortRanges = [ { from = 49152; to = 65535; } { from = 40000; to = 41000; } ];
     };

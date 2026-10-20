@@ -148,7 +148,10 @@
   # while sharing /var/lib/crowdsec; the second unit then cannot write the
   # first unit's machine credentials. Run both as the static crowdsec user.
   systemd.services.crowdsec.serviceConfig.DynamicUser = lib.mkForce false;
+  systemd.services.crowdsec.serviceConfig.PrivateUsers = lib.mkForce false;
   systemd.services.crowdsec-firewall-bouncer-register.serviceConfig.DynamicUser =
+    lib.mkForce false;
+  systemd.services.crowdsec-firewall-bouncer-register.serviceConfig.PrivateUsers =
     lib.mkForce false;
   systemd.services.crowdsec-firewall-bouncer-register.serviceConfig.User =
     lib.mkForce "crowdsec";

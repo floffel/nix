@@ -990,6 +990,21 @@ in
           'refresh_time'          => '00:15:00',
           'fixed'                 => [ 'accountname', 'username', 'discovery_url', 'preemptive_basic_auth', 'ssl_noverify' ],
       ];
+
+      // Use the writeable Nextcloud "Contacts" book as Roundcube's default
+      // address book and as target for auto-collected recipients/senders.
+      $prefs['_GLOBAL']['default_addressbook'] = [
+          'preset'   => 'nextcloud',
+          'matchurl' => '#/contacts/?$#',
+      ];
+      $prefs['_GLOBAL']['collected_recipients'] = [
+          'preset'   => 'nextcloud',
+          'matchurl' => '#/contacts/?$#',
+      ];
+      $prefs['_GLOBAL']['collected_senders'] = [
+          'preset'   => 'nextcloud',
+          'matchurl' => '#/contacts/?$#',
+      ];
       PHP
     '';
     configureNginx = false;

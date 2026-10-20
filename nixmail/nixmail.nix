@@ -454,7 +454,7 @@ in
       };
 
       # Shared mailboxes (eltern@/travel@ and per-user sharing).
-      "mail_plugins" = { acl = true; };
+      "mail_plugins" = { acl = true; stats = true; };
       "protocol imap" = { mail_plugins = { imap_acl = true; }; };
       acl_driver = "vfile";
       "namespace inbox" = {

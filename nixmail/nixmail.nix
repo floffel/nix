@@ -1113,9 +1113,9 @@ EOF
   services.crowdsec = {
     enable = true;
     hub.collections = [ "crowdsecurity/postfix" "crowdsecurity/dovecot" ];
-    settings.general.api.server.enable = true;
+    settings.general.api.server.enable = false;
     settings.general.api.server.listen_uri = "127.0.0.1:8080";
-    settings.lapi.credentialsFile = "/var/lib/crowdsec/local-api-credentials";
+    settings.lapi.credentialsFile = "/var/lib/secrets/crowdsec/mail-machine.yaml";
     settings.general.prometheus.listen_addr = "0.0.0.0";
     localConfig.acquisitions = [
       {
@@ -1132,7 +1132,10 @@ EOF
   };
   services.crowdsec-firewall-bouncer = {
     enable = true;
-    registerBouncer.enable = true;
+    # Pull decisions from the central LAPI on nixnginx.
+    registerBouncer.enable = false;
+    secrets.apiKeyPath = "/var/lib/secrets/crowdsec/mail-bouncer.key";
+    settings.api_url = "http://10.20.20.14:8080";
   };
   # Same NixOS 26.05 crowding module workarounds as on nixnginx: shared
   # /var/lib/crowdsec must be writable by the static crowdsec user, and the
@@ -1150,31 +1153,6 @@ EOF
   environment.etc."crowdsec/config.yaml".source =
     (pkgs.formats.yaml { }).generate "crowdsec.yaml"
       config.services.crowdsec.settings.general;
-
-  # Export active CrowdSec decisions (IP, reason/scenario, origin and
-  # remaining duration) for the Grafana security dashboard.
-  systemd.services.crowdsec-decisions-exporter = {
-    description = "Export active CrowdSec decisions to Prometheus textfile";
-    serviceConfig.Type = "oneshot";
-    path = [ pkgs.crowdsec pkgs.python3 pkgs.coreutils ];
-    script = ''
-      set -euo pipefail
-      OUT=/var/lib/node-exporter-textfile/crowdsec.prom
-      TMP=$(mktemp)
-      ${pkgs.crowdsec}/bin/cscli -c /etc/crowdsec/config.yaml decisions list -o json 2>/dev/null \
-        | ${pkgs.python3}/bin/python3 ${../nixmonitoring/crowdsec-decisions.py} > "$TMP" || true
-      install -m 0644 -o node-exporter -g node-exporter "$TMP" "$OUT"
-      rm -f "$TMP"
-    '';
-  };
-  systemd.timers.crowdsec-decisions-exporter = {
-    description = "Periodically export CrowdSec decisions";
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnCalendar = "*:0/1";
-      Unit = "crowdsec-decisions-exporter.service";
-    };
-  };
 
   # Notes: Ensure DKIM private key remains outside the Nix store at
   # /var/lib/secrets/mail/dkim/minnecker.com.private and is readable by rspamd.

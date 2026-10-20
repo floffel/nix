@@ -123,7 +123,7 @@
     enable = true;
     hub.collections = [ "crowdsecurity/nginx" ];
     settings.general.api.server.enable = true;
-    settings.general.api.server.listen_uri = "127.0.0.1:8080";
+    settings.general.api.server.listen_uri = "0.0.0.0:8080";
     # The NixOS module requires a credentials path when the local LAPI is
     # enabled; cscli writes the machine credentials there.
     settings.lapi.credentialsFile = "/var/lib/crowdsec/local-api-credentials";
@@ -215,7 +215,7 @@
       enable = true;
       # 9100 is node_exporter, scraped by nixmonitoring. It is not forwarded
       # from the Proxmox host, so this only opens the service LAN.
-      allowedTCPPorts = [ 80 443 9100 6060 ];
+      allowedTCPPorts = [ 80 443 8080 9100 6060 ];
       allowedUDPPorts = [ 3478 5349 ];
       allowedUDPPortRanges = [ { from = 49152; to = 65535; } { from = 40000; to = 41000; } ];
     };

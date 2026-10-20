@@ -1,6 +1,6 @@
 $TTL 7200
 @   IN SOA r.floffel.de. postmaster.minnecker.com. (
-    2026081501	; serial
+    2026102001	; serial
     14400       ; refresh
     3600        ; retry
     604800      ; expire
@@ -69,9 +69,10 @@ vault		0	 IN AAAA fd01::14
 backendmail		 IN CNAME  px
 *			 IN CNAME  px
 mail		 IN CNAME  px
-; Temporary access to the old server during/after the MX switch.
+; Temporary access to the old Roundcube on riese during/after the MX switch.
+; Goes through nginx on px, which proxies to riese with Host mail.minnecker.com.
 ; Delete this record once the old mailboxes have been migrated.
-oldmail		 IN CNAME  riese
+oldmail		 IN CNAME  px
 matrix		 IN CNAME  px
 livekit		 IN CNAME  px
 kie		 IN CNAME  px

@@ -554,6 +554,34 @@ in
         '';
       };
 
+      # oldmail.minnecker.com (legacy Roundcube on the old server, riese)
+      #
+      # Temporary access to the old mailboxes during/after the migration. DNS
+      # points here (px) and the old host's config is left untouched: proxy to
+      # riese, but present Host/SNI as mail.minnecker.com, the vhost name the
+      # old Roundcube installation expects.
+      "oldmail.minnecker.com" = {
+        forceSSL = true;
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+        locations."/" = {
+          proxyPass = "https://riese.minnecker.com";
+          extraConfig = ''
+            proxy_set_header Host mail.minnecker.com;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_ssl_server_name on;
+            proxy_ssl_name mail.minnecker.com;
+            proxy_http_version 1.1;
+          '';
+        };
+        extraConfig = ''
+          charset utf-8;
+          client_max_body_size 4G;
+        '';
+      };
+
       # matrix.minnecker.com (Element Web client, MAS OAuth, & Matrix Synapse Reverse Proxy)
       "matrix.minnecker.com" = {
         forceSSL = true;

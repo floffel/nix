@@ -43,6 +43,10 @@
   services.prometheus = {
     enable = true;
     port = 9090;
+    # 90 days of metrics; size cap as a safety net. Increase the container
+    # disk when the cap is reached (currently ~726 MB for 15 days).
+    retentionTime = "90d";
+    extraFlags = [ "--storage.tsdb.retention.size=40GB" ];
     
     scrapeConfigs = [
       # Scraping node_exporter on all containers for system resource metrics.
@@ -109,6 +113,10 @@
             store: inmemory
         replication_factor: 1
         path_prefix: /var/lib/loki
+      compactor:
+        working_directory: /var/lib/loki/compactor
+        retention_enabled: true
+        delete_request_store: filesystem
       storage_config:
         filesystem:
           directory: /var/lib/loki/chunks
@@ -124,6 +132,9 @@
       limits_config:
         reject_old_samples: true
         reject_old_samples_max_age: 168h
+        # 90 days of centralized logs. Loki deletes older chunks through the
+        # compactor above.
+        retention_period: 2160h
     '';
   };
 
@@ -173,6 +184,9 @@
         # Verify the token still works; if not, fall through to re-init.
         if curl -sf -H "Authorization: Token $(cat "$d/token")" \
              "http://127.0.0.1:8086/api/v2/buckets?name=proxmox" >/dev/null 2>&1; then
+          ADMIN_TOKEN="$(cat "$d/admin-token" 2>/dev/null || cat "$d/token")"
+          influx bucket update --org minnecker --name proxmox --retention 2160h \
+            --token "$ADMIN_TOKEN" >/dev/null 2>&1 || true
           exit 0
         fi
         echo "Token invalid, re-initializing..."
@@ -217,6 +231,8 @@
         printf '%s' "$TOKEN" > "$d/admin-token"
         chmod 644 "$d/admin-token"
       fi
+      influx bucket update --org minnecker --name proxmox --retention 2160h \
+        --token "$(cat "$d/admin-token" 2>/dev/null || echo "$TOKEN")" >/dev/null 2>&1 || true
       echo "InfluxDB initialized: org=minnecker bucket=proxmox token=$d/token"
     '';
   };
@@ -340,5 +356,7 @@
   systemd.tmpfiles.rules = [
     "d /var/lib/grafana/dashboards 0755 grafana grafana -"
     "L+ /var/lib/grafana/dashboards/system-mail.json - - - - ${./dashboards/system-mail.json}"
+    "L+ /var/lib/grafana/dashboards/mail-ops.json - - - - ${./dashboards/mail-ops.json}"
+    "L+ /var/lib/grafana/dashboards/ai-usage.json - - - - ${./dashboards/ai-usage.json}"
   ];
 }

@@ -1056,16 +1056,16 @@ EOF
   systemd.services.dovecot-stats-exporter = {
     description = "Export Dovecot stats to Prometheus textfile";
     serviceConfig.Type = "oneshot";
-    path = [ pkgs.dovecot pkgs.coreutils ];
+    path = [ pkgs.dovecot pkgs.coreutils pkgs.gawk ];
     script = ''
       set -euo pipefail
       OUT=/var/lib/node-exporter-textfile/dovecot.prom
       TMP=$(mktemp)
-      # Prefer the native Prometheus format; fall back to parsing the
-      # classic key=value dump.
-      if ! doveadm stats dump --format prometheus > "$TMP" 2>/dev/null; then
-        doveadm stats dump 2>/dev/null | awk '{gsub(/\./, "_"); printf "dovecot_%s %s\n", $1, $2}' > "$TMP" || { rm -f "$TMP"; exit 0; }
-      fi
+      # Dovecot 2.4 removed the --format prometheus option; parse the
+      # tab-separated stats dump. The dump only contains rows once the
+      # stats service has collected events.
+      doveadm stats dump 2>/dev/null | \
+        ${pkgs.gawk}/bin/gawk 'BEGIN{FS="\t"} NR>1 && $1!="" {gsub(/\./,"_",$1); gsub(/[^A-Za-z0-9_]/,"_",$2); printf "dovecot_%s_%s_count %s\n", $1, $2, $3; printf "dovecot_%s_%s_sum %s\n", $1, $2, $4}' > "$TMP" || true
       if [ -s "$TMP" ]; then
         install -m 0644 -o node-exporter -g node-exporter "$TMP" "$OUT"
       fi
@@ -1078,6 +1078,30 @@ EOF
     timerConfig = {
       OnCalendar = "*:0/1";
       Unit = "dovecot-stats-exporter.service";
+    };
+  };
+
+  # Postfix queue depth, size and recipient count from `postqueue -j`.
+  # Node exporter's textfile collector exposes these to Prometheus.
+  systemd.services.postfix-queue-exporter = {
+    description = "Export Postfix queue metrics to Prometheus textfile";
+    serviceConfig.Type = "oneshot";
+    path = [ pkgs.postfix pkgs.python3 pkgs.coreutils ];
+    script = ''
+      set -euo pipefail
+      OUT=/var/lib/node-exporter-textfile/postfix.prom
+      TMP=$(mktemp)
+      postqueue -j 2>/dev/null | ${pkgs.python3}/bin/python3 ${./queue-metrics.py} > "$TMP" || true
+      install -m 0644 -o node-exporter -g node-exporter "$TMP" "$OUT"
+      rm -f "$TMP"
+    '';
+  };
+  systemd.timers.postfix-queue-exporter = {
+    description = "Periodically export Postfix queue metrics";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:0/1";
+      Unit = "postfix-queue-exporter.service";
     };
   };
 

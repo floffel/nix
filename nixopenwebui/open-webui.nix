@@ -132,6 +132,29 @@ in
     '';
   };
 
+  # Open WebUI activity metrics (last_active_at / chats) for Grafana.
+  systemd.services.openwebui-usage-exporter = {
+    description = "Export Open WebUI user activity to Prometheus textfile";
+    serviceConfig.Type = "oneshot";
+    path = [ pkgs.python3 pkgs.coreutils ];
+    script = ''
+      set -euo pipefail
+      OUT=/var/lib/node-exporter-textfile/openwebui.prom
+      TMP=$(mktemp)
+      ${pkgs.python3}/bin/python3 ${./usage-metrics.py} > "$TMP"
+      install -m 0644 -o node-exporter -g node-exporter "$TMP" "$OUT"
+      rm -f "$TMP"
+    '';
+  };
+  systemd.timers.openwebui-usage-exporter = {
+    description = "Periodically export Open WebUI activity metrics";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:0/1";
+      Unit = "openwebui-usage-exporter.service";
+    };
+  };
+
   # Open WebUI persists tool server connections in its config table, so the
   # TOOL_SERVER_CONNECTIONS env var only seeds the value on a fresh install.
   # This oneshot makes the declarative list authoritative on existing

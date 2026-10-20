@@ -958,12 +958,39 @@ in
     hostName = "mail.minnecker.com";
 
     # The NixOS module only supports plugins shipped with Roundcube. Wrap the
-    # stock package and add our small ManageSieve master-auth plugin.
-    package = pkgs.runCommand "roundcube-with-sieve-master" { } ''
+    # stock package and add our small ManageSieve master-auth plugin plus the
+    # RCMCardDAV plugin (Nextcloud contacts sync), including its admin config.
+    package = pkgs.runCommand "roundcube-with-plugins" { } ''
       cp -r ${pkgs.roundcube}/. $out/
       chmod -R u+w $out/plugins
       mkdir -p $out/plugins/sieve_master
       cp ${./sieve_master.php} $out/plugins/sieve_master/sieve_master.php
+      cp -r ${pkgs.roundcubePlugins.carddav}/plugins/carddav $out/plugins/carddav
+      chmod -R u+w $out/plugins/carddav
+      cat > $out/plugins/carddav/config.inc.php <<'PHP'
+      <?php
+      // OAuth2 logins have no IMAP password, so the default "encrypted"
+      // password store (which derives its key from the login password)
+      // cannot be used. Encrypt CardDAV app passwords with des_key instead.
+      $prefs['_GLOBAL']['pwstore_scheme'] = 'des_key';
+
+      // Nextcloud (nixnginx, same host) address books. Nextcloud user ids are
+      // the full mail address, so %u maps 1:1. Users only have to add their
+      // Nextcloud *app password* (Settings -> Security -> App passwords) once
+      // in Settings -> Preferences -> CardDAV; the account fields are prefilled.
+      $prefs['nextcloud'] = [
+          'accountname'           => 'Nextcloud',
+          'username'              => '%u',
+          'password'              => "",
+          'discovery_url'         => 'https://cloud.minnecker.com/remote.php/dav/addressbooks/users/%u/',
+          'preemptive_basic_auth' => true,
+          'name'                  => 'Nextcloud Kontakte',
+          'active'                => true,
+          'readonly'              => false,
+          'refresh_time'          => '00:15:00',
+          'fixed'                 => [ 'accountname', 'username', 'discovery_url', 'preemptive_basic_auth', 'ssl_noverify' ],
+      ];
+      PHP
     '';
     configureNginx = false;
     
@@ -1036,12 +1063,13 @@ in
 
       // Mark as spam/ham -> move + learn into rspamd Bayes. rspamc is
       // installed system-wide in nixnginx and reaches the rspamd controller
-      // on the internal nixmail address (secure_ip includes nixnginx).
+      // on the internal nixmail address (secure_ip includes nixnginx, so the
+      // write endpoints need no controller password).
       $config['markasjunk_learning_driver'] = 'cmd_learn';
       $config['markasjunk_spam_mbox'] = 'Junk';
       $config['markasjunk_ham_mbox'] = 'INBOX';
-      $config['markasjunk_spam_cmd'] = 'rspamc -h [fd01::13]:11334 learn_spam %f';
-      $config['markasjunk_ham_cmd'] = 'rspamc -h [fd01::13]:11334 learn_ham %f';
+      $config['markasjunk_spam_cmd'] = '/run/current-system/sw/bin/rspamc -h [fd01::13]:11334 learn_spam %f';
+      $config['markasjunk_ham_cmd'] = '/run/current-system/sw/bin/rspamc -h [fd01::13]:11334 learn_ham %f';
       $config['markasjunk_move_spam'] = true;
       $config['markasjunk_move_ham'] = true;
 
@@ -1063,6 +1091,7 @@ in
       "acl"
       "additional_message_headers"
       "attachment_reminder"
+      "carddav"
       "enigma"
       "identity_select"
       "managesieve"

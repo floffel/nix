@@ -14,6 +14,21 @@ let
       create = true;
       delete = true;
     };
+    # One human-readable digest per parsedmarc run, submitted to our own
+    # loopback SMTP listener (no auth needed: loopback is in mynetworks and
+    # the recipient is a local virtual address). The systemd timer below
+    # runs parsedmarc once a day, so exactly one digest is sent per day.
+    smtp = {
+      host = "127.0.0.1";
+      port = 587;
+      ssl = false;
+      skip_certificate_verification = true;
+      user = "reports@minnecker.com";
+      password = "";
+      from = "reports@minnecker.com";
+      to = "florian@minnecker.com";
+      subject = "DMARC/TLS-RPT Tagesbericht";
+    };
   };
 in
 {
@@ -594,6 +609,25 @@ in
       '';
       "history_redis.conf".text = ''
         servers = "127.0.0.1:6379";
+      '';
+
+      # Bayes classifier (Redis-backed, already the default backend in
+      # rspamd's statistic.conf). Enable autolearn so the classifier trains
+      # itself from the traffic rspamd scans: messages scoring >= 6 are
+      # learned as spam, messages scoring <= -0.5 as ham. min_learns is
+      # lowered from the upstream default of 200 so the classifier starts
+      # producing BAYES_HAM/BAYES_SPAM verdicts after a few dozen samples
+      # instead of staying silent for months. Explicit user feedback
+      # ("Mark as junk"/"Not junk" in Roundcube) is learned through
+      # rspamc learn_spam/learn_ham (see nixnginx markasjunk config).
+      "classifier-bayes.conf".text = ''
+        min_learns = 20;
+        autolearn {
+          spam_threshold = 6.0;
+          ham_threshold = -0.5;
+          check_balance = true;
+          min_balance = 0.9;
+        }
       '';
 
       # Score bands. add_header adds the X-Spam-* headers (drives the spam

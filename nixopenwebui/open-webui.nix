@@ -1,6 +1,34 @@
 # NixOS Service Configuration for Open WebUI
 { config, pkgs, lib, ... }:
 
+let
+  # Read-only mail tool server provided by nixmail (nixmail/mail-api.py).
+  # Access control is enforced by the bridge: it only accepts connections
+  # from this container's address and uses the forwarded
+  # X-OpenWebUI-User-Email header to select the mailbox. No shared secret
+  # is needed, and the model can never choose another user's mailbox.
+  mailToolServer = [
+    {
+      type = "openapi";
+      url = "http://10.20.20.13:8081";
+      path = "/openapi.json";
+      auth_type = "none";
+      key = "";
+      config = {
+        enable = true;
+        # Empty access_grants means admin-only in Open WebUI 0.11; grant
+        # read access to every signed-in user.
+        access_grants = [
+          {
+            principal_type = "user";
+            principal_id = "*";
+            permission = "read";
+          }
+        ];
+      };
+    }
+  ];
+in
 {
   # Allow unfree packages since NixOS marks Open WebUI's modified license as unfree
   nixpkgs.config.allowUnfree = true;
@@ -43,6 +71,15 @@
       OPENAI_API_BASE_URL = "http://192.168.1.196:8123/v1";
       OPENAI_API_KEY = "x";
       ENABLE_OLLAMA_API = "False"; # Disable local Ollama since we use remote OpenAI API
+
+      # Forward the authenticated user's identity (including e-mail) to
+      # OpenAPI tool servers. The mail bridge relies on this header to know
+      # whose mailbox to open; Open WebUI derives it from the OIDC session.
+      ENABLE_FORWARD_USER_INFO_HEADERS = "True";
+
+      # Declarative tool server list (also seeded into the DB by the
+      # open-webui-tool-server oneshot for existing installations).
+      TOOL_SERVER_CONNECTIONS = builtins.toJSON mailToolServer;
     };
   };
 
@@ -94,6 +131,48 @@
       fi
       chown root:root "$f"
       chmod 644 "$f"
+    '';
+  };
+
+  # Open WebUI persists tool server connections in its config table, so the
+  # TOOL_SERVER_CONNECTIONS env var only seeds the value on a fresh install.
+  # This oneshot makes the declarative list authoritative on existing
+  # installations too. It runs before open-webui starts (SQLite is not
+  # locked) and preserves the open-webui ownership of the WAL/SHM files.
+  systemd.services.open-webui-tool-server = {
+    description = "Upsert declarative Open WebUI tool server connections";
+    wantedBy = [ "open-webui.service" ];
+    before = [ "open-webui.service" ];
+    partOf = [ "open-webui.service" ];
+    environment.TOOL_SERVER_CONNECTIONS = builtins.toJSON mailToolServer;
+    serviceConfig.Type = "oneshot";
+    path = [ pkgs.python3 pkgs.coreutils ];
+    script = ''
+      set -euo pipefail
+      DB=/var/lib/private/open-webui/data/webui.db
+      [ -f "$DB" ] || exit 0
+      ${pkgs.python3}/bin/python3 - "$DB" <<'PY'
+import json
+import os
+import sqlite3
+import sys
+import time
+
+db = sys.argv[1]
+value = json.loads(os.environ["TOOL_SERVER_CONNECTIONS"])
+con = sqlite3.connect(db)
+with con:
+    con.execute(
+        "INSERT INTO config(key, value, updated_at) VALUES('tool_server.connections', ?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+        (json.dumps(value), int(time.time())),
+    )
+PY
+      for f in "$DB-wal" "$DB-shm"; do
+        if [ -e "$f" ]; then
+          chown --reference="$DB" "$f"
+        fi
+      done
     '';
   };
 }

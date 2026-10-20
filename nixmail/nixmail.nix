@@ -340,7 +340,7 @@ in
       # PROXY protocol trust for any future HAProxy/TCP-proxy that may sit
       # in front, but it is no longer required for the auth flow.
       haproxy_trusted_networks = [ "10.20.20.14/32" "fd01::14/128" ];
-      login_trusted_networks = [ "10.20.20.14/32" "fd01::14/128" ];
+      login_trusted_networks = [ "127.0.0.1/32" "::1/128" "10.20.20.14/32" "fd01::14/128" ];
 
       lda_mailbox_autocreate = true;
       lda_mailbox_autosubscribe = true;
@@ -970,25 +970,76 @@ EOF
     };
   };
 
+  # Read-only IMAP bridge for Open WebUI. Open WebUI calls it as an OpenAPI
+  # tool server and forwards the authenticated user's address in
+  # X-OpenWebUI-User-Email; the bridge impersonates exactly that mailbox via
+  # the Dovecot master user below. It is reachable only from Open WebUI's
+  # container address (and loopback for debugging).
+  systemd.services.mail-api-secrets = {
+    description = "Provision Dovecot master password for the mail API";
+    wantedBy = [ "mail-api.service" "dovecot.service" ];
+    before = [ "mail-api.service" "dovecot.service" ];
+    serviceConfig.Type = "oneshot";
+    path = [ pkgs.openssl pkgs.coreutils ];
+    script = ''
+      set -euo pipefail
+      D=/var/lib/secrets/mail/api
+      install -d -m 0750 "$D"
+      if [ ! -s "$D/master-password" ]; then
+        openssl rand -hex 24 > "$D/master-password"
+      fi
+      chmod 600 "$D/master-password"
+    '';
+  };
+
+  systemd.services.mail-api = {
+    description = "Read-only IMAP API for Open WebUI";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "dovecot.service" "mail-api-secrets.service" ];
+    requires = [ "dovecot.service" "mail-api-secrets.service" ];
+    serviceConfig = {
+      DynamicUser = true;
+      ExecStart = "${pkgs.python3}/bin/python3 ${./mail-api.py}";
+      LoadCredential = "imap-master-password:/var/lib/secrets/mail/api/master-password";
+      Environment = [
+        "MAIL_API_ADDR=10.20.20.13"
+        "MAIL_API_PORT=8081"
+        "MAIL_API_ALLOW=127.0.0.1/32,::1/128,10.20.20.24/32,fd01::24/128"
+        "MAIL_API_MASTER_USER=mailapi"
+      ];
+      Restart = "on-failure";
+      RestartSec = "5s";
+      NoNewPrivileges = true;
+      PrivateTmp = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
+    };
+  };
+
   # ManageSieve master user for Roundcube. The password is generated once in
   # the shared secrets tree; only the derived passwd-file is written to /run.
   # Roundcube reads the same secret from the shared mount.
   systemd.services.managesieve-master-user = {
-    description = "Generate Dovecot master passwd for ManageSieve";
+    description = "Generate Dovecot master passwd for ManageSieve and the mail API";
     wantedBy = [ "dovecot.service" ];
     before = [ "dovecot.service" ];
+    after = [ "mail-api-secrets.service" ];
+    requires = [ "mail-api-secrets.service" ];
     serviceConfig.Type = "oneshot";
     path = with pkgs; [ openssl coreutils ];
     script = ''
       set -euo pipefail
       SECRET=/var/lib/secrets/ssl/minnecker.com/managesieve-master-password
+      API_SECRET=/var/lib/secrets/mail/api/master-password
       if [ ! -s "$SECRET" ]; then
         echo "ERROR: $SECRET is missing; generate it on the NAS with 'openssl rand -hex 32'" >&2
         exit 1
       fi
       install -d -m 0750 -o dovecot2 -g dovecot2 /run/dovecot-auth
       PW=$(cat "$SECRET")
-      printf 'sieveadmin:{PLAIN}%s\n' "$PW" > /run/dovecot-auth/master-users
+      API_PW=$(cat "$API_SECRET")
+      printf 'sieveadmin:{PLAIN}%s\nmailapi:{PLAIN}%s\n' "$PW" "$API_PW" > /run/dovecot-auth/master-users
       chown dovecot2:dovecot2 /run/dovecot-auth/master-users
       chmod 0600 /run/dovecot-auth/master-users
     '';

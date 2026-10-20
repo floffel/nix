@@ -255,7 +255,7 @@ in
         # transport and makes every external delivery fail with
         # "mail transport unavailable" (dsn=4.3.0).
         smtp_inet = {
-          command = "postscreen";
+          command = lib.mkForce "postscreen";
           chroot = false;
           maxproc = 1;
         };

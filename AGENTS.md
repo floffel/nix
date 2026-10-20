@@ -71,6 +71,9 @@ without the dependent mounts.
 
 CrowdSec, exporters, Grafana and log shipping are safe to change on
 non-edge containers. Do not attach new storage or network dependencies to
-CT 100 while implementing them. The CrowdSec firewall bouncer on CT 100 must
-be deployed only after the central LAPI and shared secret path are proven
-reachable independently of CT 100.
+CT 100 while implementing them. **CT 100 is deliberately excluded from the
+CrowdSec blocking strategy.** Do not add a CrowdSec agent, bouncer, key mount
+or firewall rule to the WireGuard container; an accidental ban of a peer
+address can cut the VPN path. CrowdSec runs its central LAPI on nixnginx with
+agents/bouncers on nginx and mail only. Raw UDP/port scans must be handled at
+the Proxmox host, not by changing CT 100.

@@ -7,16 +7,6 @@
     ../hosts.nix
   ];
 
-  # Enforce CrowdSec decisions from the central LAPI on nixnginx. WireGuard
-  # itself has no useful application logs, so this node only runs the
-  # firewall bouncer; detections come from nginx and mail.
-  services.crowdsec-firewall-bouncer = {
-    enable = true;
-    registerBouncer.enable = false;
-    secrets.apiKeyPath = "/var/lib/secrets/crowdsec/wireguard-bouncer.key";
-    settings.api_url = "http://10.20.20.14:8080";
-  };
-
   # Enable IP Forwarding in the kernel (essential for routing client traffic)
   boot.kernel.sysctl = {
     "net.ipv4.ip_forward" = 1;

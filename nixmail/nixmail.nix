@@ -1115,7 +1115,7 @@ EOF
     hub.collections = [ "crowdsecurity/postfix" "crowdsecurity/dovecot" ];
     settings.general.api.server.enable = false;
     settings.general.api.server.listen_uri = "127.0.0.1:8080";
-    settings.lapi.credentialsFile = "/var/lib/secrets/crowdsec/mail-machine.yaml";
+    settings.lapi.credentialsFile = "/var/lib/crowdsec/mail-machine.yaml";
     settings.general.prometheus.listen_addr = "0.0.0.0";
     localConfig.acquisitions = [
       {
@@ -1134,7 +1134,7 @@ EOF
     enable = true;
     # Pull decisions from the central LAPI on nixnginx.
     registerBouncer.enable = false;
-    secrets.apiKeyPath = "/var/lib/secrets/crowdsec/mail-bouncer.key";
+    secrets.apiKeyPath = "/var/lib/crowdsec/mail-bouncer.key";
     settings.api_url = "http://10.20.20.14:8080";
   };
   # Same NixOS 26.05 crowding module workarounds as on nixnginx: shared

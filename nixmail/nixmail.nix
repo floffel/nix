@@ -247,12 +247,17 @@ in
       };
 
       master = {
-        smtp = {
-          type = "inet";
-          private = false;
+        # Do NOT override the module's `smtp` entry: that is the outbound
+        # `smtp unix` transport the queue manager uses for every external
+        # domain. Port 25 is the separate `smtp_inet` entry (name = "smtp",
+        # type = "inet"); only its command is switched to postscreen here.
+        # Overriding `smtp` with an inet listener removes the outbound
+        # transport and makes every external delivery fail with
+        # "mail transport unavailable" (dsn=4.3.0).
+        smtp_inet = {
+          command = "postscreen";
           chroot = false;
           maxproc = 1;
-          command = "postscreen";
         };
         smtpd = {
           type = "unix";

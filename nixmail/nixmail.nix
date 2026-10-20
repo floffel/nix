@@ -1004,8 +1004,8 @@ EOF
       Environment = [
         "MAIL_API_ADDR=10.20.20.13"
         "MAIL_API_PORT=8081"
-        "MAIL_API_ALLOW=127.0.0.1/32,::1/128,10.20.20.24/32,fd01::24/128"
         "MAIL_API_MASTER_USER=mailapi"
+        "MAIL_API_OPENWEBUI_AUTH_URL=http://10.20.20.24:8080/api/v1/auths/"
       ];
       Restart = "on-failure";
       RestartSec = "5s";

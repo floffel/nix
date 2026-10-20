@@ -12,7 +12,7 @@ let
       type = "openapi";
       url = "http://10.20.20.13:8081";
       path = "/openapi.json";
-      auth_type = "none";
+      auth_type = "session";
       key = "";
       config = {
         enable = true;
@@ -72,13 +72,11 @@ in
       OPENAI_API_KEY = "x";
       ENABLE_OLLAMA_API = "False"; # Disable local Ollama since we use remote OpenAI API
 
-      # Forward the authenticated user's identity (including e-mail) to
-      # OpenAPI tool servers. The mail bridge relies on this header to know
-      # whose mailbox to open; Open WebUI derives it from the OIDC session.
-      ENABLE_FORWARD_USER_INFO_HEADERS = "True";
-
       # Declarative tool server list (also seeded into the DB by the
-      # open-webui-tool-server oneshot for existing installations).
+      # open-webui-tool-server oneshot for existing installations). The
+      # "session" auth type sends the logged-in user's Open WebUI session
+      # token; the mail bridge resolves it via /api/v1/auths/ and then
+      # impersonates exactly that user's mailbox (read-only).
       TOOL_SERVER_CONNECTIONS = builtins.toJSON mailToolServer;
     };
   };

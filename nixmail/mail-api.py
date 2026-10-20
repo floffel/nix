@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 """Read-only IMAP API for Open WebUI.
 
-Open WebUI calls this as an OpenAPI tool server and forwards the
-authenticated user's e-mail address in X-OpenWebUI-User-Email (the header
-name is Open WebUI's default). The API impersonates exactly that mailbox via
-a Dovecot master user and never accepts a user/mailbox identity from the
-model. Everything is read-only: no flags are set, nothing is moved/deleted.
+Open WebUI calls this as an OpenAPI tool server and forwards the logged-in
+user's session token (tool server auth_type "session"). The API verifies that
+token by asking Open WebUI's /api/v1/auths/ endpoint who it belongs to, then
+impersonates exactly that mailbox via a Dovecot master user. The model can
+never choose a user or mailbox identity. Everything is read-only: no flags are
+set, nothing is moved or deleted.
 """
 
 import email
-import html
 import imaplib
-import ipaddress
 import json
 import os
 import re
 import sys
+import urllib.error
+import urllib.request
 from email.header import decode_header, make_header
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -26,15 +27,13 @@ PORT = int(os.environ.get("MAIL_API_PORT", "8081"))
 MASTER_USER = os.environ.get("MAIL_API_MASTER_USER", "mailapi")
 IMAP_HOST = os.environ.get("MAIL_API_IMAP_HOST", "127.0.0.1")
 IMAP_PORT = int(os.environ.get("MAIL_API_IMAP_PORT", "143"))
+OPEN_WEBUI_AUTH_URL = os.environ.get(
+    "MAIL_API_OPENWEBUI_AUTH_URL", "http://10.20.20.24:8080/api/v1/auths/"
+)
 MAX_BODY = 20000
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 50
 
-ALLOWED_NETS = [
-    ipaddress.ip_network(n.strip())
-    for n in os.environ.get("MAIL_API_ALLOW", "").split(",")
-    if n.strip()
-]
 USER_RE = re.compile(r"^[a-z0-9][a-z0-9._%+-]*@minnecker\.com$")
 MAILBOX_RE = re.compile(r"^[A-Za-z0-9._@/-]+$")
 
@@ -46,6 +45,25 @@ def read_master_password() -> str:
 
 
 MASTER_PASSWORD = read_master_password()
+
+
+def verify_user(auth_header: str | None) -> str | None:
+    """Return the Open WebUI user's e-mail for a valid session token."""
+    if not auth_header or not auth_header.lower().startswith("bearer "):
+        return None
+    token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        return None
+    req = urllib.request.Request(
+        OPEN_WEBUI_AUTH_URL, headers={"Authorization": f"Bearer {token}"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.load(resp)
+    except (urllib.error.URLError, ValueError, OSError):
+        return None
+    email_addr = (data.get("email") or "").strip().lower()
+    return email_addr if USER_RE.match(email_addr) else None
 
 
 def hdr(value) -> str:
@@ -325,13 +343,6 @@ class Handler(BaseHTTPRequestHandler):
             "%s %s\n" % (self.address_string(), fmt % args)
         )
 
-    def _peer_allowed(self) -> bool:
-        try:
-            peer = ipaddress.ip_address(self.client_address[0])
-        except ValueError:
-            return False
-        return any(peer in net for net in ALLOWED_NETS)
-
     def _send(self, status: int, payload) -> None:
         data = json.dumps(payload).encode("utf-8")
         self.send_response(status)
@@ -341,18 +352,15 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
-        if not self._peer_allowed():
-            return self._send(403, {"error": "forbidden"})
-
         parsed = urlparse(self.path)
         if parsed.path == "/openapi.json":
             return self._send(200, SPEC)
         if parsed.path == "/health":
             return self._send(200, {"status": "ok"})
 
-        user = (self.headers.get("X-OpenWebUI-User-Email") or "").strip().lower()
-        if not USER_RE.match(user):
-            return self._send(401, {"error": "missing or invalid user header"})
+        user = verify_user(self.headers.get("Authorization"))
+        if not user:
+            return self._send(401, {"error": "authentication required"})
 
         params = parse_qs(parsed.query)
         try:

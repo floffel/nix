@@ -43,20 +43,13 @@
 
     # Custom jail definitions — nginx error log based.
     jails = {
-      # Default settings for all jails: wrap actionban/actionunban to use
-      # IPSET instead of creating a new iptables chain per jail.  This is
-      # more efficient when many jails ban the same offender — all go into
-      # one IPSET (f2b-nginx) and a single DROP rule in the f2b-nginx chain.
-      # Redis settings store ban data on nixpostgres for persistence.
+      # Use the standard per-jail iptables-multiport action (each jail has
+      # its own f2b-<jail> chain, inserted into INPUT for the jail's ports).
+      # Redis on nixpostgres stores fail2ban's ban database so bans survive
+      # a fail2ban restart.
       DEFAULT.settings = {
         "redis-server" = "nixpostgres";
         "redis-port" = 6379;
-        actionban = ''
-          iptables -I f2b-nginx 0 -s <ip> -j DROP
-        '';
-        actionunban = ''
-          iptables -D f2b-nginx 0 -s <ip> -j DROP
-        '';
       };
       # OAuth2 token endpoint — catches brute-force against the public PKCE
       # client discovery and token URLs. These are intentionally public but
@@ -137,30 +130,6 @@
     journalmatch = _SYSTEMD_UNIT=nginx.service
   '';
 
-  # Ensure the shared iptables fail2ban chain exists before any jail starts.
-  # networking.firewall.extraRules was removed in NixOS 26.05 — allowedTCPPorts
-  # above covers HTTP/HTTPS.
-  systemd.services.fail2ban-iptables-chain = {
-    description = "Create f2b-nginx iptables chain for fail2ban";
-    wantedBy = [ "fail2ban.service" ];
-    before = [ "fail2ban.service" ];
-    after = [ "firewall.service" ];
-    wants = [ "firewall.service" ];
-    serviceConfig.Type = "oneshot";
-    path = [ pkgs.iptables ];
-    script = ''
-      if ! iptables -L f2b-nginx -n >/dev/null 2>&1; then
-        iptables -N f2b-nginx
-        iptables -A f2b-nginx -j RETURN
-      fi
-      # The jail actions only insert rules into f2b-nginx. Without this jump
-      # the chain has zero references and every ban is a no-op.
-      if ! iptables -C INPUT -j f2b-nginx >/dev/null 2>&1; then
-        iptables -I INPUT 1 -j f2b-nginx
-      fi
-    '';
-  };
-
   # Networking
   networking = {
     hostName = "nixnginx";
@@ -168,7 +137,7 @@
     # Static IP Configuration matching the nixnginx server setup
     useDHCP = false;
 
-    # Firewall required by fail2ban (iptables rules managed manually via oneshot)
+    # Firewall; fail2ban inserts its per-jail chains into INPUT itself.
     firewall = {
       enable = true;
       # 9100 is node_exporter, scraped by nixmonitoring. It is not forwarded

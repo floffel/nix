@@ -735,7 +735,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"lxc\" and (r._field == \"mem\" or r._field == \"maxmem\") and r.host =~ /${guest:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"host\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.maxmem and r.maxmem > 0 then r.mem / r.maxmem * 100.0 else 0.0 }))\n  |> group(columns: [\"host\"])",
+          "query": "mem = from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"lxc\" and r._field == \"mem\" and r.host =~ /${guest:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last)\n  |> keep(columns: [\"_time\", \"host\", \"_value\"])\n  |> rename(columns: {_value: \"mem\"})\nmaxmem = from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"lxc\" and r._field == \"maxmem\" and r.host =~ /${guest:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last)\n  |> keep(columns: [\"_time\", \"host\", \"_value\"])\n  |> rename(columns: {_value: \"maxmem\"})\njoin(tables: {mem: mem, maxmem: maxmem}, on: [\"_time\", \"host\"])\n  |> filter(fn: (r) => r.maxmem > 0 and r.mem >= 0)\n  |> map(fn: (r) => ({ r with _value: r.mem / r.maxmem * 100.0 }))\n  |> group(columns: [\"host\"])",
           "refId": "A"
         }
       ],
@@ -827,7 +827,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"lxc\" and (r._field == \"disk\" or r._field == \"maxdisk\") and r.host =~ /${guest:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"host\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.maxdisk and r.maxdisk > 0 then r.disk / r.maxdisk * 100.0 else 0.0 }))\n  |> group(columns: [\"host\"])",
+          "query": "disk = from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"lxc\" and r._field == \"disk\" and r.host =~ /${guest:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last)\n  |> keep(columns: [\"_time\", \"host\", \"_value\"])\n  |> rename(columns: {_value: \"disk\"})\nmaxdisk = from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"system\" and r.object == \"lxc\" and r._field == \"maxdisk\" and r.host =~ /${guest:regex}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: last)\n  |> keep(columns: [\"_time\", \"host\", \"_value\"])\n  |> rename(columns: {_value: \"maxdisk\"})\njoin(tables: {disk: disk, maxdisk: maxdisk}, on: [\"_time\", \"host\"])\n  |> filter(fn: (r) => r.maxdisk > 0 and r.disk >= 0)\n  |> map(fn: (r) => ({ r with _value: r.disk / r.maxdisk * 100.0 }))\n  |> group(columns: [\"host\"])",
           "refId": "A"
         }
       ],
@@ -925,7 +925,7 @@
             "type": "influxdb",
             "uid": "influxdb"
           },
-          "query": "from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"memory\" and r.object == \"nodes\" and (r._field == \"used\" or r._field == \"total\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: max)\n  |> pivot(rowKey: [\"_time\", \"host\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: if exists r.total and r.total > 0 then r.used / r.total * 100.0 else 0.0 }))\n  |> group(columns: [\"host\"])",
+          "query": "total = from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"memory\" and r.object == \"nodes\" and r._field == \"memtotal\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last)\n  |> keep(columns: [\"_time\", \"host\", \"_value\"])\n  |> rename(columns: {_value: \"total\"})\navail = from(bucket: \"proxmox\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"memory\" and r.object == \"nodes\" and r._field == \"memavailable\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last)\n  |> keep(columns: [\"_time\", \"host\", \"_value\"])\n  |> rename(columns: {_value: \"avail\"})\njoin(tables: {total: total, avail: avail}, on: [\"_time\", \"host\"])\n  |> filter(fn: (r) => r.total > 0 and r.avail >= 0)\n  |> map(fn: (r) => ({ r with _value: (r.total - r.avail) / r.total * 100.0 }))\n  |> group(columns: [\"host\"])",
           "refId": "A"
         }
       ],

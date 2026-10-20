@@ -141,7 +141,8 @@
       "targets": [
         {
           "expr": "sum(count_over_time({systemd_unit=\"fail2ban.service\"} |= \"Ban \" [24h]))",
-          "refId": "A"
+          "refId": "A",
+          "instant": true
         }
       ]
     },
@@ -339,7 +340,7 @@
     {
       "id": 10,
       "type": "logs",
-      "title": "CrowdSec decisions log",
+      "title": "CrowdSec agent events (excluding LAPI polling)",
       "datasource": {
         "type": "loki",
         "uid": "loki"
@@ -358,7 +359,7 @@
       },
       "targets": [
         {
-          "expr": "{systemd_unit=\"crowdsec.service\"} |~ \"decision|Decision|ban|Ban\"",
+          "expr": "{systemd_unit=\"crowdsec.service\"} != \"module=lapi\" |~ \"level=(info|warning|error)\"",
           "refId": "A"
         }
       ]

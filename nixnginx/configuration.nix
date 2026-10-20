@@ -124,6 +124,9 @@
     hub.collections = [ "crowdsecurity/nginx" ];
     settings.general.api.server.enable = true;
     settings.general.api.server.listen_uri = "127.0.0.1:8080";
+    # The NixOS module requires a credentials path when the local LAPI is
+    # enabled; cscli writes the machine credentials there.
+    settings.lapi.credentialsFile = "/var/lib/crowdsec/local-api-credentials";
     # Expose CrowdSec's Prometheus endpoint on the service LAN for scraping.
     settings.general.prometheus.listen_addr = "0.0.0.0";
     localConfig.acquisitions = [

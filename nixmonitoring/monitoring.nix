@@ -46,7 +46,7 @@
     # 90 days of metrics; size cap as a safety net. Increase the container
     # disk when the cap is reached (currently ~726 MB for 15 days).
     retentionTime = "90d";
-    extraFlags = [ "--storage.tsdb.retention.size=40GB" ];
+    extraFlags = [ "--storage.tsdb.retention.size=10GB" ];
     
     scrapeConfigs = [
       # Scraping node_exporter on all containers for system resource metrics.

@@ -1107,6 +1107,50 @@ EOF
 
 
 
+  # CrowdSec: parse Postfix/Dovecot logs from journald and ban abusive
+  # source IPs at the firewall. This adds protocol-aware detections on top of
+  # rspamd (which filters message content, not SMTP/IMAP client behaviour).
+  services.crowdsec = {
+    enable = true;
+    hub.collections = [ "crowdsecurity/postfix" "crowdsecurity/dovecot" ];
+    settings.general.api.server.enable = true;
+    settings.general.api.server.listen_uri = "127.0.0.1:8080";
+    settings.lapi.credentialsFile = "/var/lib/crowdsec/local-api-credentials";
+    settings.general.prometheus.listen_addr = "0.0.0.0";
+    localConfig.acquisitions = [
+      {
+        source = "journalctl";
+        journalctl_filter = [ "_SYSTEMD_UNIT=postfix.service" ];
+        labels = { type = "syslog"; };
+      }
+      {
+        source = "journalctl";
+        journalctl_filter = [ "_SYSTEMD_UNIT=dovecot.service" ];
+        labels = { type = "syslog"; };
+      }
+    ];
+  };
+  services.crowdsec-firewall-bouncer = {
+    enable = true;
+    registerBouncer.enable = true;
+  };
+  # Same NixOS 26.05 crowding module workarounds as on nixnginx: shared
+  # /var/lib/crowdsec must be writable by the static crowdsec user, and the
+  # bouncer's raw cscli call needs /etc/crowdsec/config.yaml.
+  systemd.services.crowdsec.serviceConfig.DynamicUser = lib.mkForce false;
+  systemd.services.crowdsec.serviceConfig.PrivateUsers = lib.mkForce false;
+  systemd.services.crowdsec-firewall-bouncer-register.serviceConfig.DynamicUser =
+    lib.mkForce false;
+  systemd.services.crowdsec-firewall-bouncer-register.serviceConfig.PrivateUsers =
+    lib.mkForce false;
+  systemd.services.crowdsec-firewall-bouncer-register.serviceConfig.User =
+    lib.mkForce "crowdsec";
+  systemd.services.crowdsec-firewall-bouncer-register.serviceConfig.Group =
+    lib.mkForce "crowdsec";
+  environment.etc."crowdsec/config.yaml".source =
+    (pkgs.formats.yaml { }).generate "crowdsec.yaml"
+      config.services.crowdsec.settings.general;
+
   # Notes: Ensure DKIM private key remains outside the Nix store at
   # /var/lib/secrets/mail/dkim/minnecker.com.private and is readable by rspamd.
 

@@ -148,7 +148,7 @@ def check_mailbox(name: str) -> str:
     return name
 
 
-def fetch_headers(conn, uid: bytes) -> dict:
+def fetch_headers(conn, uid: bytes, mailbox: str) -> dict:
     typ, data = conn.fetch(
         uid, "(BODY.PEEK[HEADER.FIELDS (FROM TO CC SUBJECT DATE MESSAGE-ID)])"
     )
@@ -156,6 +156,7 @@ def fetch_headers(conn, uid: bytes) -> dict:
     msg = email.message_from_bytes(raw)
     return {
         "uid": uid.decode(),
+        "mailbox": mailbox,
         "from": hdr(msg.get("From")),
         "to": hdr(msg.get("To")),
         "cc": hdr(msg.get("Cc")),
@@ -172,7 +173,7 @@ def list_recent(user: str, mailbox: str, limit: int) -> list:
         if typ != "OK":
             raise RuntimeError("search failed")
         uids = data[0].split()[-limit:]
-        return [fetch_headers(conn, uid) for uid in reversed(uids)]
+        return [fetch_headers(conn, uid, mailbox) for uid in reversed(uids)]
     finally:
         try:
             conn.logout()
@@ -189,7 +190,7 @@ def search(user: str, mailbox: str, query: str, limit: int) -> list:
         if typ != "OK":
             raise RuntimeError("search failed")
         uids = data[0].split()[-limit:]
-        return [fetch_headers(conn, uid) for uid in reversed(uids)]
+        return [fetch_headers(conn, uid, mailbox) for uid in reversed(uids)]
     finally:
         try:
             conn.logout()

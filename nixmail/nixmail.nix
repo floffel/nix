@@ -997,6 +997,8 @@ EOF
     wantedBy = [ "multi-user.target" ];
     after = [ "dovecot.service" "mail-api-secrets.service" ];
     requires = [ "dovecot.service" "mail-api-secrets.service" ];
+    # pdftotext is used to extract text from PDF attachments.
+    path = [ pkgs.poppler_utils ];
     serviceConfig = {
       DynamicUser = true;
       ExecStart = "${pkgs.python3}/bin/python3 ${./mail-api.py}";

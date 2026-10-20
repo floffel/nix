@@ -14,6 +14,7 @@ import imaplib
 import json
 import os
 import re
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -128,12 +129,84 @@ def body_text(msg) -> str:
 
 
 def attachments(msg):
-    names = []
+    items = []
+    index = 0
     for part in msg.walk():
+        if part.get_content_maintype() == "multipart":
+            continue
         name = part.get_filename()
-        if name:
-            names.append(hdr(name))
-    return names
+        if not name:
+            continue
+        payload = part.get_payload(decode=True) or b""
+        items.append(
+            {
+                "index": index,
+                "name": hdr(name),
+                "content_type": part.get_content_type(),
+                "size": len(payload),
+            }
+        )
+        index += 1
+    return items
+
+
+def read_attachment(user: str, mailbox: str, uid: str, index: int) -> dict:
+    if not uid.isdigit():
+        raise ValueError("invalid uid")
+    conn = imap_for(user)
+    try:
+        conn.select(check_mailbox(mailbox), readonly=True)
+        typ, data = conn.fetch(uid.encode(), "(BODY.PEEK[])")
+        if typ != "OK" or not data or not isinstance(data[0], tuple):
+            raise LookupError("message not found")
+        msg = email.message_from_bytes(data[0][1])
+        parts = []
+        for part in msg.walk():
+            if part.get_content_maintype() == "multipart":
+                continue
+            if part.get_filename():
+                parts.append(part)
+        if index < 0 or index >= len(parts):
+            raise LookupError("attachment not found")
+        part = parts[index]
+        payload = part.get_payload(decode=True) or b""
+        ctype = part.get_content_type()
+        result = {
+            "uid": uid,
+            "mailbox": mailbox,
+            "index": index,
+            "name": hdr(part.get_filename() or ""),
+            "content_type": ctype,
+            "size": len(payload),
+            "text": None,
+        }
+        if ctype.startswith("text/") or ctype in (
+            "application/json",
+            "application/xml",
+            "message/rfc822",
+        ):
+            result["text"] = payload.decode(
+                part.get_content_charset() or "utf-8", "replace"
+            )[:MAX_BODY]
+        elif ctype == "application/pdf":
+            try:
+                proc = subprocess.run(
+                    ["pdftotext", "-", "-"],
+                    input=payload,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    timeout=20,
+                )
+                if proc.returncode == 0:
+                    result["text"] = proc.stdout.decode("utf-8", "replace")[:MAX_BODY]
+            except Exception:
+                pass
+        return result
+    finally:
+        try:
+            conn.logout()
+        except Exception:
+            pass
 
 
 def imap_for(user: str) -> imaplib.IMAP4:
@@ -143,7 +216,13 @@ def imap_for(user: str) -> imaplib.IMAP4:
 
 
 def check_mailbox(name: str) -> str:
-    if not name or not MAILBOX_RE.match(name) or ".." in name:
+    if (
+        not name
+        or name.startswith("/")
+        or "//" in name
+        or ".." in name
+        or not MAILBOX_RE.match(name)
+    ):
         raise ValueError("invalid mailbox")
     return name
 
@@ -305,6 +384,37 @@ SPEC = {
                 "responses": {"200": {"description": "Matching messages"}},
             }
         },
+        "/mail/attachment": {
+            "get": {
+                "operationId": "read_attachment",
+                "summary": "Extract the text of one attachment",
+                "description": (
+                    "Read attachment content by its index (see the attachments list "
+                    "returned by read_mail). Text and PDF attachments are converted "
+                    "to text; other binary types are reported without content."
+                ),
+                "parameters": [
+                    {
+                        "name": "uid",
+                        "in": "query",
+                        "required": True,
+                        "schema": {"type": "string"},
+                    },
+                    {
+                        "name": "mailbox",
+                        "in": "query",
+                        "schema": {"type": "string", "default": "INBOX"},
+                    },
+                    {
+                        "name": "index",
+                        "in": "query",
+                        "required": True,
+                        "schema": {"type": "integer"},
+                    },
+                ],
+                "responses": {"200": {"description": "Attachment metadata and text"}},
+            }
+        },
         "/mail/message": {
             "get": {
                 "operationId": "read_mail",
@@ -387,6 +497,17 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(400, {"error": "uid is required"})
                 return self._send(
                     200, {"message": read_message(user, mailbox, uid)}
+                )
+            if parsed.path == "/mail/attachment":
+                uid = (params.get("uid") or [""])[0]
+                if not uid:
+                    return self._send(400, {"error": "uid is required"})
+                try:
+                    index = int((params.get("index") or [""])[0])
+                except ValueError:
+                    return self._send(400, {"error": "invalid index"})
+                return self._send(
+                    200, {"attachment": read_attachment(user, mailbox, uid, index)}
                 )
             if parsed.path == "/mail/mailboxes":
                 return self._send(200, {"mailboxes": mailboxes(user)})

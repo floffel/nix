@@ -28,7 +28,7 @@ MASTER_USER = os.environ.get("MAIL_API_MASTER_USER", "mailapi")
 IMAP_HOST = os.environ.get("MAIL_API_IMAP_HOST", "127.0.0.1")
 IMAP_PORT = int(os.environ.get("MAIL_API_IMAP_PORT", "143"))
 OPEN_WEBUI_AUTH_URL = os.environ.get(
-    "MAIL_API_OPENWEBUI_AUTH_URL", "http://10.20.20.24:8080/api/v1/auths/"
+    "MAIL_API_OPENWEBUI_AUTH_URL", "http://[fd01::24]:8080/api/v1/auths/"
 )
 MAX_BODY = 20000
 DEFAULT_LIMIT = 10

@@ -1005,7 +1005,8 @@ EOF
         "MAIL_API_ADDR=10.20.20.13"
         "MAIL_API_PORT=8081"
         "MAIL_API_MASTER_USER=mailapi"
-        "MAIL_API_OPENWEBUI_AUTH_URL=http://10.20.20.24:8080/api/v1/auths/"
+        # Open WebUI binds an IPv6-only [::]:8080, so use its v6 address.
+        "MAIL_API_OPENWEBUI_AUTH_URL=http://[fd01::24]:8080/api/v1/auths/"
       ];
       Restart = "on-failure";
       RestartSec = "5s";

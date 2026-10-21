@@ -216,6 +216,19 @@ in
         smtpd_recipient_restrictions = "permit_sasl_authenticated, reject_unauth_destination, reject_unknown_recipient_domain";
         smtpd_helo_restrictions = "permit_sasl_authenticated, reject_invalid_hostname, reject_unknown_hostname, reject_non_fqdn_hostname";
         smtpd_helo_required = "yes";
+
+        # Baseline SMTP anti-abuse limits (Postfix defaults are unlimited).
+        # These are per-client, per-minute limits; generous for normal users
+        # but they cap password spraying, relay probing and compromised-
+        # account bursts before fail2ban/CrowdSec has to intervene.
+        disable_vrfy_command = "yes";
+        smtpd_client_connection_count_limit = "20";
+        smtpd_client_connection_rate_limit = "30";
+        smtpd_client_message_rate_limit = "30";
+        smtpd_client_recipient_rate_limit = "60";
+        smtpd_client_new_tls_session_rate_limit = "30";
+        smtpd_client_auth_rate_limit = "10";
+
         biff = "no";
 
         virtual_alias_maps = "proxy:ldap:/var/lib/secrets/mail/postfix/ldap-aliases.cf, hash:/etc/postfix/catchall";

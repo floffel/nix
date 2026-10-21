@@ -1175,6 +1175,7 @@ EOF
     enable = true;
     # Same proxmox-lxc empty-hostname caveat as on nixnginx.
     name = "nixmail";
+    autoUpdateService = true;
     hub.collections = [ "crowdsecurity/postfix" "crowdsecurity/dovecot" ];
     # The collection install does not enable the base parsers; without these the
     # journald lines never reach postfix-logs and every line is unparsed.
@@ -1197,6 +1198,17 @@ EOF
         source = "journalctl";
         journalctl_filter = [ "_SYSTEMD_UNIT=dovecot.service" ];
         labels = { type = "syslog"; };
+      }
+    ];
+    # Never ban the Proxmox host's own public addresses (DNAT/hairpin traffic).
+    localConfig.parsers.s02Enrich = [
+      {
+        name = "local/whitelist-hosts";
+        description = "Whitelist the Proxmox host public addresses";
+        whitelist = {
+          reason = "proxmox host public ip";
+          cidr = [ "178.63.124.242/32" "195.201.13.200/32" ];
+        };
       }
     ];
   };

@@ -31,6 +31,7 @@
     # false, so the module's hostname default would register an unnamed LAPI
     # machine (and produce credentials without a login). Pin the name.
     name = "nixnginx";
+    autoUpdateService = true;
     hub.collections = [ "crowdsecurity/nginx" ];
     # The collection install does not enable the base parsers; without these the
     # journald lines never reach nginx-logs and every line is unparsed.
@@ -51,6 +52,17 @@
         source = "journalctl";
         journalctl_filter = [ "_SYSTEMD_UNIT=nginx.service" ];
         labels = { type = "nginx"; };
+      }
+    ];
+    # Never ban the Proxmox host's own public addresses (DNAT/hairpin traffic).
+    localConfig.parsers.s02Enrich = [
+      {
+        name = "local/whitelist-hosts";
+        description = "Whitelist the Proxmox host public addresses";
+        whitelist = {
+          reason = "proxmox host public ip";
+          cidr = [ "178.63.124.242/32" "195.201.13.200/32" ];
+        };
       }
     ];
   };

@@ -259,11 +259,20 @@ in
           chroot = false;
           maxproc = 1;
         };
+        # postscreen hands the connection to the private smtpd socket.
+        # `private = false` writes public/smtpd and every inbound SMTP
+        # connection fails with "cannot connect to private/smtpd".
         smtpd = {
           type = "unix";
-          private = false;
+          private = true;
           chroot = false;
           command = "smtpd";
+        };
+        dnsblog = {
+          type = "unix";
+          private = true;
+          chroot = false;
+          command = "dnsblog";
         };
         submission = {
           type = "inet";

@@ -1102,16 +1102,17 @@ EOF
     script = ''
       set -euo pipefail
       OUT=/var/lib/node-exporter-textfile/dovecot.prom
-      TMP=$(mktemp)
+      TMP=$(mktemp /var/lib/node-exporter-textfile/.dovecot-prom.XXXXXX)
+      trap 'rm -f "$TMP"' EXIT
       # Dovecot 2.4 removed the --format prometheus option; parse the
       # tab-separated stats dump. The dump only contains rows once the
       # stats service has collected events.
       doveadm stats dump 2>/dev/null | \
         ${pkgs.gawk}/bin/gawk 'BEGIN{FS="\t"} NR>1 && $1!="" {gsub(/\./,"_",$1); gsub(/[^A-Za-z0-9_]/,"_",$2); printf "dovecot_%s_%s_count %s\n", $1, $2, $3; printf "dovecot_%s_%s_sum %s\n", $1, $2, $4}' > "$TMP" || true
       if [ -s "$TMP" ]; then
-        install -m 0644 -o node-exporter -g node-exporter "$TMP" "$OUT"
+        chmod 0644 "$TMP"
+        mv -f "$TMP" "$OUT"
       fi
-      rm -f "$TMP"
     '';
   };
   systemd.timers.dovecot-stats-exporter = {
@@ -1132,10 +1133,13 @@ EOF
     script = ''
       set -euo pipefail
       OUT=/var/lib/node-exporter-textfile/postfix.prom
-      TMP=$(mktemp)
+      TMP=$(mktemp /var/lib/node-exporter-textfile/.postfix-prom.XXXXXX)
+      trap 'rm -f "$TMP"' EXIT
       postqueue -j 2>/dev/null | ${pkgs.python3}/bin/python3 ${./queue-metrics.py} > "$TMP" || true
-      install -m 0644 -o node-exporter -g node-exporter "$TMP" "$OUT"
-      rm -f "$TMP"
+      if [ -s "$TMP" ]; then
+        chmod 0644 "$TMP"
+        mv -f "$TMP" "$OUT"
+      fi
     '';
   };
   systemd.timers.postfix-queue-exporter = {

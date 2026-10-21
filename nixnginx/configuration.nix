@@ -179,11 +179,14 @@
     script = ''
       set -euo pipefail
       OUT=/var/lib/node-exporter-textfile/crowdsec.prom
-      TMP=$(mktemp)
+      TMP=$(mktemp /var/lib/node-exporter-textfile/.crowdsec-prom.XXXXXX)
+      trap 'rm -f "$TMP"' EXIT
       ${pkgs.crowdsec}/bin/cscli -c /etc/crowdsec/config.yaml decisions list -o json 2>/dev/null \
         | ${pkgs.python3}/bin/python3 ${../nixmonitoring/crowdsec-decisions.py} > "$TMP" || true
-      install -m 0644 -o node-exporter -g node-exporter "$TMP" "$OUT"
-      rm -f "$TMP"
+      if [ -s "$TMP" ]; then
+        chmod 0644 "$TMP"
+        mv -f "$TMP" "$OUT"
+      fi
     '';
   };
   systemd.timers.crowdsec-decisions-exporter = {

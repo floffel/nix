@@ -72,6 +72,13 @@ in
       OPENAI_API_KEY = "x";
       ENABLE_OLLAMA_API = "False"; # Disable local Ollama since we use remote OpenAI API
 
+      # OCR images embedded in PDFs. Without this, Open WebUI's default
+      # PyPDFLoader only extracts the PDF text layer; scanned/image-only PDFs
+      # yield no text and the document appears unparseable. The Nix package
+      # ships rapidocr (with its models), so this works without an external
+      # Tika/Docling service.
+      PDF_EXTRACT_IMAGES = "True";
+
       # Declarative tool server list (also seeded into the DB by the
       # open-webui-tool-server oneshot for existing installations). The
       # "session" auth type sends the logged-in user's Open WebUI session
@@ -140,10 +147,11 @@ in
     script = ''
       set -euo pipefail
       OUT=/var/lib/node-exporter-textfile/openwebui.prom
-      TMP=$(mktemp)
+      TMP=$(mktemp /var/lib/node-exporter-textfile/.openwebui-prom.XXXXXX)
+      trap 'rm -f "$TMP"' EXIT
       ${pkgs.python3}/bin/python3 ${./usage-metrics.py} > "$TMP"
-      install -m 0644 -o node-exporter -g node-exporter "$TMP" "$OUT"
-      rm -f "$TMP"
+      chmod 0644 "$TMP"
+      mv -f "$TMP" "$OUT"
     '';
   };
   systemd.timers.openwebui-usage-exporter = {

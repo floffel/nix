@@ -1144,6 +1144,51 @@ EOF
 
 
 
+  # CrowdSec's stock Postfix parser does not match journald lines in this
+  # setup (it filters on a syslog program field that journalctl does not
+  # provide), so Postfix HELO/relay rejects are handled by fail2ban using the
+  # systemd journal backend. CrowdSec still handles HTTP and central/shared
+  # decisions.
+  services.fail2ban = {
+    enable = true;
+    jails = {
+      postfix-helo = {
+        enabled = true;
+        filter = "postfix-helo";
+        settings = {
+          backend = "systemd";
+          journalmatch = "_SYSTEMD_UNIT=postfix.service";
+          port = "25,465,587";
+          maxretry = 1;
+          findtime = "10m";
+          bantime = "1d";
+        };
+      };
+      postfix-relay = {
+        enabled = true;
+        filter = "postfix-relay";
+        settings = {
+          backend = "systemd";
+          journalmatch = "_SYSTEMD_UNIT=postfix.service";
+          port = "25,465,587";
+          maxretry = 1;
+          findtime = "10m";
+          bantime = "7d";
+        };
+      };
+    };
+  };
+  environment.etc."fail2ban/filter.d/postfix-helo.conf".text = ''
+    [Definition]
+    failregex = ^NOQUEUE: reject: RCPT from .*\[<HOST>\]: [0-9]+ [0-9.]+ <[^>]*>: Helo command rejected: .*$
+    ignoreregex =
+  '';
+  environment.etc."fail2ban/filter.d/postfix-relay.conf".text = ''
+    [Definition]
+    failregex = ^NOQUEUE: reject: RCPT from .*\[<HOST>\]: [0-9]+ [0-9.]+ <[^>]*>: Relay access denied.*$
+    ignoreregex =
+  '';
+
   # CrowdSec: parse Postfix/Dovecot logs from journald and ban abusive
   # source IPs at the firewall. This adds protocol-aware detections on top of
   # rspamd (which filters message content, not SMTP/IMAP client behaviour).

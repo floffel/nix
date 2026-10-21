@@ -414,6 +414,7 @@
           },
           "editorMode": "code",
           "expr": "sum by (user) (count_over_time({systemd_unit=\"dovecot.service\"} |= \"Logged in: user=\" | regexp \"Logged in: user=<(?P<user>[^>]+)>\" [$__range]))",
+          "legendFormat": "{{user}}",
           "queryType": "range",
           "refId": "A"
         }
@@ -1074,7 +1075,7 @@
         "graphMode": "none",
         "reduceOptions": {
           "calcs": [
-            "sum"
+            "lastNotNull"
           ],
           "fields": "",
           "values": false
@@ -1088,6 +1089,7 @@
             "uid": "prometheus"
           },
           "expr": "sum(wireguard_peer_connected)",
+          "instant": true,
           "refId": "A"
         }
       ],

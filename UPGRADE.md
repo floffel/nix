@@ -177,6 +177,12 @@ systemctl is-active container-upgrade-build.service
   `mail transport unavailable` (`dsn=4.3.0`), check that
   `postconf -M | grep '^smtp'` shows **both** `smtp unix ... smtp` and
   `smtp inet ... postscreen`.
+- **Roundcube markasjunk:** the `nixnginx` package override patches
+  `plugins/markasjunk/markasjunk{,.min}.js` so the Spam button passes the
+  server-returned UIDs to `move_messages()`. Grep checks in the derivation
+  fail the build if a Roundcube/nixpkgs update changes the patch target, so
+  the fix cannot silently disappear. Re-check the sed expression after a
+  Roundcube upgrade (and remove it if upstream fixes the bug).
 - **Open WebUI 0.12.2+:** `/api/v1/auths/` requires a **human session** and
   rejects API keys. When testing the mail tool, use a real logged-in session,
   not an API key. The tool server itself uses `auth_type: "session"`, so this

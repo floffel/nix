@@ -259,12 +259,12 @@ in
           chroot = false;
           maxproc = 1;
         };
-        # postscreen hands the connection to the private smtpd socket.
-        # `private = false` writes public/smtpd and every inbound SMTP
-        # connection fails with "cannot connect to private/smtpd".
+        # postscreen hands the already-accepted connection to smtpd via a
+        # "pass" service. A unix service here makes postscreen connect to a
+        # separate socket; smtpd then sees localhost and a NUL byte instead
+        # of the real client, so every external SMTP session is dropped.
         smtpd = {
-          type = "unix";
-          private = true;
+          type = "pass";
           chroot = false;
           command = "smtpd";
         };

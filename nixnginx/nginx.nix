@@ -131,6 +131,18 @@ in
       proxy_headers_hash_bucket_size 128;
 
       brotli on;
+
+      # Per-client edge rate limiting. This is a broad DoS/flood guard for
+      # every vhost; authentication brute force is handled by fail2ban and
+      # CrowdSec, which can react to repeated failures. 30 r/s with a 60
+      # request burst allows normal page assets and Nextcloud sync while
+      # stopping request floods.
+      limit_req_zone $binary_remote_addr zone=web:20m rate=30r/s;
+      limit_conn_zone $binary_remote_addr zone=addr:20m;
+      limit_req zone=web burst=60 nodelay;
+      limit_conn addr 40;
+      limit_req_status 429;
+
       auth_ldap_cache_enabled on;
       auth_ldap_cache_expiration_time 10000;
       auth_ldap_cache_size 1000;

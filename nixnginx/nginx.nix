@@ -1007,6 +1007,14 @@ in
       cp ${./sieve_master.php} $out/plugins/sieve_master/sieve_master.php
       cp -r ${pkgs.roundcubePlugins.carddav}/plugins/carddav $out/plugins/carddav
       chmod -R u+w $out/plugins/carddav
+      # markasjunk receives the affected UIDs from the server but its JS
+      # discarded them and relied on the current message-list selection.
+      # Clicking Spam while viewing a message therefore learned it in rspamd
+      # but did not move it. Pass the UIDs through to move_messages().
+      sed -i 's/this\.move_messages(mbox);/this.move_messages(mbox, null, uids);/' \
+        $out/plugins/markasjunk/markasjunk.js
+      sed -i 's/this\.move_messages(a):/this.move_messages(a,null,n):/' \
+        $out/plugins/markasjunk/markasjunk.min.js
       cat > $out/plugins/carddav/config.inc.php <<'PHP'
       <?php
       // OAuth2 logins have no IMAP password, so the default "encrypted"

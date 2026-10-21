@@ -1180,12 +1180,12 @@ EOF
   };
   environment.etc."fail2ban/filter.d/postfix-helo.conf".text = ''
     [Definition]
-    failregex = ^NOQUEUE: reject: RCPT from .*\[<HOST>\]: [0-9]+ [0-9.]+ <[^>]*>: Helo command rejected: .*$
+    failregex = .*NOQUEUE: reject: RCPT from .*\[<HOST>\]: [0-9]+ [0-9.]+ <[^>]*>: Helo command rejected: .*$
     ignoreregex =
   '';
   environment.etc."fail2ban/filter.d/postfix-relay.conf".text = ''
     [Definition]
-    failregex = ^NOQUEUE: reject: RCPT from .*\[<HOST>\]: [0-9]+ [0-9.]+ <[^>]*>: Relay access denied.*$
+    failregex = .*NOQUEUE: reject: RCPT from .*\[<HOST>\]: [0-9]+ [0-9.]+ <[^>]*>: Relay access denied.*$
     ignoreregex =
   '';
 

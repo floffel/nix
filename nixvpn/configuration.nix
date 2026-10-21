@@ -129,9 +129,9 @@
       # its handshake field is empty.
       wg show all dump 2>/dev/null | while IFS=$'\t' read -r iface pubkey psk endpoint allowed_ips handshake rx tx keepalive; do
         [ -z "$handshake" ] && continue
-        handshake=${handshake:-0}
-        rx=${rx:-0}
-        tx=${tx:-0}
+        handshake=''${handshake:-0}
+        rx=''${rx:-0}
+        tx=''${tx:-0}
         # These fields only contain keys, IPs and ports; backslashes and quotes
         # never occur, and colons must not be escaped in label values.
         ep_clean=$(printf '%s' "$endpoint" | tr -d ' ')

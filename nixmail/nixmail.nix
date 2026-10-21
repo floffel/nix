@@ -944,14 +944,37 @@ EOF
         # Subscribe the shared folder so clients that hide unsubscribed
         # mailboxes (mobile IMAP, some desktop clients) still show it.
         doveadm mailbox subscribe -u "$member_mail" "mail_shared/$owner" >/dev/null 2>&1 || true
+        # A symlink to the owner's maildir root exposes its INBOX but does not
+        # recurse into maildir++ subfolders. Mirror each owner subfolder as a
+        # child symlink (e.g. .mail_shared.travel.test -> travel/maildir/.test)
+        # so tag folders such as travel.test@ become visible to members.
+        for sub in "$owner_path"/.[!.]*; do
+          [ -d "$sub" ] || continue
+          subname=$(basename "$sub")
+          subname=$(printf '%s' "$subname" | cut -c2-)
+          case "$subname" in
+            cur|new|tmp|dovecot*|mail_shared*) continue ;;
+          esac
+          ln -sfn "$sub" "$member_path/.mail_shared.$owner.$subname"
+          doveadm mailbox subscribe -u "$member_mail" "mail_shared/$owner/$subname" >/dev/null 2>&1 || true
+        done
+        # Drop child symlinks whose owner subfolder was removed.
+        for link in "$member_path/.mail_shared.$owner".*; do
+          [ -L "$link" ] || continue
+          [ -e "$link" ] || rm -f "$link"
+        done
         doveadm acl set -u "$owner_mail" INBOX user="$member_mail" \
           lookup read write write-seen write-deleted insert create delete expunge >/dev/null 2>&1 || true
         printf '%s\t%s\n' "$owner" "$member_mail" >> "$EXPECTED"
       done < "$MEMBERS"
 
-      # Prune shares for removed members or deleted groups.
+      # Prune shares for removed members or deleted groups. Child symlinks
+      # contain a second dot after .mail_shared.<owner> and are skipped here;
+      # they are removed together with their top-level owner link below.
       find /var/vmail -type l -name '.mail_shared.*' 2>/dev/null | while read -r link; do
-        owner=''${link##*/.mail_shared.}
+        link_base=''${link##*/}
+        owner=''${link_base#.mail_shared.}
+        case "$owner" in *.*) continue ;; esac
         member_path=''${link%/.mail_shared.*}
         member_domain=''${member_path#/var/vmail/}
         member_domain=''${member_domain%%/*}
@@ -960,6 +983,10 @@ EOF
         member_mail="$member_user@$member_domain"
         if ! grep -qxF "$owner"$'\t'"$member_mail" "$EXPECTED" 2>/dev/null; then
           doveadm mailbox unsubscribe -u "$member_mail" "mail_shared/$owner" >/dev/null 2>&1 || true
+          for child in "$member_path/.mail_shared.$owner".*; do
+            [ -L "$child" ] || continue
+            rm -f "$child"
+          done
           rm -f "$link"
           doveadm acl delete -u "$owner@minnecker.com" INBOX user="$member_mail" >/dev/null 2>&1 || true
         fi

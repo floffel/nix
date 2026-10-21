@@ -247,6 +247,19 @@
         tls_chain = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
         tls_key = "/var/lib/secrets/ssl/minnecker.com/key.pem";
 
+        # nginx (and the Proxmox host gateway for inter-container traffic)
+        # are allowed to supply X-Forwarded-For. nginx replaces the header
+        # with the real client address, so Kanidm logs the client rather than
+        # the proxy.
+        http_client_address_info = {
+          "x-forward-for" = [
+            "10.20.20.1"
+            "fd01::1"
+            "10.20.20.14"
+            "fd01::14"
+          ];
+        };
+
         role = "WriteReplica";
       };
     };

@@ -297,7 +297,9 @@ in
           proxyWebsockets = true;
           extraConfig = ''
             proxy_set_header X-Forwarded-Proto https;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            # Replace, don't append: a client-supplied X-Forwarded-For must
+            # not be trusted. Kanidm is configured to trust these proxies.
+            proxy_set_header X-Forwarded-For $remote_addr;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header Host $host;
             proxy_ssl_verify off;

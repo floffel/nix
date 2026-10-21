@@ -121,6 +121,10 @@
   # scenarios for scanners, probes and HTTP abuse.
   services.crowdsec = {
     enable = true;
+    # proxmox-lxc.nix forces networking.hostName to "" when manageHostName is
+    # false, so the module's hostname default would register an unnamed LAPI
+    # machine (and produce credentials without a login). Pin the name.
+    name = "nixnginx";
     hub.collections = [ "crowdsecurity/nginx" ];
     settings.general.api.server.enable = true;
     settings.general.api.server.listen_uri = "0.0.0.0:8080";

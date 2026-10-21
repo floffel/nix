@@ -16,6 +16,23 @@
     privileged = false;
   };
 
+  nixpkgs.overlays = [
+    (final: prev: {
+      php84 =
+        if prev.lib.versionOlder prev.php84.version "8.4.27"
+        then
+          prev.php84.overrideAttrs (_: {
+            version = "8.4.27";
+            src = prev.fetchurl {
+              url = "https://www.php.net/distributions/php-8.4.27.tar.bz2";
+              hash = "sha256-slMKh3xyL0sIyeF0owywi6wrfhkD7m6eMV8KqfX4LCQ=";
+            };
+          })
+        else prev.php84;
+      php = final.php84;
+    })
+  ];
+
   # Disable sandboxing inside the container since LXC profiles usually restrict the system calls Nix sandbox uses
   nix.settings.sandbox = false;
 

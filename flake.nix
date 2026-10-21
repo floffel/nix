@@ -176,6 +176,8 @@
           (cfg.services.fail2ban.enable or false)
           (cfg.services.nextcloud.enable or false)
           (builtins.hasAttr "nextcloud" (cfg.services.phpfpm.pools or {}))
+          (lib.versionAtLeast cfg.services.phpfpm.pools.nextcloud.phpPackage.version "8.4.27")
+          (lib.versionAtLeast cfg.services.phpfpm.pools.roundcube.phpPackage.version "8.4.27")
           (builtins.any (u: (builtins.hasAttr "isSystemUser" u) && (u.name or "" == "alloy"))
             (builtins.attrValues (cfg.users.users or {})))
           ((builtins.length (builtins.attrNames (cfg.services.prometheus.exporters or {}))) >= 1)
@@ -187,6 +189,8 @@
         errorMsgs = [
           "nginx must be enabled" "fail2ban must be enabled"
           "nextcloud must be enabled" "phpfpm nextcloud pool must exist"
+          "nextcloud PHP must be >= 8.4.27 (CVE-2026-109618, CVE-2026-109619)"
+          "roundcube PHP must be >= 8.4.27 (CVE-2026-109618, CVE-2026-109619)"
           "alloy user must exist" "node_exporter must be enabled"
           "at least 5 fail2ban jails must be defined"
           "coturn must be enabled"

@@ -34,6 +34,11 @@ in
 {
   systemd.tmpfiles.rules = [
     "d /var/vmail 0770 dovecot dovecot - -"
+    # CrowdSec GeoIP enrichment. DB-IP Lite is a free MaxMind-format
+    # alternative to MaxMind GeoLite2 (which requires an account/license).
+    "d /var/lib/crowdsec/state 0750 crowdsec crowdsec - -"
+    "L+ /var/lib/crowdsec/state/GeoLite2-City.mmdb - - - - ${pkgs.dbip-city-lite}/share/dbip/dbip-city-lite.mmdb"
+    "L+ /var/lib/crowdsec/state/GeoLite2-ASN.mmdb - - - - ${pkgs.dbip-asn-lite}/share/dbip/dbip-asn-lite.mmdb"
   ];
 
   # Generate Dovecot + Postfix LDAP config files from the shared mail
@@ -1176,6 +1181,30 @@ EOF
           bantime = "7d";
         };
       };
+      postfix-sasl = {
+        enabled = true;
+        filter = "postfix-sasl";
+        settings = {
+          backend = "systemd";
+          journalmatch = "_SYSTEMD_UNIT=postfix.service";
+          port = "25,465,587";
+          maxretry = 5;
+          findtime = "10m";
+          bantime = "1d";
+        };
+      };
+      dovecot-auth = {
+        enabled = true;
+        filter = "dovecot-auth";
+        settings = {
+          backend = "systemd";
+          journalmatch = "_SYSTEMD_UNIT=dovecot.service";
+          port = "143,993,110,995,4190";
+          maxretry = 3;
+          findtime = "10m";
+          bantime = "1d";
+        };
+      };
     };
   };
   environment.etc."fail2ban/filter.d/postfix-helo.conf".text = ''
@@ -1186,6 +1215,16 @@ EOF
   environment.etc."fail2ban/filter.d/postfix-relay.conf".text = ''
     [Definition]
     failregex = .*NOQUEUE: reject: RCPT from .*\[<HOST>\]: [0-9]+ [0-9.]+ <[^>]*>: Relay access denied.*$
+    ignoreregex =
+  '';
+  environment.etc."fail2ban/filter.d/postfix-sasl.conf".text = ''
+    [Definition]
+    failregex = .*warning: .*\[<HOST>\]: SASL (?:LOGIN|PLAIN|(?:CRAM|DIGEST)-MD5) authentication failed:.*$
+    ignoreregex =
+  '';
+  environment.etc."fail2ban/filter.d/dovecot-auth.conf".text = ''
+    [Definition]
+    failregex = .*(?:auth failed|Authentication failed).*rip=<HOST>.*$
     ignoreregex =
   '';
 

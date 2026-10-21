@@ -14,6 +14,9 @@
   # Enigma PGP support in Roundcube.
   systemd.tmpfiles.rules = [
     "d /var/lib/roundcube/enigma 0700 nginx nginx -"
+    "d /var/lib/crowdsec/state 0750 crowdsec crowdsec - -"
+    "L+ /var/lib/crowdsec/state/GeoLite2-City.mmdb - - - - ${pkgs.dbip-city-lite}/share/dbip/dbip-city-lite.mmdb"
+    "L+ /var/lib/crowdsec/state/GeoLite2-ASN.mmdb - - - - ${pkgs.dbip-asn-lite}/share/dbip/dbip-asn-lite.mmdb"
   ];
   systemd.services.phpfpm-roundcube.path = [ pkgs.gnupg ];
 

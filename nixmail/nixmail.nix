@@ -1170,47 +1170,6 @@ EOF
     ];
   };
 
-  # The upstream postfix parser filters on evt.Parsed.program, which the
-  # journalctl acquisition does not provide, so all Postfix lines were counted
-  # as unparsed and the postfix-helo-rejected/relay-denied scenarios never
-  # fired. This local parser matches the journald message directly.
-  environment.etc."crowdsec/parsers/s01-parse/zz-postfix-journal.yaml".text = ''
-    name: local/postfix-journal
-    description: "Parse Postfix journald lines without a syslog program field"
-    filter: "evt.Line.Labels.type == 'syslog' && evt.Line.Raw contains 'NOQUEUE:'"
-    pattern_syntax:
-      POSTFIX_HOSTNAME: '(%{HOSTNAME}|unknown)'
-      POSTFIX_ACTION: 'discard|dunno|filter|hold|ignore|info|prepend|redirect|replace|reject|warn'
-      RELAY: '(?:%{HOSTNAME:remote_host}(?:\[%{IP:remote_addr}\](?::[0-9]+(.[0-9]+)?)?)?)'
-      SMTP_BASIC_STATUS_CODE: '[0-9]{3}'
-      SMTP_ENHANCED_STATUS_CODE: '[0-9.]+'
-      SMTP_RETURN_CODES: '%{SMTP_BASIC_STATUS_CODE:smtp_basic_status_code}( %{SMTP_ENHANCED_STATUS_CODE:smtp_enhanced_status_code})?'
-    nodes:
-      - grok:
-          apply_on: message
-          pattern: 'NOQUEUE: %{POSTFIX_ACTION:action}: %{DATA:command} from %{RELAY}: %{SMTP_RETURN_CODES:smtp_return_codes} %{GREEDYDATA:reason}'
-          statics:
-            - meta: action
-              expression: "evt.Parsed.action"
-        nodes:
-          - filter: "evt.Parsed.reason != 'Service unavailable'"
-            grok:
-              apply_on: reason
-              pattern: "<%{DATA:helo}>: %{GREEDYDATA:reason}; %{GREEDYDATA:kvItems}"
-            statics:
-              - meta: reason
-                expression: "evt.Parsed.reason"
-    statics:
-      - meta: service
-        value: postfix
-      - meta: source_ip
-        expression: "evt.Parsed.remote_addr"
-      - meta: source_hostname
-        expression: "evt.Parsed.remote_host"
-      - meta: log_type
-        value: postfix
-  '';
-
   services.crowdsec-firewall-bouncer = {
     enable = true;
     # Pull decisions from the central LAPI on nixnginx.

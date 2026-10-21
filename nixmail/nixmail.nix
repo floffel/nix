@@ -272,6 +272,7 @@ in
           type = "unix";
           private = true;
           chroot = false;
+          maxproc = 0;
           command = "dnsblog";
         };
         submission = {
@@ -1148,6 +1149,8 @@ EOF
   # rspamd (which filters message content, not SMTP/IMAP client behaviour).
   services.crowdsec = {
     enable = true;
+    # Same proxmox-lxc empty-hostname caveat as on nixnginx.
+    name = "nixmail";
     hub.collections = [ "crowdsecurity/postfix" "crowdsecurity/dovecot" ];
     settings.general.api.server.enable = false;
     settings.general.api.server.listen_uri = "127.0.0.1:8080";

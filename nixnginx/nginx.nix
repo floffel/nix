@@ -335,8 +335,20 @@ in
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+
+            # PDF/document parsing (including OCR) is synchronous and can
+            # easily exceed nginx's 60s default for a larger document.
+            proxy_read_timeout 600s;
+            proxy_send_timeout 600s;
           '';
         };
+        extraConfig = ''
+          charset utf-8;
+          # nginx defaults to 1m, which rejects most PDFs before they ever
+          # reach Open WebUI (the UI then reports the upload/parse as failed).
+          # Images are usually below 1m, which is why only PDFs seem broken.
+          client_max_body_size 100M;
+        '';
       };
 
       # ki.minnecker.com (LDAP Protected Proxy)
@@ -487,8 +499,8 @@ in
       #
       # Serves the MTA-STS policy file. The host is reached via the wildcard
       # CNAME to the nginx proxy; only this well-known path is needed.
-      # Policy must list EVERY published MX: the new stack (mx) as primary
-      # and the old server (riese) as secondary until migration completes.
+      # Policy must list every published MX. The old riese MX has been
+      # removed, so only mx.minnecker.com is listed.
       "mta-sts.minnecker.com" = {
         forceSSL = true;
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
@@ -496,7 +508,7 @@ in
         locations."= /.well-known/mta-sts.txt" = {
           extraConfig = ''
             default_type text/plain;
-            return 200 'version: STSv1\nmode: enforce\nmx: mx.minnecker.com\nmx: riese.minnecker.com\nmax_age: 86400\n';
+            return 200 'version: STSv1\nmode: enforce\nmx: mx.minnecker.com\nmax_age: 86400\n';
           '';
         };
       };

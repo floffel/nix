@@ -15,7 +15,6 @@ $TTL 7200
 @                        IN NS      robotns3.second-ns.com.
 
 @                        300 IN MX 10   mx.minnecker.com.
-@                        300 IN MX 20   riese.minnecker.com.
 
 @                        IN TXT     "v=spf1 mx -all"
 _dmarc                   IN TXT     "v=DMARC1; p=reject; sp=reject; rua=mailto:reports@minnecker.com"

@@ -12,7 +12,6 @@ $TTL 7200
  
 ; Lowered TTL (300) for mail cutover; primary = new stack, secondary = old server.
 @                        300 IN MX 10   mx.minnecker.com.
-@                        300 IN MX 20   riese.minnecker.com.
 @                        IN TXT     "v=spf1 a mx -all"
 
 ; DMARC must live at _dmarc, not on the apex.

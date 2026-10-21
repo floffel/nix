@@ -15,9 +15,7 @@ $TTL 7200
 
  
 ; Lowered TTL (300) for mail cutover; primary = new stack (mx -> px),
-; secondary = old server (riese) until the migration is complete.
 @                        300 IN MX 10   mx
-@                        300 IN MX 20   riese
 @                        IN TXT     "v=spf1 a mx -all"
 
 minnecker.com.		 IN CAA	0   issue "letsencrypt.org"
@@ -33,7 +31,7 @@ arc._domainkey               IN TXT     ( "v=DKIM1; k=rsa; "
 minnecker2._domainkey IN TXT     ( "v=DKIM1; k=rsa; " "p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2YLw5BMN6FPewVWin2mVxn3ZwB/ekYuE0aezAB8B0snnVU8OoKoB1jWkaUrzeuI7Xi1YZoE9Km0WL5oJX04Pk5W0ddQJgpLBIFwU37uZXx4XovLA3zMzZlTqNcd1kLDf+029dQ63" "Q9en3ElHhLU2T8KAZaIVeSLNNtDpjSoftASDaU1vqhLHYSid+sBsMtOLWbruObiqsAWkyAcvCQ7DbjRKH/6lnAJcOfy4dKWSwp0/iCmGjU+S4EMmFux1kQlDa34t/aVGR4ilh8hiErnMfRWlNSetw8rcQ1+WZsAAXVfhVBei8/C2OIZAxPC+yZ32FVg8C/gNefOucx0/7ZkQKQIDAQAB" )
 arc2._domainkey       IN TXT     ( "v=DKIM1; k=rsa; " "p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2YLw5BMN6FPewVWin2mVxn3ZwB/ekYuE0aezAB8B0snnVU8OoKoB1jWkaUrzeuI7Xi1YZoE9Km0WL5oJX04Pk5W0ddQJgpLBIFwU37uZXx4XovLA3zMzZlTqNcd1kLDf+029dQ63" "Q9en3ElHhLU2T8KAZaIVeSLNNtDpjSoftASDaU1vqhLHYSid+sBsMtOLWbruObiqsAWkyAcvCQ7DbjRKH/6lnAJcOfy4dKWSwp0/iCmGjU+S4EMmFux1kQlDa34t/aVGR4ilh8hiErnMfRWlNSetw8rcQ1+WZsAAXVfhVBei8/C2OIZAxPC+yZ32FVg8C/gNefOucx0/7ZkQKQIDAQAB" )
 
-_mta-sts                     IN TXT     "v=STSv1; id=2026081501"
+_mta-sts                     IN TXT     "v=STSv1; id=2026102101"
 _smtp._tls                   IN TXT     "v=TLSRPTv1; rua=mailto:reports@minnecker.com"
 ; DMARC must live at _dmarc, not on the apex. Reports go to reports@ because
 ; parsedmarc watches florian's .Reports folder and the routing sieve files

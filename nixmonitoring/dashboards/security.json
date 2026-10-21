@@ -151,7 +151,7 @@
     {
       "id": 5,
       "type": "table",
-      "title": "Blocked IPs / reason / remaining time",
+      "title": "Currently blocked IPs / reason / remaining time",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -183,7 +183,7 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Alerts by scenario",
+      "title": "Active decisions by scenario (selected range)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -271,7 +271,7 @@
     {
       "id": 8,
       "type": "timeseries",
-      "title": "CrowdSec alerts by reason",
+      "title": "Retained alerts by reason (history)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"

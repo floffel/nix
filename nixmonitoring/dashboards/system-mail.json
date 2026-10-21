@@ -85,7 +85,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({systemd_unit=\"postfix.service\"} |= \"status=sent\" |~ \"postfix/smtp\" [$__interval]))",
+          "expr": "sum(count_over_time({systemd_unit=\"postfix.service\"} |= \"status=sent\" != \"dovecot-lmtp\" [$__interval])) or vector(0)",
           "queryType": "range",
           "refId": "A"
         }
@@ -145,7 +145,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({systemd_unit=\"postfix.service\"} |= \"status=sent\" |~ \"postfix/(local|lmtp|virtual)\" [$__interval]))",
+          "expr": "sum(count_over_time({systemd_unit=\"postfix.service\"} |= \"status=sent\" |= \"dovecot-lmtp\" [$__interval])) or vector(0)",
           "queryType": "range",
           "refId": "A"
         }
@@ -205,7 +205,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({systemd_unit=\"postfix.service\"} |= \"reject:\" [$__interval]))",
+          "expr": "sum(count_over_time({systemd_unit=\"postfix.service\"} |= \"reject:\" [$__interval])) or vector(0)",
           "queryType": "range",
           "refId": "A"
         }
@@ -265,7 +265,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({systemd_unit=\"dovecot2.service\"} |= \"Login:\" [$__interval]))",
+          "expr": "sum(count_over_time({systemd_unit=\"dovecot.service\"} |= \"Logged in: user=\" [$__interval])) or vector(0)",
           "queryType": "range",
           "refId": "A"
         }
@@ -325,7 +325,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum by (systemd_unit) (count_over_time({systemd_unit=\"dovecot2.service\"} |= \"Login:\" [$__interval]))",
+          "expr": "sum by (systemd_unit) (count_over_time({systemd_unit=\"dovecot.service\"} |= \"Logged in: user=\" [$__interval]))",
           "legendFormat": "Dovecot Logins",
           "queryType": "range",
           "refId": "C"
@@ -374,7 +374,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "{systemd_unit=\"dovecot2.service\"} |= \"Login: user=\" | regexp \"Login: user=<(?P<user>[^>]+)>, method=(?P<method>[^,]+), rip=(?P<rip>[^,]+)\"",
+          "expr": "{systemd_unit=\"dovecot.service\"} |= \"Logged in: user=\" | regexp \"Logged in: user=<(?P<user>[^>]+)>, method=(?P<method>[^,]+), rip=(?P<rip>[^,]+)\"",
           "queryType": "range",
           "refId": "A"
         }
@@ -413,7 +413,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum by (user) (count_over_time({systemd_unit=\"dovecot2.service\"} |= \"Login: user=\" | regexp \"Login: user=<(?P<user>[^>]+)>\" [$__range]))",
+          "expr": "sum by (user) (count_over_time({systemd_unit=\"dovecot.service\"} |= \"Logged in: user=\" | regexp \"Logged in: user=<(?P<user>[^>]+)>\" [$__range]))",
           "queryType": "range",
           "refId": "A"
         }
@@ -502,7 +502,7 @@
             "uid": "loki"
           },
           "editorMode": "code",
-          "expr": "sum by (status) (count_over_time({systemd_unit=\"nginx.service\"} | regexp \" (?P<status>[45]\\d{2}) \" [$__interval]))",
+          "expr": "sum by (status) (count_over_time({systemd_unit=\"nginx.service\"} | regexp \" (?P<status>[45][0-9][0-9]) \" [$__interval]))",
           "legendFormat": "HTTP {{status}} Errors",
           "queryType": "range",
           "refId": "A"

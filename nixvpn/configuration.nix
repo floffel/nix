@@ -124,12 +124,18 @@
       NOW=$(date +%s)
 
       # wg show all dump output format (tab-separated):
-      # interface  peer-key  endpoint  allowed-ips  latest-handshake  transfer-rx  transfer-tx  persistent-keepalive
-      wg show all dump 2>/dev/null | while IFS=$'\t' read -r iface pubkey endpoint allowed_ips handshake rx tx keepalive; do
-        [ -z "$pubkey" ] && continue
-        # Sanitize for Prometheus label values
-        ep_clean=$(printf '%s' "$endpoint" | tr -d ' ' | sed 's/:/\\:/g')
-        ai_clean=$(printf '%s' "$allowed_ips" | tr ',' ' ' | sed 's/:/\\:/g')
+      # interface  peer-key  preshared-key  endpoint  allowed-ips  latest-handshake  transfer-rx  transfer-tx  persistent-keepalive
+      # The per-interface header line has only 5 fields; it is skipped because
+      # its handshake field is empty.
+      wg show all dump 2>/dev/null | while IFS=$'\t' read -r iface pubkey psk endpoint allowed_ips handshake rx tx keepalive; do
+        [ -z "$handshake" ] && continue
+        handshake=${handshake:-0}
+        rx=${rx:-0}
+        tx=${tx:-0}
+        # These fields only contain keys, IPs and ports; backslashes and quotes
+        # never occur, and colons must not be escaped in label values.
+        ep_clean=$(printf '%s' "$endpoint" | tr -d ' ')
+        ai_clean=$(printf '%s' "$allowed_ips")
         # Connection status: handshake within last 180s
         if [ -n "$handshake" ] && [ "$handshake" -gt 0 ]; then
           AGE=$((NOW - handshake))

@@ -220,7 +220,7 @@ in
         # Baseline SMTP anti-abuse limits (Postfix defaults are unlimited).
         # These are per-client, per-minute limits; generous for normal users
         # but they cap password spraying, relay probing and compromised-
-        # account bursts before fail2ban/CrowdSec has to intervene.
+        # account bursts before CrowdSec has to intervene.
         disable_vrfy_command = "yes";
         smtpd_client_connection_count_limit = "20";
         smtpd_client_connection_rate_limit = "30";
@@ -1166,88 +1166,11 @@ EOF
 
 
 
-  # CrowdSec's stock Postfix parser does not match journald lines in this
-  # setup (it filters on a syslog program field that journalctl does not
-  # provide), so Postfix HELO/relay rejects are handled by fail2ban using the
-  # systemd journal backend. CrowdSec still handles HTTP and central/shared
-  # decisions.
-  services.fail2ban = {
-    enable = true;
-    jails = {
-      postfix-helo = {
-        enabled = true;
-        filter = "postfix-helo";
-        settings = {
-          backend = "systemd";
-          journalmatch = "_SYSTEMD_UNIT=postfix.service";
-          port = "25,465,587";
-          maxretry = 1;
-          findtime = "10m";
-          bantime = "1d";
-        };
-      };
-      postfix-relay = {
-        enabled = true;
-        filter = "postfix-relay";
-        settings = {
-          backend = "systemd";
-          journalmatch = "_SYSTEMD_UNIT=postfix.service";
-          port = "25,465,587";
-          maxretry = 1;
-          findtime = "10m";
-          bantime = "7d";
-        };
-      };
-      postfix-sasl = {
-        enabled = true;
-        filter = "postfix-sasl";
-        settings = {
-          backend = "systemd";
-          journalmatch = "_SYSTEMD_UNIT=postfix.service";
-          port = "25,465,587";
-          maxretry = 5;
-          findtime = "10m";
-          bantime = "1d";
-        };
-      };
-      dovecot-auth = {
-        enabled = true;
-        filter = "dovecot-auth";
-        settings = {
-          backend = "systemd";
-          journalmatch = "_SYSTEMD_UNIT=dovecot.service";
-          port = "143,993,110,995,4190";
-          maxretry = 3;
-          findtime = "10m";
-          bantime = "1d";
-        };
-      };
-    };
-  };
-  environment.etc."fail2ban/filter.d/postfix-helo.conf".text = ''
-    [Definition]
-    failregex = .*NOQUEUE: reject: RCPT from .*\[<HOST>\]: [0-9]+ [0-9.]+ <[^>]*>: Helo command rejected: .*$
-    ignoreregex =
-  '';
-  environment.etc."fail2ban/filter.d/postfix-relay.conf".text = ''
-    [Definition]
-    failregex = .*NOQUEUE: reject: RCPT from .*\[<HOST>\]: [0-9]+ [0-9.]+ <[^>]*>: Relay access denied.*$
-    ignoreregex =
-  '';
-  environment.etc."fail2ban/filter.d/postfix-sasl.conf".text = ''
-    [Definition]
-    failregex = .*warning: .*\[<HOST>\]: SASL (?:LOGIN|PLAIN|(?:CRAM|DIGEST)-MD5) authentication failed:.*$
-    ignoreregex =
-  '';
-  environment.etc."fail2ban/filter.d/dovecot-auth.conf".text = ''
-    [Definition]
-    failregex = .*(?:auth failed|Authentication failed).*rip=<HOST>.*$
-    ignoreregex =
-  '';
-
   # CrowdSec: parse Postfix/Dovecot logs from journald and ban abusive
-  # source IPs at the firewall. This adds protocol-aware detections on top of
-  # rspamd (which filters message content, not SMTP/IMAP client behaviour).
+  # source IPs at the firewall. This replaces the former fail2ban jails and
+  # adds protocol-aware detections on top of rspamd (which filters message
+  # content, not SMTP/IMAP client behaviour). Decisions are shared through
+  # the central LAPI with every CrowdSec bouncer.
   services.crowdsec = {
     enable = true;
     # Same proxmox-lxc empty-hostname caveat as on nixnginx.

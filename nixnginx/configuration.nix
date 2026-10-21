@@ -21,107 +21,10 @@
   systemd.services.phpfpm-roundcube.path = [ pkgs.gnupg ];
 
   # Fail2ban — brute-force and scan protection in front of all public vhosts.
-  # Jails monitor nginx error logs for OAuth2 token abuse, general auth
-  # failures, and known exploit probes. Uses iptables-multiport which works
-  # inside unprivileged LXC (no new netns needed). The ban action is a simple
-  # chain-insert so all jails share one IPSET chain. Fail2ban uses Redis on
-  # nixpostgres for its ban database so bans survive a fail2ban restart.
-  services.fail2ban = {
-    enable = true;
-
-    # Ban for 15 min after 10 failures within a 10-minute findtime.
-    # Redis on nixpostgres stores the in-memory ban database so fail2ban
-    # survives its own restart without losing bans (persistence = rdb on).
-    bantime = "15m";
-    bantime-increment = {
-      enable = true;
-      maxtime = "6h";
-      factor = "1.5";
-    };
-
-    daemonSettings.Definition = {
-      dbpurgeage = "1h";
-      socket = "/run/fail2ban/fail2ban.sock";
-    };
-
-    # Custom jail definitions — nginx error log based.
-    jails = {
-      # Use the standard per-jail iptables-multiport action (each jail has
-      # its own f2b-<jail> chain, inserted into INPUT for the jail's ports).
-      # Redis on nixpostgres stores fail2ban's ban database so bans survive
-      # a fail2ban restart.
-      DEFAULT.settings = {
-        "redis-server" = "nixpostgres";
-        "redis-port" = 6379;
-      };
-      # OAuth2 token endpoint — catches brute-force against the public PKCE
-      # client discovery and token URLs. These are intentionally public but
-      # a scanner probing every .well-known/ path will hammer these endpoints.
-      "nginx-oauth2-brute-force" = {
-        enabled = true;
-        filter = "nginx-oauth2-brute-force";
-        settings = {
-          logpath = "/var/log/nginx/error.log";
-          port = "http,https";
-          maxretry = 10;
-          findtime = "600s";
-          bantime = "15m";
-        };
-      };
-
-      # General nginx auth failures — catches 401 from any location that
-      # does per-request auth (njs /auth/, auth_ldap, etc.). Vaultwarden
-      # and Roundcube webmail both return 401 on bad credentials / token
-      # expiry; this catches credential stuffing across all vhosts.
-      "nginx-http-auth" = {
-        enabled = true;
-        filter = "nginx-http-auth";
-        settings = {
-          logpath = "/var/log/nginx/error.log";
-          port = "http,https";
-          maxretry = 8;
-          findtime = "600s";
-          bantime = "15m";
-        };
-      };
-
-      # Common exploit probes — known bad paths and patterns (wp-login,
-      # .env, phpmyadmin, etc.). These are pure noise scanners but the
-      # volume can be high (100s/hour) and adds log noise. Banning them
-      # at the fail2ban/iptables level is more efficient than letting nginx
-      # process every probe request.
-      "nginx-botsearch" = {
-        enabled = true;
-        filter = "nginx-botsearch";
-        settings = {
-          logpath = "/var/log/nginx/error.log";
-          port = "http,https";
-          maxretry = 5;
-          findtime = "300s";
-          bantime = "30m";
-        };
-      };
-
-      # Overly aggressive bots — matches User-Agent-based patterns that are
-      # clearly scanning/crawling maliciously (masscan, zgrab, etc.).
-      "nginx-overload" = {
-        enabled = true;
-        filter = "nginx-overload";
-        settings = {
-          logpath = "/var/log/nginx/error.log";
-          port = "http,https";
-          maxretry = 3;
-          findtime = "120s";
-          bantime = "1h";
-        };
-      };
-    };
-  };
-
   # CrowdSec: parses nginx access/error logs from journald and blocks the
-  # offending source IP at the firewall. This complements fail2ban (which
-  # only sees a few error-log patterns) and uses the CrowdSec community
-  # scenarios for scanners, probes and HTTP abuse.
+  # offending source IP at the firewall. It replaces the former fail2ban
+  # jails and uses the community scenarios for scanners, probes and HTTP
+  # abuse; decisions are shared with every bouncer.
   services.crowdsec = {
     enable = true;
     # proxmox-lxc.nix forces networking.hostName to "" when manageHostName is
@@ -205,21 +108,6 @@
     };
   };
 
-  environment.etc."fail2ban/filter.d/nginx-oauth2-brute-force.conf".text = ''
-    [Definition]
-    failregex = ^\s*\[\w+\] \d+#\d+: \*\d+ access forbidden by rule, client: <ADDR>.*request: "POST .*/(?:token|authorize|device_authorization)"
-                ^\s*\[\w+\] \d+#\d+: \*\d+ auth request unexpected status: 403 while sending to client, client: <ADDR>
-    ignoreregex =
-    journalmatch = _SYSTEMD_UNIT=nginx.service
-  '';
-
-  environment.etc."fail2ban/filter.d/nginx-overload.conf".text = ''
-    [Definition]
-    failregex = ^\s*\[\w+\] \d+#\d+: \*\d+ \w+ .*client: <HOST>, .*\(User-Agent: (?:masscan|zgrab|zgrab2|zgrab3|gobuster|nikto|dirbuster|sqlmap|wpscan|nmap|Nuclei|nessus)\)
-    ignoreregex =
-    journalmatch = _SYSTEMD_UNIT=nginx.service
-  '';
-
   # Networking
   networking = {
     hostName = "nixnginx";
@@ -227,7 +115,7 @@
     # Static IP Configuration matching the nixnginx server setup
     useDHCP = false;
 
-    # Firewall; fail2ban inserts its per-jail chains into INPUT itself.
+    # Firewall; the CrowdSec firewall bouncer inserts its own INPUT chain.
     firewall = {
       enable = true;
       # 9100 is node_exporter, scraped by nixmonitoring. It is not forwarded

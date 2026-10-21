@@ -46,7 +46,7 @@
     description = "Create test secrets for integration tests";
     wantedBy = [ "multi-user.target" ];
     before = [
-      "nginx.service" "fail2ban.service"
+      "nginx.service"
       "phpfpm-nextcloud.service" "phpfpm-roundcube.service"
       "postgresql.service" "kanidm.service"
       "roundcube-setup-oauth.service" "nextcloud-setup-oidc.service"

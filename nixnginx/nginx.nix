@@ -133,8 +133,8 @@ in
       brotli on;
 
       # Per-client edge rate limiting. This is a broad DoS/flood guard for
-      # every vhost; authentication brute force is handled by fail2ban and
-      # CrowdSec, which can react to repeated failures. 30 r/s with a 60
+      # every vhost; authentication brute force is handled by CrowdSec,
+      # which can react to repeated failures. 30 r/s with a 60
       # request burst allows normal page assets and Nextcloud sync while
       # stopping request floods.
       limit_req_zone $binary_remote_addr zone=web:20m rate=30r/s;

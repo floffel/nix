@@ -16,6 +16,44 @@
     privileged = false;
   };
 
+  nixpkgs.overlays = [
+    (final: prev: {
+      php84 =
+        if prev.lib.versionOlder prev.php84.version "8.4.27"
+        then
+          prev.php84.buildEnv
+            {
+              phpAttrsOverrides = (_: {
+                version = "8.4.27";
+                src = prev.fetchurl {
+                  url = "https://www.php.net/distributions/php-8.4.27.tar.bz2";
+                  hash = "sha256-slMKh3xyL0sIyeF0owywi6wrfhkD7m6eMV8KqfX4LCQ=";
+                };
+              });
+              extensions = { enabled, ... }:
+                map
+                  (ext:
+                    if ext.extensionName == "filter"
+                    then
+                      ext.overrideAttrs
+                        (_: {
+                          postConfigure = ''
+                            substituteInPlace \
+                              tests/oom_filter_input.phpt \
+                              tests/oom_filter_input_array.phpt \
+                              tests/oom_filter_default_encoded.phpt \
+                              --replace-fail "'-n'," "'-n', '-d', 'extension=$PWD/modules/filter.so',"
+                          '';
+                        })
+                    else ext
+                  )
+                  enabled;
+            }
+        else prev.php84;
+      php = final.php84;
+    })
+  ];
+
   # Disable sandboxing inside the container since LXC profiles usually restrict the system calls Nix sandbox uses
   nix.settings.sandbox = false;
 

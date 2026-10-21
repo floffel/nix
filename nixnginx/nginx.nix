@@ -1015,6 +1015,18 @@ in
         $out/plugins/markasjunk/markasjunk.js
       sed -i 's/this\.move_messages(a):/this.move_messages(a,null,n):/' \
         $out/plugins/markasjunk/markasjunk.min.js
+      # Fail the build instead of silently shipping the old behaviour if a
+      # Roundcube upgrade changes the plugin source or minifier output.
+      grep -qF 'this.move_messages(mbox, null, uids);' \
+        $out/plugins/markasjunk/markasjunk.js || {
+          echo "ERROR: markasjunk.js patch did not apply; review the upstream plugin" >&2
+          exit 1
+        }
+      grep -qF 'this.move_messages(a,null,n):' \
+        $out/plugins/markasjunk/markasjunk.min.js || {
+          echo "ERROR: markasjunk.min.js patch did not apply; review the upstream plugin" >&2
+          exit 1
+        }
       cat > $out/plugins/carddav/config.inc.php <<'PHP'
       <?php
       // OAuth2 logins have no IMAP password, so the default "encrypted"

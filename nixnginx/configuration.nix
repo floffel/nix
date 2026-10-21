@@ -129,6 +129,13 @@
     # machine (and produce credentials without a login). Pin the name.
     name = "nixnginx";
     hub.collections = [ "crowdsecurity/nginx" ];
+    # The collection install does not enable the base parsers; without these the
+    # journald lines never reach nginx-logs and every line is unparsed.
+    hub.parsers = [
+      "crowdsecurity/syslog-logs"
+      "crowdsecurity/dateparse-enrich"
+      "crowdsecurity/whitelists"
+    ];
     settings.general.api.server.enable = true;
     settings.general.api.server.listen_uri = "0.0.0.0:8080";
     # The NixOS module requires a credentials path when the local LAPI is

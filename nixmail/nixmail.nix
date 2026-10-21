@@ -1253,6 +1253,13 @@ EOF
     # Same proxmox-lxc empty-hostname caveat as on nixnginx.
     name = "nixmail";
     hub.collections = [ "crowdsecurity/postfix" "crowdsecurity/dovecot" ];
+    # The collection install does not enable the base parsers; without these the
+    # journald lines never reach postfix-logs and every line is unparsed.
+    hub.parsers = [
+      "crowdsecurity/syslog-logs"
+      "crowdsecurity/dateparse-enrich"
+      "crowdsecurity/whitelists"
+    ];
     settings.general.api.server.enable = false;
     settings.general.api.server.listen_uri = "127.0.0.1:8080";
     settings.lapi.credentialsFile = "/var/lib/crowdsec/mail-machine.yaml";

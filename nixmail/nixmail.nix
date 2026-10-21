@@ -693,8 +693,8 @@ in
       # unknown inbound senders get the temporary 451 and retry.
       "greylist.conf".text = ''
         enabled = true;
-        expire = 1d;
-        timeout = 5m;
+        expire = 86400;
+        timeout = 300;
         key_prefix = "rg";
         max_data_len = 10k;
         message = "Try again later";

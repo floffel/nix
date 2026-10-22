@@ -479,7 +479,9 @@ cmd_policy() {
   case "$sub" in
     get)
       local group="${1:-}"; [ -n "$group" ] || die "usage: policy get <group>"
-      k group account-policy credential-type-minimum "$group"
+      # `account-policy credential-type-minimum` is a setter; read the policy
+      # from the group object instead (credential_type_minimum appears there).
+      k group get "$group"
       ;;
     enable)
       local group="${1:-}"; [ -n "$group" ] || die "usage: policy enable <group>"

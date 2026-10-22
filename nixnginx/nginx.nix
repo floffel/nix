@@ -822,10 +822,9 @@ in
         locations."^~ /_synapse/admin" = {
           proxyPass = "http://matrix";
           extraConfig = ''
-            allow 10.20.20.0/24;
-            allow 10.100.0.0/24;
             allow 192.168.0.0/16;
-            allow fd01::/64;
+            allow 10.100.0.0/24;
+            allow 10.10.10.5;
             allow fd00::/64;
             deny all;
             proxy_http_version 1.1;

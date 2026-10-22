@@ -42,12 +42,13 @@
   # 1. Prometheus Metrics Storage
   services.prometheus = {
     enable = true;
+    listenAddress = "127.0.0.1";
     port = 9090;
     # 90 days of metrics; size cap as a safety net. Increase the container
     # disk when the cap is reached (currently ~726 MB for 15 days).
     retentionTime = "90d";
     extraFlags = [ "--storage.tsdb.retention.size=10GB" ];
-    
+
     scrapeConfigs = [
       # Scraping node_exporter on all containers for system resource metrics.
       # Hostnames must match the aliases declared in hosts.nix (the LXC
@@ -100,7 +101,7 @@
         job_name = "crowdsec";
         static_configs = [
           {
-            targets = [ "nixnginx:6060" ];
+            targets = [ "10.20.20.14:6060" "10.20.20.13:6060" ];
           }
         ];
       }

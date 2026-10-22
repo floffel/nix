@@ -1272,12 +1272,10 @@ EOF
     # Postfix/Dovecot auth and HELO/relay rejects are handled by fail2ban
     # (the stock CrowdSec Postfix parser does not match journald here). Mail
     # still enforces central LAPI decisions through its firewall bouncer.
+    # Postfix HELO/relay/SASL abuse is handled by fail2ban because the stock
+    # CrowdSec Postfix parser does not match journald; keep only the working
+    # Dovecot acquisition here.
     localConfig.acquisitions = [
-      {
-        source = "journalctl";
-        journalctl_filter = [ "_SYSTEMD_UNIT=postfix.service" ];
-        labels = { type = "syslog"; };
-      }
       {
         source = "journalctl";
         journalctl_filter = [ "_SYSTEMD_UNIT=dovecot.service" ];

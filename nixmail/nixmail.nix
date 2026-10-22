@@ -1220,6 +1220,8 @@ EOF
   # Same NixOS 26.05 crowding module workarounds as on nixnginx: shared
   # /var/lib/crowdsec must be writable by the static crowdsec user, and the
   # bouncer's raw cscli call needs /etc/crowdsec/config.yaml.
+  systemd.services.crowdsec.enable = lib.mkForce false;
+  systemd.services.crowdsec.wantedBy = lib.mkForce [ ];
   systemd.services.crowdsec.serviceConfig.DynamicUser = lib.mkForce false;
   systemd.services.crowdsec.serviceConfig.PrivateUsers = lib.mkForce false;
   systemd.services.crowdsec-firewall-bouncer-register.serviceConfig.DynamicUser =

@@ -1308,10 +1308,13 @@ in
     };
 
     poolSettings = {
+      "pm" = "dynamic";
       "pm.max_children" = "16";
       "pm.start_servers" = "4";
       "pm.min_spare_servers" = "2";
       "pm.max_spare_servers" = "6";
+      "pm.max_requests" = "500";
+      "pm.status_path" = "/status";
       "php_admin_value[open_basedir]" = "/nix/store:/var/lib/nextcloud:/var/lib/nextcloud-data:/var/lib/php:/tmp:/run:/dev/null:/etc:/proc";
     };
 

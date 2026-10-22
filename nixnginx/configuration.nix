@@ -41,7 +41,9 @@
       "crowdsecurity/whitelists"
     ];
     settings.general.api.server.enable = true;
-    settings.general.api.server.listen_uri = "10.20.20.14:8080";
+    # The local agent/bouncer resolve this wildcard address to loopback; the
+    # firewall below restricts external access to the bouncer hosts.
+    settings.general.api.server.listen_uri = "0.0.0.0:8080";
     # The NixOS module requires a credentials path when the local LAPI is
     # enabled; cscli writes the machine credentials there.
     settings.lapi.credentialsFile = "/var/lib/crowdsec/local-api-credentials";

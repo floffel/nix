@@ -132,20 +132,8 @@
         }
       }
 
-      // Forgejo's per-request access lines are not used by CrowdSec or the
-      // Grafana dashboards and make up a large part of the log volume. Keep
-      // errors (4xx/5xx) but drop successful 2xx/3xx access lines.
-      loki.process "filter" {
-        stage.drop {
-          source              = "message"
-          expression          = ".*router: completed .* (2[0-9]{2}|3[0-9]{2}) .*"
-          drop_counter_reason = "forgejo_access_log"
-        }
-        forward_to = [loki.write.local_loki.receiver]
-      }
-
       loki.source.journal "read" {
-        forward_to    = [loki.process.filter.receiver]
+        forward_to    = [loki.write.local_loki.receiver]
         relabel_rules = loki.relabel.journal.rules
         labels        = { job = "systemd-journal" }
       }

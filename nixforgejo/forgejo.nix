@@ -83,6 +83,13 @@
         LOG_RETENTION_DAYS = 14;
       };
 
+      # Per-request router/access logs are not used by CrowdSec and are very
+      # noisy (Actions API polling). Keep normal application/error logs.
+      log = {
+        LOGGER_ROUTER_MODE = "";
+        LOGGER_ACCESS_MODE = "";
+      };
+
       # Enable Prometheus metrics endpoint
       metrics = {
         ENABLED = true;

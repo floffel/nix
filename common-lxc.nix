@@ -136,13 +136,10 @@
       // Grafana dashboards and make up a large part of the log volume. Keep
       // errors (4xx/5xx) but drop successful 2xx/3xx access lines.
       loki.process "filter" {
-        stage.match {
-          selector = "{systemd_unit=\"forgejo.service\"}"
-          stage.drop {
-            source                = "message"
-            expression            = "router: completed .* (2[0-9]{2}|3[0-9]{2}) "
-            drop_counter_reason   = "forgejo_access_log"
-          }
+        stage.drop {
+          source              = "message"
+          expression          = ".*router: completed .* (2[0-9]{2}|3[0-9]{2}) .*"
+          drop_counter_reason = "forgejo_access_log"
         }
         forward_to = [loki.write.local_loki.receiver]
       }

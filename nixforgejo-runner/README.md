@@ -4,6 +4,11 @@ This directory contains the NixOS configuration files for the Forgejo Actions ru
 
 The runner executes CI/CD workflows using Docker containerization.
 
+> **Trust boundary:** workflows can execute repository code with access to the
+> runner's Docker daemon and the `native` host label. Do not run untrusted pull
+> requests on this runner; require approval for external contributors and never
+> store production credentials in the runner container.
+
 ---
 
 ## Deployment Step-by-Step
@@ -16,11 +21,13 @@ The runner executes CI/CD workflows using Docker containerization.
 2. Go to **Site Administration** -> **Actions** -> **Runners** (or visit `https://git.minnecker.com/admin/actions/runners`).
 3. Click the **Create new Runner** button.
 4. Enter a name and description, then click **Create**.
-5. Copy the **UUID** and **Token** displayed. Example:
+5. Copy the **UUID** and **Token** displayed. These are one-time secrets. Do not paste real values into this repository or any ticket:
    ```
-   UUID:  33834eef-e758-48c4-a676-1745426747aa
-   Token: d4fe2db46a4c6bdc434a9ce3378d9a1489c1b30e
+   UUID:  <runner-uuid>
+   Token: <runner-token>
    ```
+
+   If a real token has ever been committed, create a new runner registration and revoke the old token.
 
 ---
 

@@ -95,7 +95,7 @@ in
   # 1. Custom Nginx Service Configuration
   services.nginx = {
     enable = true;
-    
+
     # Compile Nginx with mail proxy capabilities and custom modules
     package = (pkgs.nginx.override {
       withMail = true;
@@ -114,7 +114,7 @@ in
     });
 
     # Set system-wide client max body size to allow large files in cloud/webmail
-    clientMaxBodySize = "20G";
+    clientMaxBodySize = "64M";
 
     # The kie.minnecker.com token map uses a "Bearer <token>" key (~71 chars)
     # which exceeds nginx's default 64-byte map hash bucket, so bump it.
@@ -131,6 +131,8 @@ in
       proxy_headers_hash_bucket_size 128;
 
       brotli on;
+
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
       # Per-client edge rate limiting. This is a broad DoS/flood guard for
       # every vhost; authentication brute force is handled by CrowdSec,
@@ -172,22 +174,22 @@ in
     # 2. Upstream Definitions
     # Replicates the upstreams.conf from the Arch system
     upstreams = {
-      forgejo.servers = { "nixforgejo:3000" = {}; };
-      matrix.servers = { "nixmatrix:8008" = {}; };
-      mas.servers = { "nixmatrix:8080" = {}; };
-      jitsi.servers = { "nixjitsi:80" = {}; };
-      wikijs.servers = { "nixwikijs:3000" = {}; };
-      vaultwarden.servers = { "nixvaultwarden:8080" = {}; };
-      ki.servers = { "192.168.1.196:8080" = {}; };
+      forgejo.servers = { "nixforgejo:3000" = { }; };
+      matrix.servers = { "nixmatrix:8008" = { }; };
+      mas.servers = { "nixmatrix:8080" = { }; };
+      jitsi.servers = { "nixjitsi:80" = { }; };
+      wikijs.servers = { "nixwikijs:3000" = { }; };
+      vaultwarden.servers = { "nixvaultwarden:8080" = { }; };
+      ki.servers = { "192.168.1.196:8080" = { }; };
       # OpenAI-compatible LLM endpoint on the same host as `ki` but on the
       # LLM API port (matches Open WebUI's OPENAI_API_BASE_URL). Gated by the
       # kie.minnecker.com vhost's bearer-token check (see kie-auth.js).
-      kiellm.servers = { "192.168.1.196:8123" = {}; };
-      openwebui.servers = { "nixopenwebui:8080" = {}; };
-      nixmonitoring.servers = { "nixmonitoring:3000" = {}; };
-      idm.servers = { "nixidm:8443" = {}; };
+      kiellm.servers = { "192.168.1.196:8123" = { }; };
+      openwebui.servers = { "nixopenwebui:8080" = { }; };
+      nixmonitoring.servers = { "nixmonitoring:3000" = { }; };
+      idm.servers = { "nixidm:8443" = { }; };
       # Rspamd controller (WebUI/history) on the mail host.
-      nixmail.servers = { "nixmail:11334" = {}; };
+      nixmail.servers = { "nixmail:11334" = { }; };
     };
 
     # 3. Virtual Hosts Configuration
@@ -258,6 +260,7 @@ in
           add_header X-Frame-Options "SAMEORIGIN" always;
           add_header X-Permitted-Cross-Domain-Policies "none" always;
           add_header X-XSS-Protection "1; mode=block" always;
+          add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
           # gzip settings matching original configuration
           gzip on;
@@ -302,7 +305,7 @@ in
         };
         extraConfig = ''
           charset utf-8;
-          client_max_body_size 4G;
+          client_max_body_size 1G;
         '';
       };
 
@@ -580,10 +583,11 @@ in
         };
         extraConfig = ''
           charset utf-8;
-          client_max_body_size 4G;
+          client_max_body_size 64M;
           fastcgi_hide_header X-Powered-By;
-          fastcgi_hide_header X-Frame-Options;
-          add_header Content-Security-Policy "default-src *  data: blob: 'unsafe-inline' 'unsafe-eval';script-src * data: blob: 'unsafe-inline' 'unsafe-eval';connect-src * data: blob: 'unsafe-inline';img-src * data: blob: 'unsafe-inline';frame-src * data: blob: ;style-src * data: blob: 'unsafe-inline';font-src * data: blob: 'unsafe-inline';worker-src *;";
+          add_header X-Frame-Options "SAMEORIGIN" always;
+          add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; worker-src 'self' blob:; frame-ancestors 'self'; base-uri 'self'; form-action 'self'" always;
+          add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         '';
       };
 
@@ -611,7 +615,7 @@ in
         };
         extraConfig = ''
           charset utf-8;
-          client_max_body_size 4G;
+          client_max_body_size 64M;
         '';
       };
 
@@ -643,6 +647,7 @@ in
             add_header Access-Control-Allow-Origin "*" always;
             add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
             add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
             return 200 '{"m.homeserver":{"base_url":"https://matrix.minnecker.com"},"m.turn_servers":[{"uris":["turn:turn.minnecker.com:3478?transport=udp","turns:turn.minnecker.com:5349?transport=tcp"],"username":"","password":""}],"org.matrix.msc4143.rtc_foci":[{"type":"livekit","livekit_service_url":"https://livekit.minnecker.com/jwt"}]}';
           '';
         };
@@ -814,6 +819,21 @@ in
         };
 
         # Synapse admin API (no longer serves OIDC callbacks — MAS handles those)
+        locations."^~ /_synapse/admin" = {
+          proxyPass = "http://matrix";
+          extraConfig = ''
+            allow 10.20.20.0/24;
+            allow 10.100.0.0/24;
+            allow 192.168.0.0/16;
+            allow fd01::/64;
+            allow fd00::/64;
+            deny all;
+            proxy_http_version 1.1;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Host $host;
+          '';
+        };
         locations."/_synapse" = {
           proxyPass = "http://matrix";
           extraConfig = ''
@@ -845,6 +865,7 @@ in
             chunked_transfer_encoding off;
             add_header Access-Control-Allow-Credentials true;
             add_header Referrer-Policy "same-origin";
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
             error_log /var/log/nginx/vaultwarden.error.log;
           '';
         };
@@ -937,7 +958,7 @@ in
         };
         extraConfig = ''
           charset utf-8;
-          client_max_body_size 4G;
+          client_max_body_size 64M;
         '';
       };
 
@@ -993,6 +1014,7 @@ in
           add_header X-Frame-Options "SAMEORIGIN" always;
           add_header X-Permitted-Cross-Domain-Policies "none" always;
           add_header X-XSS-Protection "1; mode=block" always;
+          add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
           # gzip settings matching original configuration
           gzip on;
@@ -1089,7 +1111,7 @@ in
       PHP
     '';
     configureNginx = false;
-    
+
     # We do not run a local database, it resides on nixpostgres
     database = {
       host = "nixpostgres";
@@ -1198,6 +1220,9 @@ in
     ];
   };
 
+  services.phpfpm.pools.roundcube.settings."php_admin_value[open_basedir]" =
+    "/nix/store:/var/lib/roundcube:/var/lib/php:/var/lib/secrets:/tmp:/run:/dev/null:/etc:/proc";
+
   # 5. Nextcloud Service Configuration
   services.nextcloud = {
     enable = true;
@@ -1211,7 +1236,7 @@ in
     # Served over HTTPS by nginx → module injects the HSTS
     # (Strict-Transport-Security) header that the security check expects.
     https = true;
-    
+
     # We do not run a local database, it resides on nixpostgres
     database.createLocally = false;
 
@@ -1235,7 +1260,7 @@ in
       # Nextcloud suffered in the past. With an empty array, brute-force
       # protection and the audit log key solely off REMOTE_ADDR.
       trusted_proxies = [ "127.0.0.1" "::1" ];
-      forwarded_for_headers = [];
+      forwarded_for_headers = [ ];
       overwriteprotocol = "https";
 
       # File-based logging so the log viewer works in the web admin UI
@@ -1268,7 +1293,7 @@ in
         port = 6379;
       };
     };
-    
+
     configureRedis = false;
 
     # Raised above the security-check threshold of 8. The interned strings
@@ -1279,6 +1304,15 @@ in
     phpOptions = {
       "opcache.interned_strings_buffer" = "128";
       "opcache.memory_consumption" = "512";
+      memory_limit = lib.mkForce "512M";
+    };
+
+    poolSettings = {
+      "pm.max_children" = "16";
+      "pm.start_servers" = "4";
+      "pm.min_spare_servers" = "2";
+      "pm.max_spare_servers" = "6";
+      "php_admin_value[open_basedir]" = "/nix/store:/var/lib/nextcloud:/var/lib/nextcloud-data:/var/lib/php:/tmp:/run:/dev/null:/etc:/proc";
     };
 
     # configureRedis adds a local Unix-socket Redis (conflicts with our
@@ -1305,7 +1339,7 @@ in
   #
   # We explicitly LoadCredential the same secrets so credential-passing works
   # exactly like the module-generated unit.
-systemd.services.nextcloud-setup.unitConfig = { };
+  systemd.services.nextcloud-setup.unitConfig = { };
   systemd.services.nextcloud-setup = {
     serviceConfig.LoadCredential = [
       "dbpass:${config.services.nextcloud.config.dbpassFile}"
@@ -1414,7 +1448,7 @@ systemd.services.nextcloud-setup.unitConfig = { };
         --discoveryuri="$discovery" \
         --scope="openid email profile" \
         --mapping-uid="preferred_username" \
-        --unique-uid=0 \
+        --unique-uid=1 \
         --mapping-groups="groups" \
         --group-provisioning=1 2>&1)
       provider_rc=$?
@@ -1544,6 +1578,18 @@ systemd.services.nextcloud-setup.unitConfig = { };
     max-port = 65535;
     secure-stun = true;
     no-cli = true;
+    extraConfig = ''
+      no-multicast-peers
+      denied-peer-ip=0.0.0.0-0.255.255.255
+      denied-peer-ip=10.0.0.0-10.255.255.255
+      denied-peer-ip=127.0.0.0-127.255.255.255
+      denied-peer-ip=169.254.0.0-169.254.255.255
+      denied-peer-ip=172.16.0.0-172.31.255.255
+      denied-peer-ip=192.168.0.0-192.168.255.255
+      denied-peer-ip=::1
+      denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+      denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+    '';
   };
 
   # LiveKit SFU — required by Element X/Element Call for MatrixRTC VoIP.

@@ -41,12 +41,12 @@
       "crowdsecurity/whitelists"
     ];
     settings.general.api.server.enable = true;
-    settings.general.api.server.listen_uri = "0.0.0.0:8080";
+    settings.general.api.server.listen_uri = "10.20.20.14:8080";
     # The NixOS module requires a credentials path when the local LAPI is
     # enabled; cscli writes the machine credentials there.
     settings.lapi.credentialsFile = "/var/lib/crowdsec/local-api-credentials";
     # Expose CrowdSec's Prometheus endpoint on the service LAN for scraping.
-    settings.general.prometheus.listen_addr = "0.0.0.0";
+    settings.general.prometheus.listen_addr = "10.20.20.14";
     localConfig.acquisitions = [
       {
         source = "journalctl";
@@ -130,11 +130,22 @@
     # Firewall; the CrowdSec firewall bouncer inserts its own INPUT chain.
     firewall = {
       enable = true;
-      # 9100 is node_exporter, scraped by nixmonitoring. It is not forwarded
-      # from the Proxmox host, so this only opens the service LAN.
-      allowedTCPPorts = [ 80 443 8080 9100 6060 ];
+      # Public HTTP(S) only. Scrape and LAPI access is source-restricted below.
+      allowedTCPPorts = [ 80 443 ];
       allowedUDPPorts = [ 3478 5349 ];
-      allowedUDPPortRanges = [ { from = 49152; to = 65535; } { from = 40000; to = 41000; } ];
+      allowedUDPPortRanges = [{ from = 49152; to = 65535; } { from = 40000; to = 41000; }];
+      extraCommands = ''
+        iptables -A nixos-fw -p tcp -s 10.20.20.11 --dport 8080 -j nixos-fw-accept
+        iptables -A nixos-fw -p tcp -s 10.20.20.12 --dport 8080 -j nixos-fw-accept
+        iptables -A nixos-fw -p tcp -s 10.20.20.13 --dport 8080 -j nixos-fw-accept
+        ip6tables -A nixos-fw -p tcp -s fd01::11 --dport 8080 -j nixos-fw-accept
+        ip6tables -A nixos-fw -p tcp -s fd01::12 --dport 8080 -j nixos-fw-accept
+        ip6tables -A nixos-fw -p tcp -s fd01::13 --dport 8080 -j nixos-fw-accept
+        iptables -A nixos-fw -p tcp -s 10.20.20.23 --dport 6060 -j nixos-fw-accept
+        ip6tables -A nixos-fw -p tcp -s fd01::23 --dport 6060 -j nixos-fw-accept
+        iptables -A nixos-fw -p tcp -s 10.20.20.23 --dport 9100 -j nixos-fw-accept
+        ip6tables -A nixos-fw -p tcp -s fd01::23 --dport 9100 -j nixos-fw-accept
+      '';
     };
 
     # Pin the public service hostnames to the local nginx reverse proxy.

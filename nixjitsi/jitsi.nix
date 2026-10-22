@@ -27,9 +27,51 @@
   services.jitsi-meet = {
     enable = true;
     hostName = "meet.minnecker.com";
-    
+    secureDomain.enable = true;
+    secureDomain.authentication = "internal_hashed";
+
     # Enable Nginx on the local container to serve the web assets
     nginx.enable = true;
+  };
+
+  systemd.services.jitsi-admin-secret = {
+    description = "Generate the Jitsi secure-domain admin password";
+    wantedBy = [ "prosody.service" ];
+    before = [ "prosody.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    path = [ pkgs.openssl pkgs.coreutils ];
+    script = ''
+      set -euo pipefail
+      f=/var/lib/jitsi-meet/admin-password
+      if [ ! -s "$f" ]; then
+        (umask 027; openssl rand -hex 24 > "$f")
+      fi
+      chown root:jitsi-meet "$f"
+      chmod 0640 "$f"
+    '';
+  };
+
+  systemd.services.jitsi-admin-user = {
+    description = "Provision the Jitsi secure-domain admin account";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "prosody.service" "jitsi-admin-secret.service" ];
+    requires = [ "jitsi-admin-secret.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "prosody";
+      Group = "prosody";
+      SupplementaryGroups = [ "jitsi-meet" ];
+      Restart = "on-failure";
+      RestartSec = "5s";
+    };
+    script = ''
+      set -euo pipefail
+      ${config.services.prosody.package}/bin/prosodyctl register admin ${config.services.jitsi-meet.hostName} "$(cat /var/lib/jitsi-meet/admin-password)" || true
+    '';
   };
 
   # Disable ACME and ForceSSL locally so traffic can be proxied over HTTP

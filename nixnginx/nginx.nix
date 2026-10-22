@@ -151,7 +151,14 @@ in
       # journald source picks them up and ships them to Loki. Without this,
       # nginx logs only to /var/log/nginx/*.log and the monitoring dashboard's
       # {systemd_unit="nginx.service"} Loki queries return nothing.
-      access_log syslog:server=unix:/dev/log;
+      # Only ship 4xx/5xx access lines to Loki. Successful asset/API
+      # requests are high-volume and are not used by CrowdSec or fail2ban;
+      # probes, auth failures and errors remain for security analysis.
+      map $status $access_loggable {
+        ~^[23] 0;
+        default 1;
+      }
+      access_log syslog:server=unix:/dev/log combined if=$access_loggable;
       error_log syslog:server=unix:/dev/log;
 
       # Include LDAP configurations from the isolated mail/ldap secrets mount

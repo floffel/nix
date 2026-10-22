@@ -115,6 +115,9 @@
       server:
         http_listen_port: 3100
         grpc_listen_port: 9096
+        # Loki's own per-query info logs were a large part of Loki's log
+        # volume; keep warnings/errors only.
+        log_level: warn
       common:
         ring:
           instance_addr: 127.0.0.1

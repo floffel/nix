@@ -1188,18 +1188,11 @@ EOF
     settings.general.api.server.listen_uri = "127.0.0.1:8080";
     settings.lapi.credentialsFile = "/var/lib/crowdsec/mail-machine.yaml";
     settings.general.prometheus.listen_addr = "0.0.0.0";
-    localConfig.acquisitions = [
-      {
-        source = "journalctl";
-        journalctl_filter = [ "_SYSTEMD_UNIT=postfix.service" ];
-        labels = { type = "syslog"; };
-      }
-      {
-        source = "journalctl";
-        journalctl_filter = [ "_SYSTEMD_UNIT=dovecot.service" ];
-        labels = { type = "syslog"; };
-      }
-    ];
+    # Postfix/Dovecot auth and HELO/relay rejects are handled by fail2ban
+    # (the stock CrowdSec Postfix parser does not match journald here). Mail
+    # still enforces central LAPI decisions through its firewall bouncer.
+    localConfig.acquisitions = [ ];
+
     # Never ban the Proxmox host's own public addresses (DNAT/hairpin traffic).
     localConfig.parsers.s02Enrich = [
       {

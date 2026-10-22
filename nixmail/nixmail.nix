@@ -887,10 +887,12 @@ EOF
     # envelope detail is stripped by Postfix anyway. The preserved To/Cc
     # header still has the original address. Tags are restricted to
     # [A-Za-z0-9_-] so a tag cannot create a nested/special mailbox.
-    # Bcc-only tags are not visible in To/Cc.
+    # Bcc-only tags (GitHub notifications) are not in To/Cc, but the tagged
+    # original recipient is preserved in Delivered-To.
     if anyof (
       address :detail :matches "to" "?*",
-      address :detail :matches "cc" "?*"
+      address :detail :matches "cc" "?*",
+      address :detail :matches "delivered-to" "?*"
     ) {
       fileinto :create "''${1}''${2}";
       stop;

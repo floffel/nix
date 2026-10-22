@@ -1176,7 +1176,7 @@ EOF
   # separate firewall bouncer still enforces central LAPI decisions. Keep the
   # agent disabled to avoid a permanently failing service and wasted CPU.
   services.crowdsec = {
-    enable = false;
+    enable = true;
     # Same proxmox-lxc empty-hostname caveat as on nixnginx.
     name = "nixmail";
     autoUpdateService = true;
@@ -1195,7 +1195,18 @@ EOF
     # Postfix/Dovecot auth and HELO/relay rejects are handled by fail2ban
     # (the stock CrowdSec Postfix parser does not match journald here). Mail
     # still enforces central LAPI decisions through its firewall bouncer.
-    localConfig.acquisitions = [ ];
+    localConfig.acquisitions = [
+      {
+        source = "journalctl";
+        journalctl_filter = [ "_SYSTEMD_UNIT=postfix.service" ];
+        labels = { type = "syslog"; };
+      }
+      {
+        source = "journalctl";
+        journalctl_filter = [ "_SYSTEMD_UNIT=dovecot.service" ];
+        labels = { type = "syslog"; };
+      }
+    ];
 
     # Never ban the Proxmox host's own public addresses (DNAT/hairpin traffic).
     localConfig.parsers.s02Enrich = [
@@ -1220,8 +1231,6 @@ EOF
   # Same NixOS 26.05 crowding module workarounds as on nixnginx: shared
   # /var/lib/crowdsec must be writable by the static crowdsec user, and the
   # bouncer's raw cscli call needs /etc/crowdsec/config.yaml.
-  systemd.services.crowdsec.enable = lib.mkForce false;
-  systemd.services.crowdsec.wantedBy = lib.mkForce [ ];
   systemd.services.crowdsec.serviceConfig.DynamicUser = lib.mkForce false;
   systemd.services.crowdsec.serviceConfig.PrivateUsers = lib.mkForce false;
   systemd.services.crowdsec-firewall-bouncer-register.serviceConfig.DynamicUser =

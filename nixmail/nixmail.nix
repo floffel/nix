@@ -1171,8 +1171,12 @@ EOF
   # adds protocol-aware detections on top of rspamd (which filters message
   # content, not SMTP/IMAP client behaviour). Decisions are shared through
   # the central LAPI with every CrowdSec bouncer.
+  # The mail agent's Postfix/Dovecot acquisitions do not parse journald in
+  # this CrowdSec version. Fail2ban covers mail auth/HELO/relay abuse, and the
+  # separate firewall bouncer still enforces central LAPI decisions. Keep the
+  # agent disabled to avoid a permanently failing service and wasted CPU.
   services.crowdsec = {
-    enable = true;
+    enable = false;
     # Same proxmox-lxc empty-hostname caveat as on nixnginx.
     name = "nixmail";
     autoUpdateService = true;

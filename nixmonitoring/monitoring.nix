@@ -100,7 +100,7 @@
         job_name = "crowdsec";
         static_configs = [
           {
-            targets = [ "nixnginx:6060" "nixmail:6060" ];
+            targets = [ "nixnginx:6060" ];
           }
         ];
       }

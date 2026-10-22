@@ -387,6 +387,10 @@ in
 
       protocols = [ "imap" "pop3" "lmtp" "sieve" ];
       recipient_delimiter = "+.";
+      # Bcc-only address tags (GitHub notifications) never appear in To/Cc,
+      # and this Pigeonhole does not expose the LMTP envelope detail to Sieve.
+      # LMTP can save directly to the mailbox named by the detail instead.
+      lmtp_save_to_detail_mailbox = true;
       ssl = "yes";
 
       # Dovecot 2.4's lib-ldap sets LDAP_OPT_X_TLS_REQUIRE_CERT per-connection
@@ -882,17 +886,13 @@ EOF
     }
 
     # 5. Address tags: user+tag@ and user.tag@ -> mailbox "tag".
-    # The address test's :detail (subaddress extension) is the correct Sieve
-    # mechanism; envelope :detail is not supported by this pigeonhole and the
-    # envelope detail is stripped by Postfix anyway. The preserved To/Cc
-    # header still has the original address. Tags are restricted to
+    # This handles tags visible in To/Cc. Bcc-only tags (GitHub
+    # notifications) are saved by Dovecot's lmtp_save_to_detail_mailbox,
+    # which sees the LMTP envelope recipient. Tags are restricted to
     # [A-Za-z0-9_-] so a tag cannot create a nested/special mailbox.
-    # Bcc-only tags (GitHub notifications) are not in To/Cc, but the tagged
-    # original recipient is preserved in Delivered-To.
     if anyof (
       address :detail :matches "to" "?*",
-      address :detail :matches "cc" "?*",
-      address :detail :matches "delivered-to" "?*"
+      address :detail :matches "cc" "?*"
     ) {
       fileinto :create "''${1}''${2}";
       stop;

@@ -885,18 +885,11 @@ EOF
       stop;
     }
 
-    # 5. Address tags: user+tag@ and user.tag@ -> mailbox "tag".
-    # This handles tags visible in To/Cc. Bcc-only tags (GitHub
-    # notifications) are saved by Dovecot's lmtp_save_to_detail_mailbox,
-    # which sees the LMTP envelope recipient. Tags are restricted to
-    # [A-Za-z0-9_-] so a tag cannot create a nested/special mailbox.
-    if anyof (
-      address :detail :matches "to" "?*",
-      address :detail :matches "cc" "?*"
-    ) {
-      fileinto :create "''${1}''${2}";
-      stop;
-    }
+    # Address tags (user+tag@ and user.tag@) are handled by Dovecot's
+    # lmtp_save_to_detail_mailbox, which uses the actual LMTP envelope
+    # recipient. Keeping a header-based rule here would misfile messages whose
+    # To/Cc contains an unrelated external address with a dot in the local
+    # part (e.g. carola.kaden@example.com -> mailbox "kaden").
   '';
 
   # Export Dovecot stats to Prometheus via the node_exporter textfile

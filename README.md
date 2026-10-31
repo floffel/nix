@@ -137,6 +137,71 @@ For example, to mount secrets for the `nixnsd` container:
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/nsd var/lib/secrets/nsd none bind,rw 0 0
 ```
 
+#### Where secrets live: host disk vs NAS share
+
+Two rules, decided per secret:
+
+* **Shared between containers** → the Proxmox host's **own disk**, under
+  `/var/lib/secrets/<group>/<consumer>`, bind-mounted into every container that
+  needs it (the writer `rw`, the readers `ro`).  Everything Matrix reads lives
+  there since 2026-10-31, which is why `nixmatrix` has **no NAS dependency at
+  all** anymore (`mount | grep mnt/pve/nas` inside CT 109 is empty).
+* **Used by exactly one container** → inside that container's own filesystem
+  under `/var/lib/secrets/<name>`, with no mount entry at all.  Examples: the
+  Garage S3 keys in `nixmatrix:var/lib/secrets/matrix/s3`, Vaultwarden's admin
+  token, Wiki.js' admin password, MAS's own signing keys.
+
+The NAS (`/mnt/pve/nas`, NFS `192.168.1.203:/mnt/big/remote`) still carries the
+other groups.  Moving a group is per-subdir: `nixpostgres` and `nixidm` keep
+their NAS parent mount and simply get the `matrix` subdir bind-mounted **on
+top** of it, so one consumer can move without touching its siblings.  Put the
+nested line after its parent in the config file, and remember that mount
+entries only take effect on container **start** (`pct stop` + `pct start`).
+
+**Ownership is the part that bites.** All these containers are unprivileged and
+share one uid mapping (container root = host uid `100000`, `0 100000 65536`),
+which behaves differently from the NAS:
+
+* A file written by container root lands on the host as uid `100000` and shows
+  up as `root:root` inside *every* container — so `0600` already suffices for a
+  root-run consumer.  On the NAS the export squashes everything to host `root`,
+  which is *unmapped* inside the containers, so files appear as
+  `nobody:nogroup` and only the world-readable bit made them usable.
+* Seeded files must be owned by `100000`, not by host `root`, otherwise no
+  container can rewrite them.
+* When the writer's unit drops privileges, the directory must belong to **that**
+  uid: `postgresql-password-provisioning` runs as `postgres` (uid 71 in
+  CT 107), so `/var/lib/secrets/postgres/matrix` is owned by host `100071`.
+  Getting this wrong surfaces as `chmod: changing permissions of
+  '/var/lib/secrets/postgres/matrix/db-password': Operation not permitted`.
+* Never `chown` a shared file to a service user — `coturn` did exactly that to
+  the mirrored TURN secret, which would have made it unreadable for Synapse's
+  root-run config unit and silently substituted `PLACEHOLDER` for the real
+  value.  It now chowns the mirrored copy to `root` (see `nixnginx/nginx.nix`).
+
+Seeding a host-local group looks like this (then change **only the source**
+path in `/etc/pve/lxc/<id>.conf` and restart the container):
+
+```bash
+install -d -m 755 -o 100000 -g 100000 /var/lib/secrets/coturn
+install -m 644 -o 100000 -g 100000 \
+  /mnt/pve/nas/shared/secrets/coturn/shared-secret /var/lib/secrets/coturn/shared-secret
+chown -R 100071:100071 /var/lib/secrets/postgres/matrix   # writer runs as postgres
+```
+
+**Rollback.** Mount entries live only in `/etc/pve/lxc/<id>.conf`; the
+pre-change copies are on the host in `/root/backups/secrets-off-nas-20261031/`.
+Restore the file, `pct stop <id> && pct start <id>`, done.  The NAS copies were
+**copied, not moved**, and are byte-identical (`md5sum` verified), so a rollback
+is lossless — but note they are now dead copies that nothing reads, and if one
+is ever deleted while a writer still points at the NAS, that writer regenerates
+a *fresh* value there and the two sides diverge silently (SSO or DB auth breaks
+on the next consumer restart).
+
+**Caveat:** `/var/lib/secrets` is on the host's root filesystem, which is not
+part of the NAS backup.  It holds ~5 small files; snapshot or back it up
+alongside the host config.
+
 #### Complete Bind-Mount Table
 
 Add one `lxc.mount.entry` line per row to the container listed in the first
@@ -156,18 +221,20 @@ bind-mounted into **multiple** containers from the same NAS path.
 | `nixvpn` | `/mnt/pve/nas/shared/secrets/wireguard` | `var/lib/secrets/nixvpn` | `rw` | WireGuard server private/public keys |
 | `nixidm` | `/mnt/pve/nas/shared/secrets/kanidm` | `var/lib/secrets/kanidm` | `rw` | `idm-admin-password` for the provision hook |
 | `nixidm` | `/mnt/pve/nas/shared/secrets/oauth2` | `var/lib/secrets/oauth2` | `rw` | Provisions **all** OAuth2 client secrets (sole writer) |
+| `nixidm` | **`/var/lib/secrets/oauth2/matrix`** *(host disk)* | `var/lib/secrets/oauth2/matrix` | `rw` | Nested override: the Matrix MAS client secret now lives on the host, the other clients stay on the NAS |
 | `nixforgejo` | `/mnt/pve/nas/shared/secrets/oauth2/forgejo` | `var/lib/secrets/oauth2/forgejo` | `ro` | Forgejo OIDC client secret |
 | `nixnginx` | `/mnt/pve/nas/shared/secrets/oauth2/nextcloud` | `var/lib/secrets/oauth2/nextcloud` | `ro` | Nextcloud OIDC client secret |
 | `nixmonitoring` | `/mnt/pve/nas/shared/secrets/oauth2/grafana` | `var/lib/secrets/oauth2/grafana` | `ro` | Grafana OIDC client secret |
-| `nixmatrix` | `/mnt/pve/nas/shared/secrets/oauth2/matrix` | `var/lib/secrets/oauth2/matrix` | `ro` | Matrix Synapse OIDC client secret |
+| `nixmatrix` | **`/var/lib/secrets/oauth2/matrix`** *(host disk)* | `var/lib/secrets/oauth2/matrix` | `ro` | Matrix MAS client secret (`mas-secret`); the legacy `secret` file is unused and was not carried over |
 
 | `nixvaultwarden` | `/mnt/pve/nas/shared/secrets/oauth2/vaultwarden` | `var/lib/secrets/oauth2/vaultwarden` | `ro` | Vaultwarden OIDC client secret |
 | `nixwikijs` | `/mnt/pve/nas/shared/secrets/oauth2/wikijs` | `var/lib/secrets/oauth2/wikijs` | `ro` | Wiki.js OIDC client secret (seeded into the `authentication` table by `wikijs-provision`) |
 | `nixpostgres` | `/mnt/pve/nas/shared/secrets/postgres` | `var/lib/secrets/postgres` | `rw` | Provisions **all** DB role passwords (sole writer) |
+| `nixpostgres` | **`/var/lib/secrets/postgres/matrix`** *(host disk)* | `var/lib/secrets/postgres/matrix` | `rw` | Nested override for the Matrix/MAS role passwords; owned by `100071` because the writer runs as `postgres` |
 | `nixforgejo` | `/mnt/pve/nas/shared/secrets/postgres/forgejo` | `var/lib/secrets/postgres/forgejo` | `ro` | Forgejo DB password |
 | `nixnginx` | `/mnt/pve/nas/shared/secrets/postgres/roundcube` | `var/lib/secrets/postgres/roundcube` | `ro` | Roundcube DB password |
 | `nixnginx` | `/mnt/pve/nas/shared/secrets/postgres/nextcloud` | `var/lib/secrets/postgres/nextcloud` | `ro` | Nextcloud DB password |
-| `nixmatrix` | `/mnt/pve/nas/shared/secrets/postgres/matrix` | `var/lib/secrets/postgres/matrix` | `ro` | Matrix DB password |
+| `nixmatrix` | **`/var/lib/secrets/postgres/matrix`** *(host disk)* | `var/lib/secrets/postgres/matrix` | `ro` | Matrix DB passwords (`db-password`, `mas-db-password`) |
 | `nixvaultwarden` | `/mnt/pve/nas/shared/secrets/postgres/vaultwarden` | `var/lib/secrets/postgres/vaultwarden` | `ro` | Vaultwarden DB password |
 | `nixwikijs` | `/mnt/pve/nas/shared/secrets/postgres/wikijs` | `var/lib/secrets/postgres/wikijs` | `ro` | Wiki.js DB password |
 | `nixforgejo` | `/mnt/pve/nas/shared/secrets/forgejo` | `var/lib/secrets/forgejo` | `rw` | Forgejo Actions runner registration token |
@@ -177,8 +244,8 @@ bind-mounted into **multiple** containers from the same NAS path.
 | `nixwikijs` | `/mnt/pve/nas/shared/secrets/wikijs` | `var/lib/secrets/wikijs` | `rw` | Wiki.js admin password (generated locally by `wikijs-provision`) |
 | `nixnsd` | `/mnt/pve/nas/shared/secrets/nsd` | `var/lib/secrets/nsd` | `rw` | NSD TSIG sync key |
 | `nixnginx` | `/mnt/pve/nas/shared/secrets/nginx` | `var/lib/secrets/nginx` | `ro` | Nextcloud/Roundcube DB pws, Roundcube DES key |
-| `nixnginx` | `/mnt/pve/nas/shared/secrets/coturn` | `var/lib/secrets/coturn` | `rw` | Coturn TURN shared secret (generated by `coturn-secret` oneshot, mirrored for `nixmatrix`) |
-| `nixmatrix` | `/mnt/pve/nas/shared/secrets/coturn` | `var/lib/secrets/coturn` | `ro` | Coturn TURN shared secret (read by Synapse for REST API auth) |
+| `nixnginx` | **`/var/lib/secrets/coturn`** *(host disk)* | `var/lib/secrets/coturn` | `rw` | Coturn TURN shared secret (generated by the `coturn-secret` activation script, mirrored for `nixmatrix`) |
+| `nixmatrix` | **`/var/lib/secrets/coturn`** *(host disk)* | `var/lib/secrets/coturn` | `ro` | Coturn TURN shared secret (read by Synapse for REST API auth) |
 | `nixnginx` | `/mnt/pve/nas/shared/nextcloud-data` | `var/lib/nextcloud-data` | `rw` | Nextcloud user data directory (NFS backed) |
 
 Example `lxc.mount.entry` lines (one per row above):
@@ -188,18 +255,22 @@ lxc.mount.entry: /mnt/pve/nas/shared/secrets/forgejo var/lib/secrets/forgejo non
 # Shared SSL certificates
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/ssl var/lib/secrets/ssl none bind,ro 0 0
 # Shared OAuth2 client secrets — nixidm gets the parent (rw), consumers get their own subdir (ro)
+# nixmatrix instead reads from the host's own disk (no NAS dependency): see the section above
+lxc.mount.entry: /var/lib/secrets/oauth2/matrix var/lib/secrets/oauth2/matrix none bind,rw 0 0
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2 var/lib/secrets/oauth2 none bind,rw 0 0
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2/forgejo var/lib/secrets/oauth2/forgejo none bind,ro 0 0
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2/vaultwarden var/lib/secrets/oauth2/vaultwarden none bind,ro 0 0
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/oauth2/wikijs var/lib/secrets/oauth2/wikijs none bind,ro 0 0
 # Shared Postgres DB passwords — nixpostgres gets the parent (rw), consumers get their own subdir (ro)
+# (nested override for the Matrix role passwords, host disk instead of NAS)
+lxc.mount.entry: /var/lib/secrets/postgres/matrix var/lib/secrets/postgres/matrix none bind,rw 0 0
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/postgres var/lib/secrets/postgres none bind,rw 0 0
 lxc.mount.entry: /mnt/pve/nas/shared/secrets/postgres/forgejo var/lib/secrets/postgres/forgejo none bind,ro 0 0
 # Nextcloud user data (NFS backed, read-write)
 lxc.mount.entry: /mnt/pve/nas/shared/nextcloud-data var/lib/nextcloud-data none bind,rw 0 0
-# Coturn TURN shared secret — nixnginx writes (rw), nixmatrix reads (ro)
-lxc.mount.entry: /mnt/pve/nas/shared/secrets/coturn var/lib/secrets/coturn none bind,rw 0 0
-lxc.mount.entry: /mnt/pve/nas/shared/secrets/coturn var/lib/secrets/coturn none bind,ro 0 0
+# Coturn TURN shared secret — nixnginx writes (rw), nixmatrix reads (ro), both from the host disk
+lxc.mount.entry: /var/lib/secrets/coturn var/lib/secrets/coturn none bind,rw 0 0
+lxc.mount.entry: /var/lib/secrets/coturn var/lib/secrets/coturn none bind,ro 0 0
 ```
 
 #### Mail hardening & email features
@@ -457,7 +528,7 @@ Below are the key files and credentials required per container:
           display_name_claim: "name"
           email_claim: "email"
   ```
-  * The `password` line is **rewritten on every Synapse start** from the shared Postgres secrets mount at `/var/lib/secrets/postgres/matrix/db-password` (provisioned on `nixpostgres`), so the value above is only the initial placeholder — it stays in sync with the role's actual password automatically.
+  * The `password` line is **rewritten on every Synapse start** from `/var/lib/secrets/postgres/matrix/db-password` (written by `nixpostgres` into a **host-disk** bind mount, not the NAS — `nixmatrix` has no NAS mounts at all), so the value above is only the initial placeholder — it stays in sync with the role's actual password automatically.
   * The `client_secret`/`secret` lines are **rewritten on every Synapse start** from `/var/lib/matrix-authentication-service/client-secret` and `…/admin-token`, two random values that the `mas-secrets-config` unit generates into the container's own filesystem on first boot (they are used by MAS's native client registration, not by Kanidm — the Kanidm↔MAS client secret lives on the shared mount at `/var/lib/secrets/oauth2/matrix/mas-secret`), so the values above are only initial placeholders.
 * **Media storage in Garage (S3)**: Matrix media (own uploads, downloaded remote media and their thumbnails) is kept in the Garage bucket `synapse`. `nixmatrix/synapse.nix` loads the `matrix-synapse-s3-storage-provider` plugin (`services.matrix-synapse.plugins`), and the `matrix-synapse-secrets-config` unit appends the provider block to `secrets.yaml` at runtime:
   ```yaml
@@ -478,7 +549,7 @@ Below are the key files and credentials required per container:
   * **URL previews stay on disk by design**: this is Synapse itself, not the plugin — `MediaStorage.fetch_media()` short-circuits `file_info.url_cache` ("URL cache files are stored locally and should not go through storage providers"), so preview cards can never be read from or written to Garage. `url_preview_enabled` is at its default (`true`), and `s3_media_upload` skips those rows (`url_cache IS NULL`), so previews are neither uploaded nor deleted.
   * **Race-free offload**: the timer asks for media whose *last access* is older than `1800s`, far beyond the lifetime of an upload or download in flight, so a file is never deleted out from under a running request. The one-time migration passes `1s` (= the whole store) and runs before Synapse starts, when nothing can be in flight.
   * **Duration gotcha — use `s`, never `m`**: `s3_media_upload` accepts `s`/`h`/`d`/`m`/`y` where **`m` means 30-day months** and there is no minute unit (the script comments that "seconds can be used to implement minutes"). Passing `30m` therefore means 900 days and the job silently offloads nothing — it exits `0` and reports `Syncing files that haven't been accessed since: <two and a half years ago>`. That was caught live on 2026-10-31 by reading the unit's journal output, not the exit code; check that line whenever the numbers look suspiciously empty. (The unrelated `OnUnitActiveSec = "30m"` in the timer is a systemd duration, where `m` *is* minutes.)
-  * **Activation is file-driven, so no credential is ever committed**: the block is written only when *both* `/var/lib/secrets/matrix/s3/access-key` (Garage **key id**, `GK…`) and `/var/lib/secrets/matrix/s3/secret-key` exist and are non-empty; otherwise Synapse keeps the plain on-disk media store and both sync jobs exit `0` immediately, which is why evaluation and the `vm-nixmatrix` test need no Garage. Note that on CT 109 `/var/lib/secrets/matrix` is a directory **inside the container's own filesystem**, not a NAS bind mount (only `oauth2/matrix`, `postgres/matrix` and `coturn` are mounted there), so the key files are created inside the container:
+  * **Activation is file-driven, so no credential is ever committed**: the block is written only when *both* `/var/lib/secrets/matrix/s3/access-key` (Garage **key id**, `GK…`) and `/var/lib/secrets/matrix/s3/secret-key` exist and are non-empty; otherwise Synapse keeps the plain on-disk media store and both sync jobs exit `0` immediately, which is why evaluation and the `vm-nixmatrix` test need no Garage. Note that on CT 109 `/var/lib/secrets/matrix` is a directory **inside the container's own filesystem**, not any kind of network mount at all (the only bind entries on CT 109 are `oauth2/matrix`, `postgres/matrix` and `coturn`, and all three come from the host's own disk), so the key files are created inside the container:
     ```bash
     pct exec 109 -- /run/current-system/sw/bin/bash -c '
       install -d -m 700 -o root -g root /var/lib/secrets/matrix/s3

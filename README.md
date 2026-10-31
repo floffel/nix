@@ -172,7 +172,7 @@ bind-mounted into **multiple** containers from the same NAS path.
 | `nixwikijs` | `/mnt/pve/nas/shared/secrets/postgres/wikijs` | `var/lib/secrets/postgres/wikijs` | `ro` | Wiki.js DB password |
 | `nixforgejo` | `/mnt/pve/nas/shared/secrets/forgejo` | `var/lib/secrets/forgejo` | `rw` | Forgejo Actions runner registration token |
 | `nixopenwebui` | `/mnt/pve/nas/shared/secrets/open-webui` | `var/lib/secrets/open-webui` | `rw` | Open WebUI env (LLM URLs, PKCE client) |
-| `nixmatrix` | `/mnt/pve/nas/shared/secrets/matrix` | `var/lib/secrets/matrix` | `rw` | Synapse `secrets.yaml` (DB pw, OIDC config) |
+| — | *(not configured)* | `var/lib/secrets/matrix` | local | Synapse runtime dir **inside CT 109's own filesystem**; holds the Garage S3 keys in `s3/` (see the nixmatrix section) |
 | `nixvaultwarden` | `/mnt/pve/nas/shared/secrets/vaultwarden` | `var/lib/secrets/vaultwarden` | `rw` | Vaultwarden env (DB url, admin token) |
 | `nixwikijs` | `/mnt/pve/nas/shared/secrets/wikijs` | `var/lib/secrets/wikijs` | `rw` | Wiki.js admin password (generated locally by `wikijs-provision`) |
 | `nixnsd` | `/mnt/pve/nas/shared/secrets/nsd` | `var/lib/secrets/nsd` | `rw` | NSD TSIG sync key |
@@ -459,6 +459,38 @@ Below are the key files and credentials required per container:
   ```
   * The `password` line is **rewritten on every Synapse start** from the shared Postgres secrets mount at `/var/lib/secrets/postgres/matrix/db-password` (provisioned on `nixpostgres`), so the value above is only the initial placeholder — it stays in sync with the role's actual password automatically.
   * The `client_secret` line is **rewritten on every Synapse start** from the shared OAuth2 secret mount at `/var/lib/secrets/oauth2/matrix/secret` (provisioned on `nixidm`), so the value above is only the initial placeholder — it stays in sync with Kanidm automatically.
+* **Media storage in Garage (S3)**: Matrix media (own uploads, downloaded remote media and their thumbnails) is kept in the Garage bucket `synapse`. `nixmatrix/synapse.nix` loads the `matrix-synapse-s3-storage-provider` plugin (`services.matrix-synapse.plugins`), and the `matrix-synapse-secrets-config` unit appends the provider block to `secrets.yaml` at runtime:
+  ```yaml
+  enable_local_media_storage: false
+  url_preview_enabled: false
+  media_storage_providers:
+    - module: s3_storage_provider.S3StorageProviderBackend
+      store_local: true
+      store_remote: true
+      store_synchronous: true
+      config:
+        bucket: "synapse"
+        region_name: "garage"
+        endpoint_url: "http://192.168.1.132:3900"
+        access_key_id: "<read from /var/lib/secrets/matrix/s3/access-key>"
+        secret_access_key: "<read from /var/lib/secrets/matrix/s3/secret-key>"
+  ```
+  Garage answers the S3 API on `192.168.1.132:3900` (plain HTTP on the internal LAN, path-style addressing, region `garage`); an unauthenticated request returns `403`. Endpoint, bucket and region are declared once as `let` values at the top of `nixmatrix/synapse.nix`. `192.168.1.132` is reachable from `nixmatrix` (`10.20.20.19`).
+  * **S3 is the only media backend**: `enable_local_media_storage: false` means uploads are streamed straight into the bucket and the container disk never holds media (no mirroring, no cleanup job needed). The price is link previews: Synapse reads `url_cache` files *only* from the on-disk provider, so with no local provider a generated preview would be written to S3 and then 404 forever. `url_preview_enabled: false` is therefore set alongside it, so pasted links simply show no card instead of a silently broken feature. Flip both back (delete the two lines from the block in `nixmatrix/synapse.nix`) to get on-disk media plus previews again.
+  * **Activation is file-driven, so no credential is ever committed**: the block is written only when *both* `/var/lib/secrets/matrix/s3/access-key` (Garage **key id**, `GK…`) and `/var/lib/secrets/matrix/s3/secret-key` exist and are non-empty; otherwise Synapse keeps the plain on-disk media store, which is why evaluation and the `vm-nixmatrix` test need no Garage. Note that on CT 109 `/var/lib/secrets/matrix` is a directory **inside the container's own filesystem**, not a NAS bind mount (only `oauth2/matrix`, `postgres/matrix` and `coturn` are mounted there), so the key files are created inside the container:
+    ```bash
+    pct exec 109 -- /run/current-system/sw/bin/bash -c '
+      install -d -m 700 -o root -g root /var/lib/secrets/matrix/s3
+      printf %s "<Garage key id>"     > /var/lib/secrets/matrix/s3/access-key
+      printf %s "<Garage secret key>" > /var/lib/secrets/matrix/s3/secret-key
+      chmod 600 /var/lib/secrets/matrix/s3/access-key /var/lib/secrets/matrix/s3/secret-key'
+    ```
+    Both files are root-only (`0600`), consistent with every other secret in this repo: the root-run `matrix-synapse-secrets-config` unit reads them and hands the unprivileged migration unit a `0600 matrix-synapse` env file (`/var/lib/matrix-synapse/s3-migration/credentials.env`).
+  * **One-time migration of existing media**: `matrix-synapse-s3-media-migration` runs *before* `matrix-synapse.service` (so no upload can slip through while copying) and is pulled in via `Wants=`. It calls the plugin's `s3_media_upload update … 1s` + `upload … --delete` pair — uploading every local/remote media object plus thumbnails and then **deleting the local copies** — and drops `/var/lib/matrix-synapse/.s3-media-migrated` so it never repeats. URL-preview files are never touched (they must stay on disk). First run on 2026-10-30: 707 media / 737 files / 302 MB in ~5 min, with the object keys and MD5s verified against a pre-migration backup. Snapshot the container first (`pct snapshot 109 pre-s3-media-<date>`) and expect the switch to block while Synapse is stopped for the duration of the upload.
+  * **Safe by construction**: the unit is `Wanted` but not `Required`/`PartOf`, so a failed upload (Garage down, bad key) never keeps Synapse from starting — it retries on the next start until the marker exists; with no key files it exits `0` immediately.
+  * **Verify**: `systemctl status matrix-synapse-s3-media-migration`, `journalctl -u matrix-synapse | grep -i storage` (no provider errors), `grep -A8 media_storage_providers /var/lib/matrix-synapse/secrets.yaml`, and open an old attachment plus paste a link (preview) in Element. From any LAN machine holding the same key: `aws --endpoint-url http://192.168.1.132:3900 s3 ls s3://synapse --recursive --summarize`.
+  * **Rollback** (all three are available): delete the marker + `s3/` key files and rebuild to drop back to the on-disk store (objects already in Garage stay there and keep being served while the provider block is generated); or `nixos-rebuild switch --generation <pre-S3 gen>` inside the container; or `pct rollback 109 <snapshot>` (needs a container stop/start). A media-store tar backup is kept at `/mnt/pve/nas/shared/media-backups/nixmatrix-media_store-<date>.tar.gz` in case local copies must be restored without rolling the whole container back.
+  * **Trade-offs**: media availability now follows Garage — if the bucket is unreachable, uploads and attachments fail (LAN-only path; the WireGuard edge is not involved). Link previews are off. Existing `media_store/url_cache*` files from before the switch stay on disk but are no longer served; they are plain cache and can be deleted.
 
 #### 🔑 nixvaultwarden (Vaultwarden)
 * **Admin Token**: Auto-provisioned on first boot by the `vaultwarden-admin-token` service into `/var/lib/secrets/vaultwarden/env-template` (a random `ADMIN_TOKEN` generated with `openssl rand -base64 48`). The file is created with `0600` / `vaultwarden:vaultwarden` ownership and left untouched on subsequent starts. To retrieve the generated value (or rotate it), inspect/replace the file directly.

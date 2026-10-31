@@ -12,12 +12,15 @@ let
   # thumbnails) is copied into the bucket, and reads fall back to the bucket
   # for anything that is no longer on disk.
   #
-  # S3 can however *not* replace the local store with this plugin: its
-  # store_file() uploads open(os.path.join(media_store_path, path)), i.e. it
-  # reads the file Synapse just wrote to disk.  With
-  # enable_local_media_storage: false that file is already gone and every
-  # upload dies with FileNotFoundError -> HTTP 500.  Media storage is
-  # therefore a mirror plus an offload, not a replacement:
+  # S3 can however *not* replace the local store with this plugin: Synapse
+  # passes providers only the *relative* media path and writes the bytes to
+  # disk only when a local provider exists (otherwise into a NamedTemporaryFile
+  # whose name is never handed on), while the plugin uploads the path it
+  # rebuilt as media_store_path + path.  So with
+  # enable_local_media_storage: false it uploads a file that was never written
+  # and every upload dies with FileNotFoundError -> HTTP 500.  That is
+  # upstream issue synapse-s3-storage-provider#162 (open, unfixed as of v1.7.0,
+  # see README.md).  Media storage is a mirror plus an offload here:
   #   * store_synchronous: true, so an upload is only acknowledged once the
   #     object is in Garage and the bucket is complete at all times;
   #   * a recurring timer runs the plugin's documented

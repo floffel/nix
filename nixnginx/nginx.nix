@@ -896,7 +896,10 @@ in
         extraConfig = ''
           # LAN + WireGuard clients (10.100.0.0/24 tunnel subnet,
           # 10.10.10.5 nixwireguard host address).
-          allow 192.168.1.1/16;
+          # Written as the network address on purpose: "192.168.1.1/16" made
+          # nginx warn that the low address bits are meaningless, because it
+          # silently normalises to this same /16 anyway.
+          allow 192.168.0.0/16;
           allow 10.100.0.0/24;
           allow 10.10.10.5;
           deny all;

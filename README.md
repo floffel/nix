@@ -148,8 +148,9 @@ Two rules, decided per secret:
   all** anymore (`mount | grep mnt/pve/nas` inside CT 109 is empty).
 * **Used by exactly one container** → inside that container's own filesystem
   under `/var/lib/secrets/<name>`, with no mount entry at all.  Examples: the
-  Garage S3 keys in `nixmatrix:var/lib/secrets/matrix/s3`, Vaultwarden's admin
-  token, Wiki.js' admin password, MAS's own signing keys.
+  Garage S3 keys in `nixmatrix:var/lib/secrets/matrix/s3` and
+  `nixnginx:var/lib/secrets/s3/nextcloud`, Vaultwarden's admin token, Wiki.js'
+  admin password, MAS's own signing keys.
 
 The NAS (`/mnt/pve/nas`, NFS `192.168.1.203:/mnt/big/remote`) still carries the
 other groups.  Moving a group is per-subdir: `nixpostgres` and `nixidm` keep
@@ -725,6 +726,79 @@ Below are the key files and credentials required per container:
 
 #### 🕸️ nixnginx (Nginx Reverse Proxy)
 * Refer to the specific [nixnginx/README.md](file:///root/nixos-config/nixnginx/README.md) for detailed credentials and configuration specifications for SSL certificates, Nextcloud database credentials, and Roundcube secrets.
+
+#### ☁️ Nextcloud user files on Garage S3 (primary storage)
+
+Since 2026-10-31 the **content** of every Nextcloud user file lives in the Garage
+bucket `nextcloud` on `192.168.1.132:3900` (path-style, plain HTTP, region
+`garage`).  This is *primary* storage, not a mirror: unlike the Matrix media
+setup (where `store_local` must stay on, see the nixmatrix section), Nextcloud
+writes and reads user files through the object store only.
+
+**Object keys.** `urn:oid:<oc_filecache.fileid>` — `ObjectStoreStorage::getURN()`
+returns `objectPrefix . $fileId` and the default prefix is `urn:oid:`.  Each
+revision is a separate `oc_filecache` row with its own `fileid`, including
+`files_versions` entries, so an object is never rewritten in place and a copy
+tool only ever adds keys.
+
+**Storage ids.** Enabling the object store changes which storage id Nextcloud
+resolves for a home: `OC\Files\Mount\ObjectHomeMountProvider` (storage id
+`object::user:<uid>`, one `oc_storages` row **per user**, from
+`HomeObjectStoreStorage::getId()`) replaces `LocalHomeMountProvider`
+(`home::<uid>`).  Three tables carry a storage id — `oc_filecache.storage`,
+`oc_mounts.storage_id`, `oc_previews.storage_id`; NC 33 has no
+`oc_home_to_storage`.  `nixnginx/maintenance/remap-objectstore.sql` moves all
+three in one guarded transaction (it aborts unless all six users map, and the
+join on `oc_storages.id` refuses to remap rows if a numeric id drifted).  Share
+mounts follow the *owner's* storage, which the same `storage_id` update handles.
+
+**Configuration** lives in `nixnginx/nginx.nix` under
+`services.nextcloud.config.objectstore.s3`.  The bucket, access key id, endpoint
+and region are non-secret; the secret key is read at service start through
+`LoadCredential=s3_secret` (the module's `runtimeSystemdCredentials`, which reach
+the phpfpm pool, cron, setup units and the `occ` wrapper) from
+`nixnginx:/var/lib/secrets/s3/nextcloud/secret-key`, `root:root` mode 600 on the
+container's own disk — so nothing secret lands in the Nix store and the file is
+not readable by the `nextcloud` php-fpm user directly.
+
+**Cut-over order** (all steps in one maintenance window, because enabling the
+object store before the rows are remapped would make existing files temporarily
+invisible):
+
+```bash
+occ maintenance:mode --on                      # 1. stop writes
+# 2. delta copy: re-run the copy tool, it skips objects that already exist with
+#    matching size+ETag, so only files that changed since the warm copy move
+# 3. remap the storage ids
+psql -h nixpostgres -U nextcloud -d nextcloud -f nixnginx/maintenance/remap-objectstore.sql
+# 4. nixos-rebuild switch with objectstore.s3.enable = true
+occ maintenance:mode --off                     # 5. verify: login, list, download,
+                                               #    preview, share, WebDAV sync
+```
+
+Rollback is `pg_restore` of the pre-migration dump plus reverting the Nix change;
+the NFS tree was never modified, so it is the second rollback path.
+
+**What stays in the datadir:** `config/` (5.5 KB) and `appdata_oc5veetcuvee/`
+(178 MB — previews, avatars, DAV) keep living on the datadir, which is why the
+datadir itself does not move into the bucket.  User payloads: 35,740 files,
+238 GB (florian 108.8 GB, sabine 111.5 GB, helena 18.1 GB).
+
+**Two traps worth remembering:**
+
+* `SELECT sum(size) FROM oc_filecache` counts *directory* rows too, and those
+  carry the size of their whole subtree — that read 1.4 TB for a 238 GB tree.
+  Filter with `mimetype <> 2` (`httpd/unix-directory`).
+* Garage runs with `replica = 1`, so these objects are single-copy: one dead
+  disk loses them.  Consider `replica = 2` before the NAS copy is deleted.
+
+**Migration tooling** (temporary, `nixnginx:/var/lib/nc-s3-migration/`, deleted
+afterwards): `manifest.tsv` (35,740 rows straight from `oc_filecache`, largest
+file first), `nc-s3-copy.php` (streams each file through a tee that MD5s exactly
+the bytes that were sent, multipart above 2 GiB, verifies `HEAD` length *and*
+ETag, resumable through `done-w*.txt`, idempotent on re-run) and
+`nc-s3-inventory.php` (bucket ↔ manifest reconciliation: missing / size-mismatch
+/ extra).  Eight workers reached ~50 MB/s over the NFS → Garage path.
 
 ---
 

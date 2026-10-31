@@ -1275,6 +1275,41 @@ in
       dbpassFile = "/var/lib/secrets/postgres/nextcloud/db-password";
       adminpassFile = "/var/lib/secrets/nginx/nextcloud-admin-password.txt";
       adminuser = "admin";
+
+      # Primary file storage on the internal Garage S3 bucket
+      # (CT 104 -> 192.168.1.132).  User file *content* lives in the bucket
+      # under the key urn:oid:<oc_filecache.fileid>, which is what
+      # OC\Files\ObjectStore\ObjectStoreStorage::getURN() derives from the
+      # default objectPrefix; homes are then served by
+      # OC\Files\Mount\ObjectHomeMountProvider (storage id
+      # "object::user:<uid>") instead of OC\Files\Mount\LocalHomeMountProvider
+      # ("home::<uid>").  The datadir keeps only config/, appdata/ (previews,
+      # avatars, DAV) and scratch, so it no longer needs shared storage.
+      #
+      # Bucket, key id, endpoint and region are non-secret identifiers; the
+      # secret key is loaded at service start via LoadCredential=s3_secret
+      # (the module hands runtimeSystemdCredentials to the phpfpm pool, cron
+      # and setup units) and read by nix_read_secret(), so it never ends up in
+      # the Nix store.  The access key id has no file equivalent in this
+      # module and is useless without the secret.
+      #
+      # Flipping this on changes which storage id Nextcloud resolves for every
+      # user, so it must land in the same maintenance window as
+      # nixnginx/maintenance/remap-objectstore.sql (see README.md): enabling it
+      # before the rows are remapped makes existing files temporarily
+      # invisible, which is why the pre-migration pg_dump is the rollback.
+      objectstore.s3 = {
+        enable = true;
+        bucket = "nextcloud";
+        key = "GK3456a6057a197119dfce5aae";
+        secretFile = "/var/lib/secrets/s3/nextcloud/secret-key";
+        hostname = "192.168.1.132";
+        port = 3900;
+        useSsl = false;
+        region = "garage";
+        # Garage is addressed as http://host/bucket, not bucket.host.
+        usePathStyle = true;
+      };
     };
 
     settings = {

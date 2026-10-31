@@ -100,6 +100,43 @@ A placeholder `sha256` hash is configured for `nginx-auth-ldap` in `nginx.nix`. 
 
 ---
 
+## Rate Limiting
+`nginx.nix` keeps one broad per-client flood guard in `commonHttpConfig` (the `http` block), so it applies to **every** vhost. Authentication brute force is CrowdSec's job; these limits only stop floods.
+
+```nginx
+map $uri $web_limit_key     { default $binary_remote_addr; "~^/_matrix/(client/v1/media|media)/" ""; }
+map $uri $matrix_limit_key  { default "";                  "~^/_matrix/(client/v1/media|media)/" $binary_remote_addr; }
+
+limit_req  zone=web          burst=60  nodelay;   # 30 r/s
+limit_req  zone=matrix_media burst=300 nodelay;   # 300 r/s
+limit_conn addr 40;
+limit_conn matrix_media_conn 200;
+```
+
+* **Why two buckets.** An empty limit key means "do not limit this request", so the two maps partition traffic by URI: Matrix media traffic is counted only in the matrix bucket, everything else only in `web`/`addr`. Element Web renders authenticated media (MSC3916) through its service worker, which fetches dozens of `/_matrix/client/v1/media/…` objects in parallel for a single room, and `limit_conn addr` counts **concurrent connections per client across all vhosts on this IP** — one browser hitting Nextcloud, Git, Matrix, Vaultwarden, Wiki and the long-polling `/sync` easily exceeds 40. On 2026-10-31 that showed up as `429` (`limiting requests … zone "web"`) and `503` (`limiting connections by zone "addr"`) on those exact requests, which Element reports as "Fehler beim Herunterladen des Bildes". Media uploads share the matrix bucket; they are authenticated and bounded by `client_max_body_size`.
+* **The guard is unchanged for everything else** — scanners are still rejected with the same 40-connection / 30 r/s budget (`205.169.39.18` and friends hit it daily).
+* **`limit_req` runs in the PREACCESS phase, `return` in REWRITE.** A `location` that answers with `return 200 …` (the `.well-known` stubs here) never reaches the limit checks, so such locations cannot be used to demonstrate limiting.
+* **Verify without touching production traffic.** Spin up a throwaway instance that reuses the exact generated block; `try_files` (not `return`) is required so the requests reach the limit phase:
+  ```bash
+  CONF=$(grep -oE '/nix/store/[^ ]+-nginx\.conf' /etc/systemd/system/nginx.service | head -1)
+  mkdir -p /tmp/lt/logs /tmp/lt/html && printf 'ok\n' > /tmp/lt/html/index.html
+  { echo 'worker_processes 1;'; echo 'pid /tmp/lt/pid;'
+    echo 'error_log /tmp/lt/logs/error.log info;'
+    echo 'events { worker_connections 1024; }'; echo 'http {'
+    echo 'access_log off;'; echo 'default_type text/plain;'
+    awk '/map \$uri \$web_limit_key/,/limit_req_status/' "$CONF"
+    echo 'server { listen 127.0.0.1:18900; root /tmp/lt/html; location / { try_files $uri =404; } }'
+    echo '}'; } > /tmp/lt/nginx.conf
+  nginx -p /tmp/lt -c /tmp/lt/nginx.conf           # start
+  seq 1 300 | xargs -P40 -I{} curl -s -o /dev/null -w '%{http_code}\n' \
+    http://127.0.0.1:18900/index.html | sort | uniq -c   # expect ~88x200 + 212x429
+  nginx -p /tmp/lt -c /tmp/lt/nginx.conf -s stop; rm -rf /tmp/lt
+  ```
+  Repeat the last `curl` line against a `/_matrix/client/v1/media/…` path (create the file under `/tmp/lt/html` first): it must return `200` for all 300.
+* **Check the live guard**: `journalctl -u nginx | grep -E 'limiting (requests|connections)'` — the log line names the zone, so it also tells you which bucket a client exhausted.
+
+---
+
 ## Troubleshooting Setup Failures
 
 ### 1. Nextcloud "Command 'upgrade' is not defined"

@@ -139,10 +139,35 @@ in
       # which can react to repeated failures. 30 r/s with a 60
       # request burst allows normal page assets and Nextcloud sync while
       # stopping request floods.
-      limit_req_zone $binary_remote_addr zone=web:20m rate=30r/s;
-      limit_conn_zone $binary_remote_addr zone=addr:20m;
+      #
+      # Matrix media needs its own bucket. Synapse enforces authenticated
+      # media (MSC3916), so Element Web renders images with a service worker
+      # that fetches dozens of /_matrix/client/v1/media/... objects in
+      # parallel for one room. Sharing the single web bucket -- and the 40
+      # connection cap, which every vhost on this IP counts against for one
+      # client -- made those fetches fail with 429/503, which Element reports
+      # as "Fehler beim Herunterladen des Bildes". An empty limit key means
+      # "do not limit this request", so the two maps split traffic by URI
+      # without loosening the guard for anything else. Media uploads share
+      # the matrix bucket; they are authenticated and bounded by
+      # client_max_body_size.
+      map $uri $web_limit_key {
+        default                               $binary_remote_addr;
+        "~^/_matrix/(client/v1/media|media)/" "";
+      }
+      map $uri $matrix_limit_key {
+        default                               "";
+        "~^/_matrix/(client/v1/media|media)/" $binary_remote_addr;
+      }
+
+      limit_req_zone $web_limit_key zone=web:20m rate=30r/s;
+      limit_req_zone $matrix_limit_key zone=matrix_media:20m rate=300r/s;
+      limit_conn_zone $web_limit_key zone=addr:20m;
+      limit_conn_zone $matrix_limit_key zone=matrix_media_conn:20m;
       limit_req zone=web burst=60 nodelay;
+      limit_req zone=matrix_media burst=300 nodelay;
       limit_conn addr 40;
+      limit_conn matrix_media_conn 200;
       limit_req_status 429;
 
       auth_ldap_cache_enabled on;

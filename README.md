@@ -158,6 +158,15 @@ top** of it, so one consumer can move without touching its siblings.  Put the
 nested line after its parent in the config file, and remember that mount
 entries only take effect on container **start** (`pct stop` + `pct start`).
 
+**Status as of 2026-10-31:** the two nested overrides are configured and
+correct in `/etc/pve/lxc/{105,107}.conf`, but those two containers have not been
+restarted since, so they are still inert — `nixidm` and `nixpostgres` keep
+reading and writing the NAS copies while `nixmatrix` reads the host copies.
+`nixmatrix` itself is fully off the NAS (verified with a marker file, see
+"Nested bind mounts only change on container start" below). Restart CT 105 and
+CT 107 in a quiet moment, verify, and only then delete
+`/mnt/pve/nas/shared/secrets/{oauth2/matrix,postgres/matrix}`.
+
 **Ownership is the part that bites.** All these containers are unprivileged and
 share one uid mapping (container root = host uid `100000`, `0 100000 65536`),
 which behaves differently from the NAS:
@@ -272,6 +281,80 @@ lxc.mount.entry: /mnt/pve/nas/shared/nextcloud-data var/lib/nextcloud-data none 
 lxc.mount.entry: /var/lib/secrets/coturn var/lib/secrets/coturn none bind,rw 0 0
 lxc.mount.entry: /var/lib/secrets/coturn var/lib/secrets/coturn none bind,ro 0 0
 ```
+
+##### Nested bind mounts only change on container start — verify with a marker file
+
+`lxc.mount.entry` lines are applied by LXC **when the container starts**, never
+on `nixos-rebuild switch`, and a `pct set` alone changes nothing at runtime. That
+matters for the two *nested* host-disk overrides above (`nixidm`'s
+`oauth2/matrix` and `nixpostgres`'s `postgres/matrix`), which sit inside a NAS
+parent that is mounted into the same container: until that container has been
+stopped and started once, the parent NAS tree is still what the container reads,
+the host-disk copy is inert, and the writer (`kanidm-provision`,
+`postgresql-setup`) keeps writing to the NAS while `nixmatrix` reads the host
+copy — i.e. the two halves of the same secret can silently drift apart, and a
+rotation would break MAS/Synapse logins. So after changing these entries:
+restart the container (`pct stop <id> && pct start <id>`; `pct restart --force`
+prints a usage message and does nothing) and **verify**, in that order.
+
+Do not trust `findmnt` here — asked about a mountpoint it happily reports the
+shadowed child bind, which is exactly how this was missed once. Plant a marker
+instead and look from inside the container:
+
+```bash
+touch /var/lib/secrets/oauth2/matrix/MARKER_HOST      # host disk copy
+touch /mnt/pve/nas/shared/secrets/oauth2/matrix/MARKER_NAS   # NAS copy
+pct exec 105 -- ls /var/lib/secrets/oauth2/matrix     # which one is live?
+rm -f /var/lib/secrets/oauth2/matrix/MARKER_HOST /mnt/pve/nas/shared/secrets/oauth2/matrix/MARKER_NAS
+```
+
+`MARKER_HOST` means the override is active and the NAS copy is dead weight;
+`MARKER_NAS` means the container still needs its restart. `nixmatrix` (CT 109)
+has no NAS entries at all, so it is unambiguous by construction.
+
+#### 🌙 Nightly backup of the host's own secrets
+
+`/var/lib/secrets` is on the host's local disk and **no vzdump job covers it**
+(vzdump backs up containers, not host files), yet without those files
+`nixmatrix`/`nixpostgresql`/`nixidm`/`nixnginx` cannot start. `scratch/backup-host-secrets.sh`
+closes that gap: it archives `/var/lib/secrets`, `/etc/pve/lxc` (the configs that
+carry the bind-mount entries), `/etc/pve/storage.cfg` and `/root/backups` (the
+pre-change LXC configs plus the archived copies of retired NAS shares) into a
+zstd tar, writes it to `/var/backups/host-secrets/` *and* to
+`/mnt/pve/nas/shared/host-backups/`, keeps the newest 14 of each, and fails
+loudly if either copy is missing.
+
+Install from the repo checkout on the host (`scratch/install-host-secrets-backup.sh`,
+idempotent) — it installs the script as `/usr/local/sbin/backup-host-secrets.sh`,
+installs `scratch/systemd/host-secrets-backup.{service,timer}`, and enables the
+timer (`02:30` + up to 15 min jitter, `Persistent=true` so a missed night is
+caught up; it deliberately avoids the 00:00 vzdump window). Manual run:
+`systemctl start host-secrets-backup.service`.
+
+Three properties are deliberate and worth keeping when editing the script:
+
+* it **verifies the archive** (`zstd -t` + `tar -t`) and asserts that every
+  requested path actually appears in it — a backup nobody can open is not a
+  backup, and this is what catches a whole subtree going missing;
+* it writes to `*.tmp` and renames, because `zstd` refuses to overwrite an
+  existing file (a same-day retry would otherwise fail) and a crash must not
+  leave a truncated archive under the final name;
+* it uses `tar -h`, because `/etc/pve` is pmxcfs and `/etc/pve/lxc` is a symlink
+  to `nodes/<node>/lxc` — without `-h` the archive silently contains **zero**
+  `.conf` files. That was caught by the per-path assertion, not by luck.
+
+Restore (note `-C /`, members are relative to `/`):
+
+```bash
+cd / && zstd -dc /var/backups/host-secrets/host-secrets-<date>.tar.zst | tar -xf -
+# or a single file:
+zstd -dc <archive> | tar -C /tmp/restore -xf - var/lib/secrets/postgres/matrix/db-password
+```
+
+The archives are plaintext, root-only (`0700`/`0600`), which matches the existing
+posture: the NAS already holds full vzdump images of every container and the
+remaining NAS secret shares. Encrypting them before they leave the host would be
+an improvement, but needs a key that survives the host independently.
 
 #### Mail hardening & email features
 

@@ -7,19 +7,32 @@ let
   # ---------------------------------------------------------------------------
   # Media storage on the internal Garage S3 bucket (CT 109 -> 192.168.1.132).
   #
-  # Media (avatars, images, files, thumbnails) lives in object storage only:
-  # local media storage is switched off, so uploads are streamed straight into
-  # the bucket and the container disk never holds media.  Garage speaks the S3
-  # API, so Synapse uses the s3-storage-provider plugin.
+  # Garage speaks the S3 API, so Synapse uses the s3-storage-provider plugin:
+  # every own upload and every downloaded remote media object (plus their
+  # thumbnails) is copied into the bucket, and reads fall back to the bucket
+  # for anything that is no longer on disk.
   #
-  # The price is URL previews: Synapse reads url_cache files *only* from the
-  # on-disk provider, so with no local provider a preview would be written to
-  # S3 and then 404 forever.  Link previews are therefore disabled together
-  # with local storage instead of being left silently broken.
+  # S3 can however *not* replace the local store with this plugin: its
+  # store_file() uploads open(os.path.join(media_store_path, path)), i.e. it
+  # reads the file Synapse just wrote to disk.  With
+  # enable_local_media_storage: false that file is already gone and every
+  # upload dies with FileNotFoundError -> HTTP 500.  Media storage is
+  # therefore a mirror plus an offload, not a replacement:
+  #   * store_synchronous: true, so an upload is only acknowledged once the
+  #     object is in Garage and the bucket is complete at all times;
+  #   * a recurring timer runs the plugin's documented
+  #     `s3_media_upload update ... && upload ... --delete` pair, which pushes
+  #     whatever is still local into the bucket and reclaims the disk.
+  # The steady state on disk is thus media from roughly the last timer
+  # interval plus the link-preview cache: Synapse reads url_cache files *only*
+  # from the on-disk provider and the upload script skips them by design
+  # (`url_cache IS NULL`), which is why local storage also keeps URL previews
+  # working instead of having to disable them.
+  #
   # Credentials are *not* kept in the repo: they are read at runtime from
   # /var/lib/secrets/matrix/s3 (see README.md).  When those two key files are
-  # absent Synapse uses the plain on-disk media store only, which keeps
-  # evaluation and the VM tests independent of Garage.
+  # absent neither the provider block nor the sync jobs are active, which
+  # keeps evaluation and the VM tests independent of Garage.
   # ---------------------------------------------------------------------------
   s3Endpoint = "http://192.168.1.132:3900";
   s3Bucket = "synapse";
@@ -27,6 +40,53 @@ let
   s3SecretsDir = "/var/lib/secrets/matrix/s3";
   mediaStorePath = "/var/lib/matrix-synapse/media_store";
   s3MediaProvider = pkgs.matrix-synapse-unwrapped.plugins.matrix-synapse-s3-storage-provider;
+
+  # Shared body of both "move local media into Garage" jobs: the command pair
+  # documented by the plugin.  It takes the maximum age since a media object's
+  # last access, so the one-time migration passes 1s (the whole store, and
+  # Synapse is not running yet) while the timer passes a margin that leaves
+  # uploads still in flight alone.
+  #
+  # Both jobs run as matrix-synapse and read their credentials from the env
+  # file written by matrix-synapse-secrets-config; without that file they are
+  # no-ops, which keeps them harmless when no S3 keys are installed.
+  s3MediaSync = pkgs.writeShellScript "matrix-synapse-s3-media-sync" ''
+    set -euo pipefail
+
+    MAX_AGE="$1"
+    MEDIA_STORE=${mediaStorePath}
+    WORK_DIR=/var/lib/matrix-synapse/s3-migration
+    CRED_ENV="$WORK_DIR/credentials.env"
+
+    if [ ! -d "$MEDIA_STORE" ]; then
+      echo "No local media store at $MEDIA_STORE, nothing to sync."
+      exit 0
+    fi
+    if [ ! -s "$CRED_ENV" ]; then
+      echo "S3 credentials not configured, skipping the media sync."
+      exit 0
+    fi
+
+    # s3_media_upload keeps an incremental sqlite cache in the working
+    # directory; sharing it makes every run after the first one cheap.
+    install -d -m 750 "$WORK_DIR"
+    set -a
+    . "$CRED_ENV"
+    set +a
+    cd "$WORK_DIR"
+
+    # 1. note every media row of the Synapse database whose last access is
+    #    older than $MAX_AGE (database credentials come from the generated
+    #    runtime config; link-preview rows are skipped by the script itself)
+    # 2. upload the objects that are not in the bucket yet and delete the
+    #    local copies, which is what reclaims the container disk
+    ${s3MediaProvider}/bin/s3_media_upload --no-progress update \
+      "$MEDIA_STORE" "$MAX_AGE" \
+      --homeserver-config-path /var/lib/matrix-synapse/secrets.yaml
+
+    ${s3MediaProvider}/bin/s3_media_upload --no-progress upload \
+      "$MEDIA_STORE" "$S3_BUCKET" --endpoint-url "$S3_ENDPOINT" --delete
+  '';
 in
 {
   services.matrix-synapse = {
@@ -141,10 +201,11 @@ in
       S3_BLOCK=""
       if [ -n "$S3_ACCESS_KEY" ] && [ -n "$S3_SECRET_KEY" ]; then
         S3_BLOCK=$(cat <<EOF
-# S3 is the only media backend.  url_cache (link previews) can only be read
-# back from the on-disk provider, so previewing is turned off with it.
-enable_local_media_storage: false
-url_preview_enabled: false
+# Every media write is mirrored into Garage before it is acknowledged, and
+# reads fall back to the bucket.  The local store stays enabled on purpose:
+# this provider uploads the file it just wrote to media_store, so removing it
+# breaks uploads entirely (see the comment at the top of this file).  The
+# recurring matrix-synapse-s3-media-cleanup timer moves local copies over.
 media_storage_providers:
   - module: s3_storage_provider.S3StorageProviderBackend
     store_local: true
@@ -205,12 +266,15 @@ EOF
     '';
   };
 
-  # One-time migration of the existing on-disk media store into Garage.
+  # One-time migration of the media store that existed before the bucket was
+  # wired up.
   #
   # It runs *before* Synapse (so no upload can slip through during the copy),
   # uploads every local and remote media object plus its thumbnails, deletes
-  # the local copies and drops a marker so it never repeats.  Failures are
-  # non-fatal on purpose: Synapse still starts and the next start retries.
+  # the local copies and drops a marker so it never repeats.  From then on the
+  # recurring matrix-synapse-s3-media-cleanup timer does the same job
+  # incrementally.  Failures are non-fatal on purpose: Synapse still starts
+  # and the next start retries.
   systemd.services.matrix-synapse-s3-media-migration = {
     description = "Migrate the Synapse media store into the Garage S3 bucket";
     wantedBy = [ "matrix-synapse.service" ];
@@ -228,41 +292,53 @@ EOF
     script = ''
       set -euo pipefail
 
-      MEDIA_STORE=${mediaStorePath}
       DONE_MARKER=/var/lib/matrix-synapse/.s3-media-migrated
-      WORK_DIR=/var/lib/matrix-synapse/s3-migration
-      CRED_ENV=$WORK_DIR/credentials.env
-
-      if [ ! -d "$MEDIA_STORE" ]; then
-        echo "No local media store at $MEDIA_STORE, nothing to migrate."
-        exit 0
-      fi
-      if [ ! -s "$CRED_ENV" ]; then
-        echo "S3 credentials not configured, skipping media migration."
-        exit 0
-      fi
       if [ -e "$DONE_MARKER" ]; then
         echo "Media store already migrated ($DONE_MARKER exists)."
         exit 0
       fi
 
-      # s3_media_upload keeps its sqlite cache in the working directory.
-      install -d -m 750 "$WORK_DIR"
-      set -a
-      . "$CRED_ENV"
-      set +a
-      cd "$WORK_DIR"
-
-      # 1s = "everything created more than a second ago", i.e. the whole store.
-      # The DB credentials come from the generated runtime config.
-      ${s3MediaProvider}/bin/s3_media_upload --no-progress update "$MEDIA_STORE" 1s \
-        --homeserver-config-path /var/lib/matrix-synapse/secrets.yaml
-
-      ${s3MediaProvider}/bin/s3_media_upload --no-progress upload "$MEDIA_STORE" "$S3_BUCKET" \
-        --endpoint-url "$S3_ENDPOINT" --delete
+      # 1s = "everything accessed more than a second ago", i.e. the whole store.
+      ${s3MediaSync} 1s
 
       touch "$DONE_MARKER"
       chown matrix-synapse:matrix-synapse "$DONE_MARKER"
     '';
+  };
+
+  # Offload job for the media that arrives after the migration.
+  #
+  # Uploads are mirrored into Garage synchronously, so the bucket is complete
+  # the moment an upload succeeds; this unit exists to hand the disk space
+  # back and to catch anything the plugin could not upload (Garage down, for
+  # instance).  Anything still on disk is by definition also in the bucket,
+  # so a failed run only delays reclaiming space.
+  systemd.services.matrix-synapse-s3-media-cleanup = {
+    description = "Move remaining local Synapse media into the Garage S3 bucket";
+    # Deliberately not Wanted=/PartOf= matrix-synapse: the config service it
+    # would need is bound to Synapse with BindsTo=/PartOf=, so pulling it in
+    # from a timer could stop Synapse when the timer's unit is stopped.
+    after = [ "network.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      User = "matrix-synapse";
+      Group = "matrix-synapse";
+      TimeoutStartSec = 0;
+    };
+    path = [ pkgs.coreutils ];
+    # 30m since the last access is far beyond the lifetime of an upload in
+    # flight, so a file is never deleted out from under a running request.
+    script = ''
+      exec ${s3MediaSync} 30m
+    '';
+  };
+
+  systemd.timers.matrix-synapse-s3-media-cleanup = {
+    description = "Periodically move local Synapse media into the Garage S3 bucket";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "15m";
+      OnUnitActiveSec = "30m";
+    };
   };
 }

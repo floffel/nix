@@ -50,6 +50,11 @@ let
   # Synapse is not running yet) while the timer passes a margin that leaves
   # uploads still in flight alone.
   #
+  # Beware the unit suffixes of s3_media_upload: they are s/h/d/m/y where *m
+  # means 30-day months* and there is no minute unit ("seconds can be used to
+  # implement minutes", says the script itself).  Writing 30m here would mean
+  # 900 days, i.e. a job that silently offloads nothing.
+  #
   # Both jobs run as matrix-synapse and read their credentials from the env
   # file written by matrix-synapse-secrets-config; without that file they are
   # no-ops, which keeps them harmless when no S3 keys are installed.
@@ -329,10 +334,11 @@ EOF
       TimeoutStartSec = 0;
     };
     path = [ pkgs.coreutils ];
-    # 30m since the last access is far beyond the lifetime of an upload in
-    # flight, so a file is never deleted out from under a running request.
+    # 1800s (30 min) since the last access is far beyond the lifetime of an
+    # upload or download in flight, so a file is never deleted out from under a
+    # running request.  Not 30m: that would mean 30 *months*, see above.
     script = ''
-      exec ${s3MediaSync} 30m
+      exec ${s3MediaSync} 1800s
     '';
   };
 

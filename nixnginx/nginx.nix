@@ -1563,8 +1563,9 @@ in
   # Uses the same TLS certificates as nginx (shared ACME wildcard certs).
   # Auth is HMAC-based (REST API): Synapse generates short-lived credentials
   # for clients using the shared secret. The secret is generated at
-  # activation time and mirrored to the NAS at
-  # /var/lib/secrets/coturn/shared-secret so nixmatrix can read it.
+  # activation time and mirrored to the host secrets share at
+  # /var/lib/secrets/coturn/shared-secret (a Proxmox bind mount, see README) so
+  # nixmatrix can read it.
   services.coturn = {
     enable = true;
     listening-ips = [ "::" ];
@@ -1690,15 +1691,18 @@ in
     chmod 644 /var/lib/coturn/shared-secret
     if [ -d /var/lib/secrets/coturn ]; then
       cp /var/lib/coturn/shared-secret /var/lib/secrets/coturn/shared-secret
-      chmod 644 /var/lib/secrets/coturn/shared-secret
+      # The mirrored copy is read by nixmatrix's root-run
+      # matrix-synapse-secrets-config unit.  Every container on this host
+      # shares one uid mapping (0 -> 100000), so root *here* is the owner over
+      # there and 0600 is enough.  Chowning this file to `coturn` — as the
+      # local copy below is — would instead make it unreadable in nixmatrix
+      # and silently replace Synapse's turn_shared_secret with PLACEHOLDER.
+      chown root:root /var/lib/secrets/coturn/shared-secret
+      chmod 600 /var/lib/secrets/coturn/shared-secret
     fi
     if id coturn >/dev/null 2>&1; then
       chown coturn:coturn /var/lib/coturn/shared-secret
       chmod 600 /var/lib/coturn/shared-secret
-      if [ -d /var/lib/secrets/coturn ]; then
-        chown coturn:coturn /var/lib/secrets/coturn/shared-secret
-        chmod 600 /var/lib/secrets/coturn/shared-secret
-      fi
     fi
   '';
 }

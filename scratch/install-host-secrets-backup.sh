@@ -3,8 +3,11 @@
 # Install/refresh the nightly host-secrets backup on the Proxmox host.
 # Run from the repository checkout, on the host, as root:
 #
-#   install -m 755 scratch/backup-host-secrets.sh /usr/local/sbin/
+#   install -m 700 scratch/backup-host-secrets.sh /usr/local/sbin/
 #   ... or simply:  scratch/install-host-secrets-backup.sh
+#
+# Needs /etc/px-backup.env on the host (the repository coordinates of the
+# Garage bucket that holds the off-host copy); see install-px-s3-backup.sh.
 #
 # Idempotent: safe to re-run after every change to the script or the units.
 

@@ -12,17 +12,26 @@
 # and /root/backups holds the pre-change LXC configs plus the archived copies
 # of NAS shares that were retired when the secrets moved to the host disk.
 #
-# Two copies are written: one on the host, one on the NAS (the only off-host
-# storage here). Retention is $KEEP archives in each place.
+# Where the off-host copy lives: the restic repository in the Garage S3 bucket
+# "pxbackup", written by px-s3-backup.sh every night at 23:30 (it snapshots the
+# same files under the tag "host").  This script does not upload anything
+# itself -- it would need the repository password and would race the nightly
+# run for the repository lock -- so instead it *verifies* the off-host copy and
+# fails loudly when that copy has gone stale.  A local archive alone is not a
+# backup: it dies with the host disk.
 #
 # Usage:  backup-host-secrets.sh [--keep N]
-# Exit:   0 when both copies are OK, non-zero if either target failed.
+# Exit:   0 when the local archive is good and the S3 copy is fresh,
+#         non-zero otherwise.
 
 set -uo pipefail
 
 LOCAL_DIR=/var/backups/host-secrets
-NAS_DIR=/mnt/pve/nas/shared/host-backups
-NAS_MOUNT=/mnt/pve/nas
+# Repository coordinates of the off-host copy (Garage bucket "pxbackup").
+RESTIC_ENV=/etc/px-backup.env
+# px-s3-backup.sh runs at 23:30, this check at 02:30; anything older than this
+# means the nightly S3 run did not happen (or failed) -- more than one night.
+MAX_AGE_HOURS=26
 KEEP=14
 
 # What goes into the archive. Paths are added only if they exist, so a host
@@ -112,30 +121,37 @@ prune() {
 
 prune "$LOCAL_DIR"
 
-# Off-host copy. A missing NAS mount is a real backup failure, not a warning:
-# the local copy alone does not survive loss of the host disk.
-#
-# /mnt/pve/nas is not in /etc/fstab: it is a Proxmox NFS storage with a
-# generated mnt-pve-nas.mount unit, so it can be idle-unmounted. Try to
-# activate it before giving up (the same way vzdump brings it up).
-if ! mountpoint -q "$NAS_MOUNT"; then
-  log "$NAS_MOUNT not mounted, asking systemd for mnt-pve-nas.mount"
-  timeout 90 systemctl start mnt-pve-nas.mount 2>/dev/null || true
-fi
-
-if mountpoint -q "$NAS_MOUNT"; then
-  if mkdir -p "$NAS_DIR" && cp "$LOCAL_FILE" "${NAS_DIR}/${ARCHIVE}.tmp" \
-     && mv "${NAS_DIR}/${ARCHIVE}.tmp" "${NAS_DIR}/${ARCHIVE}" \
-     && zstd -t "${NAS_DIR}/${ARCHIVE}" 2>/dev/null; then
-    log "copied to ${NAS_DIR}/${ARCHIVE}"
-    prune "$NAS_DIR"
-  else
-    rm -f "${NAS_DIR}/${ARCHIVE}.tmp"
-    echo "ERROR: could not write ${NAS_DIR}/${ARCHIVE}" >&2
-    fail=1
+# Off-host guarantee.  The NAS used to be the second copy; it is retired, so
+# check the bucket instead.  Reading the repository does not take a lock, so
+# this stays safe even while the nightly run is still uploading.
+s3_fresh() {
+  local newest epoch age
+  if [ ! -r "$RESTIC_ENV" ]; then
+    echo "ERROR: $RESTIC_ENV is missing, the off-host copy cannot be verified" >&2
+    echo "       (see scratch/install-px-s3-backup.sh for how to recreate it)" >&2
+    return 1
   fi
-else
-  echo "ERROR: $NAS_MOUNT is not mounted, no off-host copy was made" >&2
+  if ! command -v restic >/dev/null; then
+    echo "ERROR: restic is not installed, the off-host copy cannot be verified" >&2
+    return 1
+  fi
+  (
+    set -a; . "$RESTIC_ENV"; set +a
+    newest=$(timeout 300 restic snapshots --json --no-lock --tag host 2>/dev/null \
+             | tr , \n | sed -n 's/.*"time":"\([^"]*\)".*/\1/p' | sort | tail -1)
+    [ -n "$newest" ] || { echo "ERROR: the repository has no snapshot tagged host" >&2; exit 1; }
+    epoch=$(date -d "$newest" +%s) || { echo "ERROR: cannot read the snapshot time $newest" >&2; exit 1; }
+    age=$(( $(date +%s) - epoch ))
+    if [ "$age" -gt $(( MAX_AGE_HOURS * 3600 )) ]; then
+      echo "ERROR: newest host snapshot in the bucket is $(( age / 3600 )) h old" >&2
+      echo "       (px-s3-backup.service failed or did not run; check: journalctl -u px-s3-backup.service)" >&2
+      exit 1
+    fi
+    log "off-host copy is fresh: host snapshot from $newest ($(( age / 60 )) min ago)"
+  )
+}
+
+if ! s3_fresh; then
   fail=1
 fi
 

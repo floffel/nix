@@ -1,0 +1,14 @@
+[Unit]
+Description=Nightly backup of the Proxmox host and its guests into Garage S3
+
+[Timer]
+# 23:30 local, every day.  restic deduplicates, so a weekend run only uploads
+# what changed; the retention policy wants a snapshot per day.
+OnCalendar=*-*-* 23:30:00
+RandomizedDelaySec=20min
+# Catch up if the host was down at 23:30.
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

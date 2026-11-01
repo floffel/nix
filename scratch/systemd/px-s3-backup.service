@@ -1,0 +1,25 @@
+[Unit]
+Description=Back up host files and all guests into the Garage S3 bucket pxbackup
+Documentation=https://github.com/floffel/nix
+Wants=network-online.target
+After=local-fs.target network-online.target
+
+[Service]
+Type=oneshot
+# The repository URL, the repository password and the Garage key.  Kept out of
+# the repository on purpose; see scratch/install-px-s3-backup.sh.
+EnvironmentFile=/etc/px-backup.env
+# systemd gives the unit no $HOME, and without one restic silently runs *without*
+# its local cache: every run then re-downloads the index and re-reads metadata from
+# the bucket, which costs minutes on a repository of this size.
+Environment=RESTIC_CACHE_DIR=/var/lib/px-s3-backup/cache
+ExecStartPre=/bin/mkdir -p /var/lib/px-s3-backup/cache
+ExecStart=/usr/local/sbin/px-s3-backup.sh
+# A full run reads every guest; keep it off the critical path of the services.
+Nice=10
+IOSchedulingClass=idle
+# Per-step timeouts are inside the script (restic/vzdump calls); the unit must
+# not cut off a run that is merely slow.
+TimeoutStartSec=infinity
+# Do not let a hung network call spin forever instead of failing the run.
+TimeoutStopSec=2min

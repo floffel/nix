@@ -101,9 +101,7 @@
     (pkgs.writeText "crowdsec-local-config" (builtins.toJSON config.services.crowdsec.localConfig))
     (pkgs.writeText "crowdsec-hub" (builtins.toJSON config.services.crowdsec.hub))
     config.environment.etc."crowdsec/parsers/s02-enrich/99-local-whitelist-hosts.yaml".source
-    # The hook below only runs on a start, so a change to it must restart the
-    # unit as well; a unit-file change on its own is only daemon-reload'd.
-    config.systemd.services.crowdsec.preStart
+    config.systemd.services.crowdsec-stage-prune.script
   ];
 
   # Belt and braces for the tmpfiles problem above: drop stage symlinks that
@@ -112,21 +110,31 @@
   # because they resolve under /var/lib/crowdsec/state/hub, and our own
   # environment.etc entry because it resolves under /etc/static.
   #
-  # No external tools here beyond the shell's own globbing, plus absolute paths
-  # for the rest: the unit has an empty PATH and `find`/`readlink` are not on
-  # it, so an earlier revision of this hook was a silent no-op (the failing
-  # `find | while` pipeline still exited 0 under `set -e`).
-  systemd.services.crowdsec.preStart = ''
-    for link in /etc/crowdsec/parsers/*/* /etc/crowdsec/scenarios/* \
-                /etc/crowdsec/postoverflows/*/*; do
-      [ -L "$link" ] || continue
-      target="$(${pkgs.coreutils}/bin/readlink "$link" || true)"
-      case "$target" in /nix/store/*) ;; *) continue ;; esac
-      ${pkgs.gnugrep}/bin/grep -qF "$target" /etc/tmpfiles.d/*.conf 2>/dev/null && continue
-      echo "crowdsec: pruning orphan stage file $link -> $target"
-      ${pkgs.coreutils}/bin/rm -f "$link"
-    done
-  '';
+  # This has to be its own unit: the upstream module's extraConfig carries an
+  # empty `ExecStartPre=`, which resets the list and silently discards anything
+  # contributed through systemd.services.crowdsec.preStart.
+  systemd.services.crowdsec-stage-prune = {
+    description = "Prune orphan CrowdSec stage files";
+    before = [ "crowdsec.service" ];
+    after = [ "local-fs.target" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig.Type = "oneshot";
+    path = [ pkgs.coreutils pkgs.gnugrep ];
+    script = ''
+      for link in /etc/crowdsec/parsers/*/* /etc/crowdsec/scenarios/* \
+                  /etc/crowdsec/postoverflows/*/*; do
+        [ -L "$link" ] || continue
+        target="$(readlink "$link" || true)"
+        case "$target" in /nix/store/*) ;; *) continue ;; esac
+        grep -qF "$target" /etc/tmpfiles.d/*.conf 2>/dev/null && continue
+        echo "pruning orphan CrowdSec stage file $link -> $target"
+        rm -f "$link"
+      done
+    '';
+  };
+  # Pull the prune in on every CrowdSec start, not only at boot. Wants rather
+  # than Requires, so a pruning failure can never keep the security agent down.
+  systemd.services.crowdsec.wants = [ "crowdsec-stage-prune.service" ];
   services.crowdsec-firewall-bouncer = {
     enable = true;
     # Registers the bouncer against the local CrowdSec LAPI and manages the

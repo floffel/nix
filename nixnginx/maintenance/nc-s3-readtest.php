@@ -29,6 +29,19 @@ $users = ['florian@minnecker.com', 'sabine@minnecker.com', 'helena@minnecker.com
 
 chdir($CODE);
 require $CODE . '/lib/base.php';
+require $CODE . '/3rdparty/autoload.php';
+
+// Baseline for the comparison.  While the datadir still lived on the NAS the
+// original bytes were an independent witness; after part C they are not
+// mounted any more, so fall back to the object in the bucket -- otherwise
+// every sample reports FAIL just because the original is gone.
+$creds = json_decode(file_get_contents('/var/lib/nc-s3-migration/creds.json'), true);
+$s3 = new Aws\S3\S3Client([
+    'version' => 'latest', 'region' => $creds['region'], 'endpoint' => $creds['endpoint'],
+    'use_path_style_endpoint' => true,
+    'credentials' => ['key' => $creds['key'], 'secret' => $creds['secret']],
+    'http' => ['connect_timeout' => 10, 'timeout' => 600],
+]);
 
 $root = \OC::$server->getRootFolder();
 $conn = \OC::$server->getDatabaseConnection();
@@ -77,11 +90,21 @@ foreach ($users as $uid) {
             fclose($stream);
             $ncMd5 = hash_final($hash);
             $orig = $datadir . $uid . '/files/' . $rel;
-            $diskMd5 = is_file($orig) ? md5_file($orig) : '(missing on disk)';
-            $match = ($ncMd5 === $diskMd5) && ($bytes === (int)$row['size']);
+            $key = 'urn:oid:' . $node->getId();
+            if (is_file($orig)) {
+                $origMd5 = md5_file($orig);
+                $witness = 'disk';
+            } else {
+                $tmp = tempnam('/tmp', 'ncread');
+                $s3->getObject(['Bucket' => $creds['bucket'], 'Key' => $key, 'SaveAs' => $tmp]);
+                $origMd5 = md5_file($tmp);
+                unlink($tmp);
+                $witness = 'bucket';
+            }
+            $match = ($ncMd5 === $origMd5) && ($bytes === (int)$row['size']);
             $seenKeys[] = 'urn:oid:' . $node->getId();
-            printf("  %-4s %9d B  nextcloud=%s disk=%s  %s\n",
-                $match ? 'OK' : 'FAIL', $bytes, $ncMd5, substr($diskMd5, 0, 12), $rel);
+            printf("  %-4s %9d B  nextcloud=%s %s=%s  %s\n",
+                $match ? 'OK' : 'FAIL', $bytes, $ncMd5, $witness, substr($origMd5, 0, 12), $rel);
             $match ? $ok++ : $fail++;
         } catch (\Throwable $e) {
             printf("  FAIL %s: %s\n", $rel, $e->getMessage());

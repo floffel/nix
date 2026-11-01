@@ -58,7 +58,10 @@ if ($mode === 'dump') {
             }
             $fileid = (int)substr($key, strlen($prefix));
             $etag = trim((string)$o['ETag'], '"');
-            fwrite($out, "$fileid\t$o->Size\t$etag\n");
+            // NOTE: string interpolation must use array access.  "$o->Size" on
+            // an Aws\Result silently expands to the empty string, which made
+            // every size read as 0 and produced 35672 false size mismatches.
+            fwrite($out, "$fileid\t" . (int)$o['Size'] . "\t$etag\n");
             $count++;
             $bytes += (int)$o['Size'];
         }

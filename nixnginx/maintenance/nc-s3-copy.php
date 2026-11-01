@@ -107,7 +107,7 @@ final class TeeHashStream
 }
 stream_wrapper_register('teehash', TeeHashStream::class);
 
-$opts = getopt('', ['worker:', 'workers:', 'prefix:', 'limit:', 'only-fileid:', 'dry-run',
+$opts = getopt('', ['worker:', 'workers:', 'prefix:', 'limit:', 'only-fileid:', 'dry-run', 'force',
                     'multipart-above:', 'part-size:', 'multipart-concurrency:']);
 $worker = (int)($opts['worker'] ?? 0);
 $workers = max(1, (int)($opts['workers'] ?? 1));
@@ -115,6 +115,9 @@ $prefix = $opts['prefix'] ?? 'urn:oid:';
 $limit = isset($opts['limit']) ? (int)$opts['limit'] : -1;
 $onlyFileid = isset($opts['only-fileid']) ? (int)$opts['only-fileid'] : null;
 $dryRun = isset($opts['dry-run']);
+// --force re-uploads even when the fileid is already in a done ledger, which
+// is how a known-bad object gets repaired.  --only-fileid implies it.
+$force = isset($opts['force']) || $onlyFileid !== null;
 $multipartAbove = (int)($opts['multipart-above'] ?? 2147483648);
 $partSize = (int)($opts['part-size'] ?? 33554432);
 $mpConcurrency = (int)($opts['multipart-concurrency'] ?? 2);
@@ -132,12 +135,16 @@ if (!is_array($creds) || empty($creds['key'])) {
     exit(2);
 }
 
+// The done files are the ledger of "verified present in the bucket": a fileid
+// is only ever appended after a successful size+ETag check.  Load every
+// worker's ledger, not only ours, so a re-run with a different --workers
+// count stays resumable instead of silently re-uploading everything.
 $done = [];
-if (is_file($doneFile)) {
-    foreach (file($doneFile) as $l) {
-        $l = trim($l);
-        if ($l !== '') {
-            $done[$l] = true;
+foreach (glob("$STATE/done-w*.txt") ?: [] as $ledger) {
+    foreach (file($ledger) as $entry) {
+        $entry = (int)trim($entry);
+        if ($entry > 0) {
+            $done[$entry] = true;
         }
     }
 }
@@ -156,20 +163,55 @@ if (!$dryRun) {
 }
 $bucket = $creds['bucket'];
 
-function multipartDigest(string $path, int $partSize): string
+/**
+ * Candidate composite ETags for a multipart object, most likely first.
+ *
+ * Garage does NOT use the S3 formula.  Measured against a controlled 3-part
+ * upload of random data: S3 returns md5(raw part digests)-N, Garage returns
+ * md5(HEX part digests)-N.  Both are returned so the check survives a Garage
+ * change and still works against real S3.  (Assuming the S3 formula cost a
+ * false "corrupt upload" report on the only file larger than 2 GiB.)
+ *
+ * Parts are hashed from explicit seek offsets and read until the part is full:
+ * fread() may short-read on NFS, and the SDK loops until a part is full, so a
+ * short read would shift every following boundary and yield an ETag with the
+ * right part count but the wrong digest.
+ */
+function multipartEtags(string $path, int $partSize): array
 {
     $fh = fopen($path, 'rb');
     if ($fh === false) {
         throw new RuntimeException("cannot open $path");
     }
-    $digests = '';
+    $size = (int)filesize($path);
+    $raw = '';
+    $hex = '';
     $parts = 0;
-    while (($chunk = stream_get_contents($fh, $partSize)) !== '' && $chunk !== false) {
-        $digests .= md5($chunk, true);
+    $offset = 0;
+    while ($offset < $size) {
+        $remaining = min($partSize, $size - $offset);
+        $ctx = hash_init('md5');
+        while ($remaining > 0) {
+            $chunk = fread($fh, (int)min(1048576, $remaining));
+            if ($chunk === false || $chunk === '') {
+                break;
+            }
+            hash_update($ctx, $chunk);
+            $read = strlen($chunk);
+            $remaining -= $read;
+            $offset += $read;
+        }
+        if ($remaining !== 0) {
+            fclose($fh);
+            throw new RuntimeException("short read at offset $offset: $remaining bytes missing");
+        }
+        $d = hash_final($ctx, true);
+        $raw .= $d;
+        $hex .= bin2hex($d);
         $parts++;
     }
     fclose($fh);
-    return md5($digests, false) . '-' . $parts;
+    return [md5($hex, false) . '-' . $parts, md5($raw, false) . '-' . $parts];
 }
 
 $fp = fopen($MANIFEST, 'r');
@@ -198,7 +240,7 @@ while (($line = fgets($fp)) !== false) {
         continue;
     }
     $scanned++;
-    if (isset($done[$fileid])) {
+    if (!$force && isset($done[$fileid])) {
         $stat['skipped']++;
         continue;
     }
@@ -239,15 +281,26 @@ while (($line = fgets($fp)) !== false) {
                 throw $e;
             }
         }
+        // Matching size is not proof of matching content.  Only accept the
+        // object when the ETag verifies as well, otherwise a corrupt or stale
+        // object would be marked done and never repaired.
         if ($existing !== null && (int)$existing['ContentLength'] === $diskSize) {
-            $stat['already']++;
-            fwrite($doneFp, "$fileid\n");
-            fflush($doneFp);
-            continue;
+            $existingEtag = trim((string)$existing['ETag'], '"');
+            $localEtags = $diskSize > $multipartAbove
+                ? multipartEtags($local, $partSize)
+                : [(string)@md5_file($local)];
+            if (in_array($existingEtag, $localEtags, true)) {
+                $stat['already']++;
+                fwrite($doneFp, "$fileid\n");
+                fflush($doneFp);
+                continue;
+            }
+            fwrite(STDERR, "stale object $key local=" . implode('/', $localEtags)
+                           . " remote=$existingEtag, re-uploading\n");
         }
 
         if ($diskSize > $multipartAbove) {
-            $expected = multipartDigest($local, $partSize);
+            $expected = multipartEtags($local, $partSize);
             $uploader = new MultipartUploader($s3, $local, [
                 'bucket' => $bucket,
                 'key' => $key,
@@ -269,7 +322,7 @@ while (($line = fgets($fp)) !== false) {
                 'ACL' => 'private',
             ]);
             fclose($body);
-            $expected = TeeHashStream::$lastDigest;
+            $expected = [TeeHashStream::$lastDigest];
         }
 
         $head = $s3->headObject(['Bucket' => $bucket, 'Key' => $key]);
@@ -278,8 +331,9 @@ while (($line = fgets($fp)) !== false) {
         if ($remoteLen !== $diskSize) {
             throw new RuntimeException("length mismatch local=$diskSize remote=$remoteLen");
         }
-        if ($remoteEtag !== $expected) {
-            throw new RuntimeException("etag mismatch expected=$expected remote=$remoteEtag");
+        if (!in_array($remoteEtag, $expected, true)) {
+            throw new RuntimeException('etag mismatch expected=' . implode('/', $expected)
+                                       . " remote=$remoteEtag");
         }
 
         $stat['done']++;

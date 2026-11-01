@@ -9,7 +9,10 @@
   ];
 
   # GnuPG for the Roundcube Enigma plugin; rspamc for markasjunk learning.
-  environment.systemPackages = [ pkgs.gnupg pkgs.rspamd ];
+  # ipset is operational tooling: the firewall bouncer implements its bans as
+  # ipset entries, and without the CLI there is no way to check whether a
+  # decision actually reached the kernel (`ipset list crowdsec-blacklists-0`).
+  environment.systemPackages = [ pkgs.gnupg pkgs.rspamd pkgs.ipset ];
 
   # Enigma PGP support in Roundcube.
   systemd.tmpfiles.rules = [

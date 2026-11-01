@@ -1045,6 +1045,12 @@ first attempt at this fix:
   this config does — and `crowdsec.service`'s `preStart` prunes any
   store-pointing orphan that the active tmpfiles rules no longer declare.
 
+  Note when writing that `preStart` hook: the unit runs with an **empty
+  `PATH`**, so `find`, `readlink`, `grep` and `rm` are not available. Use the
+  shell's own globbing plus absolute store paths — and avoid `find … | while`,
+  because a failing `find` in a pipeline still exits 0 and the hook becomes a
+  silent no-op.
+
 ### "Is it down, or am I banned?"
 
 Check before touching anything else:

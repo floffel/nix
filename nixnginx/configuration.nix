@@ -103,18 +103,25 @@
     config.environment.etc."crowdsec/parsers/s02-enrich/99-local-whitelist-hosts.yaml".source
   ];
 
-  # Belt and braces for the tmpfiles problem above: drop parser/scenario
-  # symlinks that point into the Nix store but are no longer declared by the
-  # active tmpfiles rules, i.e. orphans from an earlier generation. Hub files
-  # are skipped because they resolve under /var/lib/crowdsec/state/hub.
+  # Belt and braces for the tmpfiles problem above: drop stage symlinks that
+  # point into the Nix store but are no longer declared by the active tmpfiles
+  # rules, i.e. orphans from an earlier generation. Hub files are skipped
+  # because they resolve under /var/lib/crowdsec/state/hub, and our own
+  # environment.etc entry because it resolves under /etc/static.
+  #
+  # No external tools here beyond the shell's own globbing, plus absolute paths
+  # for the rest: the unit has an empty PATH and `find`/`readlink` are not on
+  # it, so an earlier revision of this hook was a silent no-op (the failing
+  # `find | while` pipeline still exited 0 under `set -e`).
   systemd.services.crowdsec.preStart = ''
-    find /etc/crowdsec/parsers /etc/crowdsec/scenarios -maxdepth 2 -type l 2>/dev/null |
-    while read -r link; do
-      target="$(readlink "$link")"
+    for link in /etc/crowdsec/parsers/*/* /etc/crowdsec/scenarios/* \
+                /etc/crowdsec/postoverflows/*/*; do
+      [ -L "$link" ] || continue
+      target="$(${pkgs.coreutils}/bin/readlink "$link" || true)"
       case "$target" in /nix/store/*) ;; *) continue ;; esac
-      grep -qF "$target" /etc/tmpfiles.d/*.conf 2>/dev/null && continue
+      ${pkgs.gnugrep}/bin/grep -qF "$target" /etc/tmpfiles.d/*.conf 2>/dev/null && continue
       echo "crowdsec: pruning orphan stage file $link -> $target"
-      rm -f "$link"
+      ${pkgs.coreutils}/bin/rm -f "$link"
     done
   '';
   services.crowdsec-firewall-bouncer = {

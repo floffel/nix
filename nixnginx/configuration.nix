@@ -56,14 +56,29 @@
         labels = { type = "nginx"; };
       }
     ];
-    # Never ban the Proxmox host's own public addresses (DNAT/hairpin traffic).
+    # Never ban addresses we control or share with the operator. Without this,
+    # legitimate traffic from the household's own egress IPs trips the generic
+    # HTTP scenarios (nginx-req-limit-exceeded from the Nextcloud sync clients,
+    # http-probing from curl/CLI probes) and the firewall bouncer then cuts the
+    # operator out of *every* vhost on this box, which looks exactly like an
+    # outage. The Proxmox host addresses are needed for DNAT/hairpin traffic.
     localConfig.parsers.s02Enrich = [
       {
         name = "local/whitelist-hosts";
-        description = "Whitelist the Proxmox host public addresses";
+        description = "Whitelist the Proxmox host and the household egress addresses";
         whitelist = {
-          reason = "proxmox host public ip";
-          cidr = [ "178.63.124.242/32" "195.201.13.200/32" ];
+          reason = "proxmox host or household egress";
+          cidr = [
+            # Proxmox host public addresses (DNAT/hairpin source).
+            "178.63.124.242/32"
+            "195.201.13.200/32"
+            # Household egress. IPv4 is the NATed uplink address; the /64 is the
+            # delegated IPv6 prefix (Purtel hands out one /64 per segment), so it
+            # covers every device on the LAN regardless of its interface id.
+            # Update these if the ISP renumbers the connection.
+            "141.78.136.224/32"
+            "2a02:2761:1000::/64"
+          ];
         };
       }
     ];

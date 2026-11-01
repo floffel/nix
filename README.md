@@ -900,6 +900,20 @@ Nextcloud 33.0.10's bundled PHP/AWS SDK, which changes on every upgrade.
 
 To allow external access to your containers on Proxmox, you must forward the public ports of the Proxmox host to the respective container IPs.
 
+> **⚠️ The live rules are NOT produced by the script below.** On this host the
+> authoritative NAT rules live in `/etc/network/interfaces` on the Proxmox host
+> (`post-up`/`post-down` `iptables`/`ip6tables` lines on `enp35s0`, `vmbr0` and
+> `vmbr1`). `scratch/setup-host-routing.sh` is a legacy template that still
+> assumes the old `172.16.16.0/24` addressing and `enp6s0`; running its
+> `enable` action on this host would add stale, wrong rules. Inspect the live
+> ruleset instead:
+>
+> ```bash
+> iptables-save  -t nat | grep PREROUTING    # IPv4 port forwards
+> ip6tables-save -t nat | grep PREROUTING    # IPv6 port forwards
+> grep -n 'ip6tables\|ip addr add' /etc/network/interfaces
+> ```
+
 ### 🛠️ Port Routing Script
 A host routing script has been created under [scratch/setup-host-routing.sh](file:///root/nixos-config/scratch/setup-host-routing.sh). Copy this script to your Proxmox host (e.g. `/root/setup-host-routing.sh`) and configure the `PUB_IF` variable matching your public network interface (e.g. `vmbr0`).
 
@@ -934,3 +948,113 @@ Install the persistence package and save active iptables NAT rules:
 sudo apt-get install -y iptables-persistent
 sudo iptables-save > /etc/iptables/rules.v4
 ```
+
+---
+
+## 🛡️ 5. IPv6, CrowdSec And "The Site Is Down"
+
+### IPv6 topology
+
+The server has two IPv6 /64 networks on `enp35s0`:
+
+| Address | Role |
+| --- | --- |
+| `2a01:4f8:13b:a41::2/64` | Hetzner **primary** IPv6 (assigned with the server) |
+| `2a01:4f8:fff2:7d::1/64` | Hetzner **floating** IPv6 — this is what `*.minnecker.com` AAAA records point at |
+
+Both are added in `/etc/network/interfaces` (the floating one with an explicit
+`ip addr add … dev enp35s0`), and each public port is DNAT-ed to the service
+bridge `vmbr1` (`fd01::/64`), exactly like the IPv4 rules:
+
+```text
+ip6tables -t nat -A PREROUTING -d 2a01:4f8:fff2:7d::1 -p tcp -m multiport \
+          --dports 80,443 -j DNAT --to fd01::14      # nixnginx
+```
+
+Reply traffic is un-NAT-ed by conntrack and additionally SNAT-ed to the
+floating address, so a container's own outbound IPv6 also appears as
+`2a01:4f8:fff2:7d::1`.
+
+Verify from a host with working IPv6 (note the `-g` and the bracketed
+`--resolve` value — zsh globs bare `[...]`):
+
+```bash
+curl -6 -g -o /dev/null -w '%{http_code} %{remote_ip}\n' https://cloud.minnecker.com/
+curl -6 -g -o /dev/null -w '%{http_code} %{remote_ip}\n' https://matrix.minnecker.com/_matrix/client/versions
+```
+
+Expected: `302` / `200` with `remote_ip = 2a01:4f8:fff2:7d::1`.
+
+### CrowdSec and why the operator gets locked out
+
+CrowdSec runs on **nixnginx (CT 104)**: the agent parses nginx access logs from
+journald, the LAPI is served on `10.20.20.14:8080`, and
+`crowdsec-firewall-bouncer` installs `ipset` DROP rules (`crowdsec-blacklists-*`
+for v4, `crowdsec6-blacklists-*` for v6) in the container's `INPUT` chain.
+nixmail runs an agent only. See `nixnginx/configuration.nix`.
+
+Because the bouncer sits in front of **every** vhost on that box, one decision
+takes down cloud, matrix, git, idm, wiki and vaultwarden at once. An IP-level
+ban of the household's own egress address therefore looks exactly like a total
+outage — and legitimate traffic triggers the generic HTTP scenarios easily
+(`nginx-req-limit-exceeded` from Nextcloud sync clients, `http-probing` from
+`curl`/CLI probing, `http-sensitive-files` from a raw-file fetch).
+
+**Fix: the household is allowlisted at the parser stage**, so its events never
+reach a scenario and can never produce a decision. Edit
+`services.crowdsec.localConfig.parsers.s02Enrich` in
+`nixnginx/configuration.nix`:
+
+```nix
+whitelist = {
+  reason = "proxmox host or household egress";
+  cidr = [
+    "178.63.124.242/32"      # Proxmox host (DNAT/hairpin source)
+    "195.201.13.200/32"      # Proxmox host
+    "141.78.136.224/32"      # household IPv4 egress
+    "2a02:2761:1000::/64"    # household IPv6 prefix (one delegated /64)
+  ];
+};
+```
+
+Update the last two entries if the ISP renumbers the connection.
+
+### "Is it down, or am I banned?"
+
+Check before touching anything else:
+
+```bash
+pct exec 104 -- cscli decisions list | grep -E '141\.78|2a02:2761'
+# unban your own addresses (safe, reversible — a repeat offender just gets
+# re-banned):
+pct exec 104 -- cscli decisions delete -i 141.78.136.224
+pct exec 104 -- cscli decisions delete -i 2a02:2761:1000::1:2cd8
+```
+
+### Diagnosing an unreachable public port
+
+The order matters; each step rules out one layer. Run the capture while you
+probe from the outside:
+
+```bash
+# 1. Does the packet arrive, and is it DNAT-ed towards the container?
+tcpdump -ni any -nn 'tcp port 443 and (host <public-v6> or host fd01::14)'
+#    enp35s0 In  <client> -> <public-ip>:443   [S]     → routing/DNS is fine
+#    vmbr1 Out   <client> -> fd01::14:443       [S]     → DNAT works
+#    veth104i0 Out …                            [S]     → host side is done
+
+# 2. Does the container answer?
+pct exec 104 -- tcpdump -ni eth0 -nn 'tcp port 443 and host <client>'
+```
+
+If the SYNs reach the container and **neither a SYN-ACK nor an RST comes back**
+while nginx is listening on `[::]:443`, the packet is being dropped by an
+`ipset` DROP rule — i.e. a CrowdSec ban (see the CROWDSEC_CHAIN packet counters
+in `ip6tables -L CROWDSEC_CHAIN -n -v -x`). A missing DNAT rule instead shows up
+as the packet never leaving `enp35s0`, and a dead route as an RST.
+
+> **Case study — 2026-11-01.** `cloud.minnecker.com` looked down over IPv4 and
+> the floating IPv6 "did not work". Both were CrowdSec bans of the household's
+> own addresses (`http-probing` on the v6 /128, `nginx-req-limit-exceeded` on
+> the v4). The IPv6 floating IP, its DNAT rules and the reply path were all
+> correct from the start; the counters in `CROWDSEC_CHAIN` were the smoking gun.

@@ -140,6 +140,16 @@ in
       # request burst allows normal page assets and Nextcloud sync while
       # stopping request floods.
       #
+      # The budget is per source address, and a household reaches us through
+      # one NAT address shared by every device and user on the LAN: several
+      # Nextcloud sync clients plus DAV polling plus normal browsing easily
+      # exceeds 30 r/s in bursts. Those throttled requests are logged by nginx
+      # as `limiting requests`, which CrowdSec's nginx-req-limit-exceeded
+      # scenario turns into a multi-hour firewall ban — so an over-tight limit
+      # here took the whole household off every vhost. Raised to 50 r/s with a
+      # 150 request burst and 80 concurrent connections: still a flood guard,
+      # but no longer reachable by ordinary use.
+      #
       # Matrix media needs its own bucket. Synapse enforces authenticated
       # media (MSC3916), so Element Web renders images with a service worker
       # that fetches dozens of /_matrix/client/v1/media/... objects in
@@ -160,13 +170,13 @@ in
         "~^/_matrix/(client/v1/media|media)/" $binary_remote_addr;
       }
 
-      limit_req_zone $web_limit_key zone=web:20m rate=30r/s;
+      limit_req_zone $web_limit_key zone=web:20m rate=50r/s;
       limit_req_zone $matrix_limit_key zone=matrix_media:20m rate=300r/s;
       limit_conn_zone $web_limit_key zone=addr:20m;
       limit_conn_zone $matrix_limit_key zone=matrix_media_conn:20m;
-      limit_req zone=web burst=60 nodelay;
+      limit_req zone=web burst=150 nodelay;
       limit_req zone=matrix_media burst=300 nodelay;
-      limit_conn addr 40;
+      limit_conn addr 80;
       limit_conn matrix_media_conn 200;
       limit_req_status 429;
 

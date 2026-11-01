@@ -58,12 +58,16 @@
     ];
   };
 
-  # Never ban addresses we control or share with the operator. Without this,
-  # legitimate traffic from the household's own egress IPs trips the generic
-  # HTTP scenarios (nginx-req-limit-exceeded from the Nextcloud sync clients,
-  # http-probing from curl/CLI probes) and the firewall bouncer then cuts the
-  # operator out of *every* vhost on this box, which looks exactly like an
-  # outage. The Proxmox host addresses are needed for DNAT/hairpin traffic.
+  # Never ban the Proxmox host's own public addresses. They are static Hetzner
+  # addresses and every DNAT/hairpin connection to a container arrives from one
+  # of them, so banning them would take down the whole host.
+  #
+  # The operator's own addresses are deliberately NOT listed here: the
+  # household gets a dynamic IPv4 and a renumbered IPv6 prefix, so an address
+  # allowlist would rot silently and give false confidence. False positives are
+  # instead handled structurally — the nginx edge limit was loosened (it was
+  # the actual trigger, see nginx.nix), and the two scenarios that fire on
+  # ordinary traffic got higher thresholds or lost their ban below.
   #
   # This stage file deliberately lives under environment.etc and NOT under
   # services.crowdsec.localConfig: the upstream module installs localConfig
@@ -76,22 +80,63 @@
   environment.etc."crowdsec/parsers/s02-enrich/99-local-whitelist-hosts.yaml".source =
     (pkgs.formats.yaml { }).generate "local-whitelist-hosts.yaml" {
       name = "local/whitelist-hosts";
-      description = "Whitelist the Proxmox host and the household egress addresses";
+      description = "Whitelist the Proxmox host public addresses";
       whitelist = {
-        reason = "proxmox host or household egress";
+        reason = "proxmox host public ip";
         cidr = [
-          # Proxmox host public addresses (DNAT/hairpin source).
+          # DNAT/hairpin source for every container on this host.
           "178.63.124.242/32"
           "195.201.13.200/32"
-          # Household egress. The IPv4 address is the NATed uplink address; the
-          # /64 is the delegated IPv6 prefix (Purtel hands out one /64 per
-          # segment), so it covers every LAN device regardless of interface id.
-          # Update these two entries if the ISP renumbers the connection.
-          "141.78.136.224/32"
-          "2a02:2761:1000::/64"
         ];
       };
     };
+
+  # The hub's http-probing scenario bans after 10 distinct 404/403/400 paths
+  # within 10 s, for the default 4 h, and its `blackhole: 5m` re-bans
+  # immediately on any further hit. That is far too twitchy for a shared NAT
+  # egress: a CLI or sync client that retries a handful of missing raw files
+  # (this is what actually fired) took the whole household offline. Hub scenarios
+  # cannot be edited in place — cscli re-creates the symlinks on every start —
+  # so this is a local replacement with a higher threshold, a shorter sentence
+  # and no blackhole, and the hub copy is stopped from banning further below.
+  services.crowdsec.localConfig.scenarios = [
+    {
+      type = "leaky";
+      name = "local/http-probing-relaxed";
+      description = "Site scanning/probing from a single ip, relaxed for shared NAT egress";
+      filter = "evt.Meta.service == 'http' && evt.Meta.http_status in ['404', '403', '400'] && evt.Parsed.static_ressource == 'false'";
+      groupby = "evt.Meta.source_ip + '/' + evt.Parsed.target_fqdn";
+      distinct = "evt.Meta.http_path";
+      capacity = 25;
+      leakspeed = "10s";
+      duration = "30m";
+      reprocess = true;
+      labels = {
+        remediation = true;
+        service = "http";
+        behavior = "http:scan";
+        label = "HTTP Probing (relaxed)";
+        confidence = 1;
+        spoofable = 0;
+        classification = [ "attack.T1595" ];
+      };
+    }
+  ];
+
+  # Stop the hub copies of the two rate-limit-shaped scenarios from banning.
+  # Both measure "this client was already throttled", so they double-punish and
+  # they are the two that fire on legitimate heavy clients:
+  #   * nginx-req-limit-exceeded — nginx answered 429 on its own; the throttle
+  #     IS the mitigation, a firewall ban on top only hits the household.
+  #   * http-probing — replaced by local/http-probing-relaxed above.
+  # Filtering happens in the bouncer, so the alerts are still recorded and stay
+  # visible in `cscli alerts list` and Grafana; only the ban is dropped. Every
+  # other scenario (sensitive files, path traversal, CVE probing, brute force,
+  # bad user agents) keeps banning at the hub defaults.
+  services.crowdsec-firewall-bouncer.settings.scenarios_not_containing = [
+    "crowdsecurity/http-probing"
+    "crowdsecurity/nginx-req-limit-exceeded"
+  ];
 
   # Upstream sets no restart trigger that covers the generated CrowdSec config,
   # so `nixos-rebuild switch` rewrites /etc/crowdsec but leaves the running
@@ -102,6 +147,10 @@
     (pkgs.writeText "crowdsec-hub" (builtins.toJSON config.services.crowdsec.hub))
     config.environment.etc."crowdsec/parsers/s02-enrich/99-local-whitelist-hosts.yaml".source
     config.systemd.services.crowdsec-stage-prune.script
+  ];
+  systemd.services.crowdsec-firewall-bouncer.restartTriggers = [
+    (pkgs.writeText "crowdsec-bouncer-settings"
+      (builtins.toJSON config.services.crowdsec-firewall-bouncer.settings))
   ];
 
   # Belt and braces for the tmpfiles problem above: drop stage symlinks that

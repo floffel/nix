@@ -1205,6 +1205,36 @@ Restore a single secret the same way, with `--include /var/lib/secrets/...`.
 `restic restore last` is broken in restic 0.18 against Garage here -- always
 name the snapshot ID.
 
+### Why a full pass takes hours (and what would fix it)
+
+Measured on the first run, 2026-11-01: CT 100 has 2.6 G of data and produced a
+**4.9 G** stream in 1220 s (~4 MB/s).  Every NixOS guest behaves like that, so
+a first full pass over the fleet is in the 15-20 h range -- the same wall time
+the old NAS job took, because the cost is in *reading* the guests, not in the
+destination.
+
+The doubling has a specific cause: `/nix/store/.links` is Nix's content-addressed
+hardlink index and holds a **second directory entry for every unique file in the
+store** (1.6 G of it inside CT 100).  `vzdump` for LXC walks the whole rootfs
+with a fixed `tar` command line, and this PVE version has no `--exclude`
+option, so both the store paths and their `.links` twins get archived.
+
+restic still uploads each chunk once (it deduplicates against the repository),
+so the bucket does not grow twice as fast -- what is paid every night is the tar
+walk and the hashing.  Three ways out, in increasing order of ambition:
+
+* leave it: backups are correct, just slow, and a night that overruns simply
+  starts the next run as soon as the previous one frees the unit;
+* mask `nix/store/.links` with a small `tmpfs` mount entry per guest: LXC's
+  `--one-file-system` walk stops at it and the stream roughly halves, but Nix
+  can no longer deduplicate new store paths across reboots (it falls back to
+  copying, so guests use more disk);
+* back up guests with `zfs send -p <pool>/<dataset>@<snap>` instead of `tar`:
+  a sequential stream of the dataset itself, so it is several times faster and
+  strictly smaller (no `.links` duplication, no per-file syscalls).  The price
+  is a different restore path -- `zfs receive` plus `pct create --rootfs`
+  instead of `pct restore <tar>` -- and per-guest handling of extra volumes.
+
 ### What is *not* covered yet
 
 * **The application data that already lives in S3.**  `pxbackup` holds the host

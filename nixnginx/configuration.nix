@@ -139,6 +139,7 @@
   services.crowdsec-firewall-bouncer.settings.scenarios_not_containing = [
     "crowdsecurity/http-probing"
     "crowdsecurity/nginx-req-limit-exceeded"
+    "local/http-probing-relaxed"
   ];
 
   # Upstream sets no restart trigger that covers the generated CrowdSec config,

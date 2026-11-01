@@ -989,39 +989,51 @@ Expected: `302` / `200` with `remote_ip = 2a01:4f8:fff2:7d::1`.
 
 CrowdSec runs on **nixnginx (CT 104)**: the agent parses nginx access logs from
 journald, the LAPI is served on `10.20.20.14:8080`, and
-`crowdsec-firewall-bouncer` installs `ipset` DROP rules (`crowdsec-blacklists-*`
-for v4, `crowdsec6-blacklists-*` for v6) in the container's `INPUT` chain.
-nixmail runs an agent only. See `nixnginx/configuration.nix`.
+`crowdsec-firewall-bouncer` turns decisions into ipset DROP rules
+(`crowdsec-blacklists-0` for v4, `crowdsec6-blacklists-0` for v6) in the
+container's `INPUT` chain. nixmail runs an agent only. See
+`nixnginx/configuration.nix`.
 
 Because the bouncer sits in front of **every** vhost on that box, one decision
-takes down cloud, matrix, git, idm, wiki and vaultwarden at once. An IP-level
-ban of the household's own egress address therefore looks exactly like a total
-outage — and legitimate traffic triggers the generic HTTP scenarios easily
-(`nginx-req-limit-exceeded` from Nextcloud sync clients, `http-probing` from
-`curl`/CLI probing, `http-sensitive-files` from a raw-file fetch).
+takes down cloud, matrix, git, idm, wiki and vaultwarden at once.
 
-**Fix: the household is allowlisted at the parser stage**, so its events never
-reach a scenario and can never produce a decision. The stage file is
-`environment.etc."crowdsec/parsers/s02-enrich/99-local-whitelist-hosts.yaml"` in
-`nixnginx/configuration.nix`:
+The nasty part is that the operator lives behind the same NAT as everybody else
+in the household, and the egress address is **dynamic** (dynamic IPv4, and the
+ISP renumbers the IPv6 prefix). An IP allowlist would therefore rot silently and
+give false confidence, so there isn't one. Instead the false positives are
+removed structurally, in three places:
 
-```nix
-whitelist = {
-  reason = "proxmox host or household egress";
-  cidr = [
-    "178.63.124.242/32"      # Proxmox host (DNAT/hairpin source)
-    "195.201.13.200/32"      # Proxmox host
-    "141.78.136.224/32"      # household IPv4 egress
-    "2a02:2761:1000::/64"    # household IPv6 prefix (one delegated /64)
-  ];
-};
-```
+1. **nginx (`nixnginx/nginx.nix`) — the actual trigger.** The shared edge limit
+   was `rate=30r/s burst=60` per source address. Several Nextcloud sync clients
+   plus DAV polling plus browsing from one household address exceed that in
+   bursts; nginx then logs `limiting requests`, and the
+   `crowdsecurity/nginx-req-limit-exceeded` scenario turns that into a 4 h
+   firewall ban. Raised to `50r/s`/`burst=150`/`limit_conn addr 80`. This is the
+   fix; the CrowdSec knobs below only soften what is left.
+2. **A relaxed replacement for `http-probing`.** The hub scenario bans on 10
+   distinct 404/403/400 paths within 10 s, and its `blackhole: 5m` re-bans
+   instantly on any further hit — reachable by any CLI that retries a few
+   missing files. Hub scenarios cannot be edited in place (cscli re-creates the
+   symlinks at every start), so `services.crowdsec.localConfig.scenarios`
+   provides `local/http-probing-relaxed` with `capacity: 25` and no blackhole.
+3. **`scenarios_not_containing` on the bouncer** for
+   `crowdsecurity/http-probing` and `crowdsecurity/nginx-req-limit-exceeded`.
+   Both measure "this client was already throttled", so they double-punish;
+   filtering them keeps the alerts (still visible in `cscli alerts list` and
+   Grafana) and drops only the ban. Everything else — sensitive files, path
+   traversal, CVE probing, brute force, bad user agents — bans at hub defaults.
 
-Update the last two entries if the ISP renumbers the connection.
+Only the two static Proxmox host addresses stay allowlisted
+(`environment.etc."crowdsec/parsers/s02-enrich/99-local-whitelist-hosts.yaml"`),
+because every DNAT/hairpin connection to a container arrives from one of them.
 
-Three upstream footguns make this easy to get wrong. All three bit during the
-first attempts at this fix, and each one fails **silently** — the generated
-file looks right while the running agent behaves differently:
+Ban length is **4 h for everything**: this host installs no remediation profile,
+so the LAPI default applies and a scenario-level `duration` is silently ignored.
+To shorten it, add `services.crowdsec.localConfig.profiles`.
+
+Three upstream footguns make this config easy to get wrong. All three bit during
+the first attempts, and each fails **silently** — the generated file looks right
+while the running agent behaves differently:
 
 1. **`nixos-rebuild switch` does not restart `crowdsec.service`.** The unit has
    no restart trigger covering the generated config, so the switch rewrites
@@ -1029,10 +1041,10 @@ file looks right while the running agent behaves differently:
    `restartTriggers` are set now (settings, `localConfig`, hub list, stage file,
    prune script). Verify with
    `systemctl show crowdsec.service -p ActiveEnterTimestamp` — it must be newer
-   than the switch. A *unit-file-only* change is merely `daemon-reload`ed, so
-   the hook itself is a trigger too.
-2. **Never put stage files in `services.crowdsec.localConfig.parsers`/`.scenarios`.**
-   The module installs them as tmpfiles.d `L+` entries named
+   than the switch. A *unit-file-only* change is merely `daemon-reload`ed, which
+   is why the hook itself is a trigger too.
+2. **Never put stage files in `services.crowdsec.localConfig.parsers`.** The
+   module installs them as tmpfiles.d `L+` entries named
    `<derivation-hash>-parsers-s02-enrich.yaml`, and tmpfiles never prunes them.
    After an edit, two files declare the same `name:` and CrowdSec drops one
    arbitrarily:
@@ -1042,7 +1054,7 @@ file looks right while the running agent behaves differently:
                       ignoring /etc/crowdsec/parsers/s02-enrich/dzyjixpr….yaml"
    ```
 
-   The new file may lose, silently restoring the previous allowlist. Keep stage
+   The new file may lose, silently restoring the previous rules. Keep stage
    files at a fixed `environment.etc` path (replaced in place), which is what
    this config does, and let `crowdsec-stage-prune.service` drop any
    store-pointing orphan that the active tmpfiles rules no longer declare. It is
@@ -1051,21 +1063,16 @@ file looks right while the running agent behaves differently:
 3. **`systemd.services.crowdsec.preStart` is silently discarded.** The module's
    `extraConfig` contains an empty `ExecStartPre=`, and systemd treats that as
    "reset the list", throwing away anything contributed earlier. Use a separate
-   ordered unit instead. And note that CrowdSec's own units run with an **empty
-   `PATH`** — `find`, `readlink`, `grep` and `rm` are not on it; give the unit an
-   explicit `path = [ … ]`. Avoid `find … | while` in a `set -e` script as well:
-   a failing `find` inside a pipeline still leaves the pipeline exiting 0, so the
-   hook becomes a no-op that looks successful.
+   ordered unit instead. CrowdSec's units also run with an **empty `PATH`**, so
+   give any helper an explicit `path = [ … ]`; and avoid `find … | while` under
+   `set -e`, because a failing `find` in a pipeline still exits 0.
 
-Confirm the whole chain with the recipe under "Is it down, or am I banned?"
-below: fire ~20 parallel requests to nonexistent paths from an allowlisted
-address and check that **no new alert** appears — before the fix the same
-traffic produced `crowdsecurity/http-probing` within seconds.
-
-```bash
-seq 20 | xargs -P20 -I{} curl -6 -g -s -o /dev/null https://cloud.minnecker.com/.probe-{}
-pct exec 104 -- cscli alerts list | head -5      # newest id must not have moved
-```
+Checking that a filter really works is worth doing properly: the ipset is keyed
+by address, so "two decisions produced one ipset entry" proves nothing. The A/B
+that settled it was to add the *replacement* scenario to
+`scenarios_not_containing` and re-fire the same burst — same detector, same
+`ban` decision in the LAPI, and the address stopped entering
+`crowdsec6-blacklists-0`. Use `ipset test <set> <addr>`, not `ipset list | grep`.
 
 ### "Is it down, or am I banned?"
 
@@ -1073,6 +1080,9 @@ Check before touching anything else:
 
 ```bash
 pct exec 104 -- cscli decisions list | grep -E '141\.78|2a02:2761'
+# what the kernel is actually blocking (ipset test, not `ipset list | grep`):
+pct exec 104 -- ipset test crowdsec-blacklists-0 <your-ipv4>
+pct exec 104 -- ipset test crowdsec6-blacklists-0 <your-ipv6>
 # unban your own addresses (safe, reversible — a repeat offender just gets
 # re-banned):
 pct exec 104 -- cscli decisions delete -i 141.78.136.224
@@ -1106,5 +1116,8 @@ as the packet never leaving `enp35s0`, and a dead route as an RST.
 > own addresses (`http-probing` on the v6 /128, `nginx-req-limit-exceeded` on
 > the v4). The IPv6 floating IP, its DNAT rules and the reply path were all
 > correct from the start; the counters in `CROWDSEC_CHAIN` were the smoking gun.
-> Cleared with `cscli decisions delete`, all vhosts answer over IPv6 again, and
-> the household is now allowlisted so it cannot recur.
+> Cleared with `cscli decisions delete`, all vhosts answer over IPv6 again.
+> Nothing is allowlisted afterwards: the nginx limit that produced the ban was
+> loosened and the two throttle-shaped scenarios no longer ban, so the same
+> ordinary traffic cannot lock the household out again even when the ISP hands
+> out new addresses.

@@ -112,7 +112,10 @@
       distinct = "evt.Meta.http_path";
       capacity = 25;
       leakspeed = "10s";
-      duration = "30m";
+      # No `duration` here on purpose. Decision length is set by a remediation
+      # profile, and this host installs none, so every ban is the LAPI default
+      # of 4h — a scenario-level `duration` is silently ignored. Shortening the
+      # sentence means adding services.crowdsec.localConfig.profiles.
       reprocess = true;
       labels = {
         remediation = true;
@@ -139,7 +142,6 @@
   services.crowdsec-firewall-bouncer.settings.scenarios_not_containing = [
     "crowdsecurity/http-probing"
     "crowdsecurity/nginx-req-limit-exceeded"
-    "local/http-probing-relaxed"
   ];
 
   # Upstream sets no restart trigger that covers the generated CrowdSec config,

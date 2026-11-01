@@ -56,33 +56,67 @@
         labels = { type = "nginx"; };
       }
     ];
-    # Never ban addresses we control or share with the operator. Without this,
-    # legitimate traffic from the household's own egress IPs trips the generic
-    # HTTP scenarios (nginx-req-limit-exceeded from the Nextcloud sync clients,
-    # http-probing from curl/CLI probes) and the firewall bouncer then cuts the
-    # operator out of *every* vhost on this box, which looks exactly like an
-    # outage. The Proxmox host addresses are needed for DNAT/hairpin traffic.
-    localConfig.parsers.s02Enrich = [
-      {
-        name = "local/whitelist-hosts";
-        description = "Whitelist the Proxmox host and the household egress addresses";
-        whitelist = {
-          reason = "proxmox host or household egress";
-          cidr = [
-            # Proxmox host public addresses (DNAT/hairpin source).
-            "178.63.124.242/32"
-            "195.201.13.200/32"
-            # Household egress. IPv4 is the NATed uplink address; the /64 is the
-            # delegated IPv6 prefix (Purtel hands out one /64 per segment), so it
-            # covers every device on the LAN regardless of its interface id.
-            # Update these if the ISP renumbers the connection.
-            "141.78.136.224/32"
-            "2a02:2761:1000::/64"
-          ];
-        };
-      }
-    ];
   };
+
+  # Never ban addresses we control or share with the operator. Without this,
+  # legitimate traffic from the household's own egress IPs trips the generic
+  # HTTP scenarios (nginx-req-limit-exceeded from the Nextcloud sync clients,
+  # http-probing from curl/CLI probes) and the firewall bouncer then cuts the
+  # operator out of *every* vhost on this box, which looks exactly like an
+  # outage. The Proxmox host addresses are needed for DNAT/hairpin traffic.
+  #
+  # This stage file deliberately lives under environment.etc and NOT under
+  # services.crowdsec.localConfig: the upstream module installs localConfig
+  # stage files as tmpfiles.d `L+` entries whose names embed the derivation
+  # hash, and tmpfiles never prunes them. Editing such a stage file therefore
+  # leaves an orphan that re-declares the same parser name, and CrowdSec then
+  # ignores one of the two at random ("multiple parsers named
+  # local/whitelist-hosts"), silently reverting the change while the freshly
+  # generated file still looks correct. A fixed name is replaced in place.
+  environment.etc."crowdsec/parsers/s02-enrich/99-local-whitelist-hosts.yaml".source =
+    (pkgs.formats.yaml { }).generate "local-whitelist-hosts.yaml" {
+      name = "local/whitelist-hosts";
+      description = "Whitelist the Proxmox host and the household egress addresses";
+      whitelist = {
+        reason = "proxmox host or household egress";
+        cidr = [
+          # Proxmox host public addresses (DNAT/hairpin source).
+          "178.63.124.242/32"
+          "195.201.13.200/32"
+          # Household egress. The IPv4 address is the NATed uplink address; the
+          # /64 is the delegated IPv6 prefix (Purtel hands out one /64 per
+          # segment), so it covers every LAN device regardless of interface id.
+          # Update these two entries if the ISP renumbers the connection.
+          "141.78.136.224/32"
+          "2a02:2761:1000::/64"
+        ];
+      };
+    };
+
+  # Upstream sets no restart trigger that covers the generated CrowdSec config,
+  # so `nixos-rebuild switch` rewrites /etc/crowdsec but leaves the running
+  # agent on the old ruleset — the change looks deployed but is inert.
+  systemd.services.crowdsec.restartTriggers = [
+    (pkgs.writeText "crowdsec-settings" (builtins.toJSON config.services.crowdsec.settings))
+    (pkgs.writeText "crowdsec-local-config" (builtins.toJSON config.services.crowdsec.localConfig))
+    (pkgs.writeText "crowdsec-hub" (builtins.toJSON config.services.crowdsec.hub))
+    config.environment.etc."crowdsec/parsers/s02-enrich/99-local-whitelist-hosts.yaml".source
+  ];
+
+  # Belt and braces for the tmpfiles problem above: drop parser/scenario
+  # symlinks that point into the Nix store but are no longer declared by the
+  # active tmpfiles rules, i.e. orphans from an earlier generation. Hub files
+  # are skipped because they resolve under /var/lib/crowdsec/state/hub.
+  systemd.services.crowdsec.preStart = ''
+    find /etc/crowdsec/parsers /etc/crowdsec/scenarios -maxdepth 2 -type l 2>/dev/null |
+    while read -r link; do
+      target="$(readlink "$link")"
+      case "$target" in /nix/store/*) ;; *) continue ;; esac
+      grep -qF "$target" /etc/tmpfiles.d/*.conf 2>/dev/null && continue
+      echo "crowdsec: pruning orphan stage file $link -> $target"
+      rm -f "$link"
+    done
+  '';
   services.crowdsec-firewall-bouncer = {
     enable = true;
     # Registers the bouncer against the local CrowdSec LAPI and manages the

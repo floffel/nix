@@ -1001,8 +1001,8 @@ outage — and legitimate traffic triggers the generic HTTP scenarios easily
 `curl`/CLI probing, `http-sensitive-files` from a raw-file fetch).
 
 **Fix: the household is allowlisted at the parser stage**, so its events never
-reach a scenario and can never produce a decision. Edit
-`services.crowdsec.localConfig.parsers.s02Enrich` in
+reach a scenario and can never produce a decision. The stage file is
+`environment.etc."crowdsec/parsers/s02-enrich/99-local-whitelist-hosts.yaml"` in
 `nixnginx/configuration.nix`:
 
 ```nix
@@ -1018,6 +1018,32 @@ whitelist = {
 ```
 
 Update the last two entries if the ISP renumbers the connection.
+
+Two upstream footguns make this easy to get wrong, and both bit during the
+first attempt at this fix:
+
+- **`nixos-rebuild switch` does not restart `crowdsec.service`.** The unit has
+  no restart trigger covering the generated config, so the switch rewrites
+  `/etc/crowdsec` while the running agent keeps the old ruleset. The change
+  looks deployed but is inert. `restartTriggers` for settings, `localConfig`,
+  the hub list and the stage file are set explicitly now. Check with
+  `systemctl show crowdsec.service -p ActiveEnterTimestamp` — it must be newer
+  than the switch.
+- **Never put stage files in `services.crowdsec.localConfig.parsers`/`.scenarios`.**
+  The module installs them as tmpfiles.d `L+` entries named
+  `<derivation-hash>-parsers-s02-enrich.yaml`, and tmpfiles never prunes them.
+  After an edit, two files declare the same `name:`, and CrowdSec drops one
+  arbitrarily:
+
+  ```text
+  level=warning msg="multiple parsers named local/whitelist-hosts:
+                     ignoring /etc/crowdsec/parsers/s02-enrich/dzyjixpr….yaml"
+  ```
+
+  The new file may lose, silently restoring the previous allowlist. Keep stage
+  files at a fixed `environment.etc` path (replaced in place) — which is what
+  this config does — and `crowdsec.service`'s `preStart` prunes any
+  store-pointing orphan that the active tmpfiles rules no longer declare.
 
 ### "Is it down, or am I banned?"
 

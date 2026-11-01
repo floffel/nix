@@ -7,8 +7,8 @@
 # the NAS is going away.  "Copy the dump directory to a bucket" is not an
 # option here -- a full nightly run is far bigger than the host's root disk,
 # so there is nowhere to stage it.  Instead every guest is streamed straight
-# out of vzdump into restic, which encrypts, compresses and deduplicates on the
-# way and keeps a retention policy inside the bucket.
+# out of vzdump into restic, which compresses and deduplicates on the way and
+# keeps a retention policy inside the bucket.
 #
 # What is backed up per run (three kinds of snapshot group, see RETENTION):
 #   host      the files no vzdump job covers: /var/lib/secrets (the shared
@@ -18,6 +18,15 @@
 #             themselves.
 #   guest-N   one vzdump stream per guest, uncompressed (restic compresses),
 #             stored as vzdump/vzdump-<type>-<vmid>-<date>.tar(.vma).
+#
+# There is deliberately NO repository password: the bucket is trusted (Garage is
+# reachable only from the internal network and is backed up in its own right at
+# the destination), so the master key is stored with an empty passphrase and
+# every restic call carries --insecure-no-password.  Consequence: whoever holds
+# the Garage key can read every dump, including all TLS keys and DB passwords.
+# To put encryption back:
+#   restic --insecure-no-password key add --new-password-file /path/to/pw
+# then store that password in /etc/px-backup.env and drop the flag again.
 #
 # Two properties are deliberate:
 #   * nothing is staged on disk: restic runs vzdump itself (--stdin-from-command),
@@ -103,31 +112,42 @@ done
 if [ "$(id -u)" != "0" ]; then echo "run as root" >&2; exit 1; fi
 
 if [ ! -r "$ENV_FILE" ]; then
-  echo "ERROR: $ENV_FILE is missing or unreadable.  It holds RESTIC_REPOSITORY," >&2
-  echo "       RESTIC_PASSWORD and the Garage key for the pxbackup bucket; see" >&2
+  echo "ERROR: $ENV_FILE is missing or unreadable.  It holds RESTIC_REPOSITORY" >&2
+  echo "       and the Garage key for the pxbackup bucket (no password; the" >&2
+  echo "       repository key has an empty passphrase); see" >&2
   echo "       scratch/install-px-s3-backup.sh for how to (re)create it." >&2
   exit 1
 fi
 set -a; . "$ENV_FILE"; set +a
 
-for v in RESTIC_REPOSITORY RESTIC_PASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+for v in RESTIC_REPOSITORY AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
   if [ -z "${!v:-}" ]; then echo "ERROR: $v is not set in $ENV_FILE" >&2; exit 1; fi
 done
 command -v restic >/dev/null || { echo "ERROR: restic not in PATH" >&2; exit 1; }
+
+# Empty repository password (see the header).  restic refuses to combine the
+# flag with a password from the environment, so a leftover RESTIC_PASSWORD here
+# is a hard error rather than a silent fallback.
+if [ -n "${RESTIC_PASSWORD:-}" ]; then
+  echo "ERROR: $ENV_FILE still sets RESTIC_PASSWORD, but this repository is opened" >&2
+  echo "       with an empty password (--insecure-no-password).  Remove the line." >&2
+  exit 1
+fi
+RESTIC=(restic --insecure-no-password)
 
 STAMP=$(date +%F)
 fail=0
 FAILED_GUESTS=()
 
 # A run that died can leave a lock that blocks forget/prune forever.
-timeout 120 restic unlock >/dev/null 2>&1 || true
+timeout 120 "${RESTIC[@]}" unlock >/dev/null 2>&1 || true
 
-if ! timeout 180 restic cat config >/dev/null 2>&1; then
+if ! timeout 180 "${RESTIC[@]}" cat config >/dev/null 2>&1; then
   echo "ERROR: cannot open the restic repository at $RESTIC_REPOSITORY" >&2
-  echo "       (Garage reachable?  key valid?  password correct?)" >&2
+  echo "       (Garage reachable?  Garage key still valid?)" >&2
   exit 1
 fi
-log "repository: $(timeout 120 restic cat config | tr -d ' \n' | head -c 100)"
+log "repository: $(timeout 120 "${RESTIC[@]}" cat config | tr -d ' \n' | head -c 100)"
 
 # Sets SNAP_ID from the JSON summary of `restic backup`; empty on failure.
 SNAP_ID=""
@@ -138,7 +158,7 @@ run_backup() {
     SNAP_ID=""
     return 0
   fi
-  out=$(restic backup --json "$@" | tail -n 1)
+  out=$("${RESTIC[@]}" backup --json "$@" | tail -n 1)
   SNAP_ID=$(printf '%s' "$out" | sed -n 's/.*"snapshot_id":"\([0-9a-f]*\)".*/\1/p')
   [ -n "$SNAP_ID" ] || { echo "ERROR: restic backup failed: $out" >&2; return 1; }
   return 0
@@ -162,7 +182,7 @@ if [ "$MODE" != guests ]; then
     # pmxcfs (FUSE); a broken mount there would otherwise store an empty
     # directory instead of the configs, silently.
     if [ "$DRY_RUN" -eq 0 ] && [ -n "$SNAP_ID" ]; then
-      LISTING=$(timeout 300 restic ls "$SNAP_ID" 2>/dev/null)
+      LISTING=$(timeout 300 "${RESTIC[@]}" ls "$SNAP_ID" 2>/dev/null)
       for p in "${RESOLVED[@]}"; do
         if ! printf '%s\n' "$LISTING" | grep -qF -- "$p"; then
           echo "ERROR: snapshot $SNAP_ID has no entry for $p" >&2
@@ -245,7 +265,7 @@ if [ "$MODE" != host ]; then
     # stderr, prefixed with "subprocess vzdump:".
     (
       set -o pipefail
-      timeout 4h restic backup --json --stdin-from-command \
+      timeout 4h "${RESTIC[@]}" backup --json --stdin-from-command \
         --stdin-filename "$archive" --tag "guest-${vmid}" --tag vzdump \
         --host "$(hostname)" -- vzdump "$vmid" --mode snapshot --stdout
     ) > "$rout" 2>&1
@@ -284,7 +304,7 @@ fi
 
 if [ "$RUN_FORGET" -eq 1 ]; then
   log "retention: keep-daily=$KEEP_DAILY keep-weekly=$KEEP_WEEKLY keep-monthly=$KEEP_MONTHLY keep-yearly=$KEEP_YEARLY, grouped by tag"
-  if ! timeout 6h restic forget --prune --group-by tag \
+  if ! timeout 6h "${RESTIC[@]}" forget --prune --group-by tag \
         --keep-daily "$KEEP_DAILY" --keep-weekly "$KEEP_WEEKLY" \
         --keep-monthly "$KEEP_MONTHLY" --keep-yearly "$KEEP_YEARLY" \
         --max-repack-size "$MAX_REPACK"; then
@@ -293,21 +313,21 @@ if [ "$RUN_FORGET" -eq 1 ]; then
   fi
 
   log "integrity: structural check"
-  if ! timeout 6h restic check; then
+  if ! timeout 6h "${RESTIC[@]}" check; then
     echo "ERROR: restic check failed" >&2
     fail=1
   fi
   # Structural checks never prove the data reads back; do a slice of that weekly.
   if [ "$(date +%u)" = 7 ]; then
     log "integrity: Sunday read check over ${CHECK_READ_DATA_SUBSET}% of the repository"
-    if ! timeout 12h restic check --read-data-subset="$CHECK_READ_DATA_SUBSET"%; then
+    if ! timeout 12h "${RESTIC[@]}" check --read-data-subset="$CHECK_READ_DATA_SUBSET"%; then
       echo "ERROR: restic check --read-data-subset failed" >&2
       fail=1
     fi
   fi
 fi
 
-log "repository: $(timeout 300 restic stats --json 2>/dev/null \
+log "repository: $(timeout 300 "${RESTIC[@]}" stats --json 2>/dev/null \
      | perl -0ne 'my $s = /"total_size":(\d+)/ ? $1 : 0; my $n = /"total_file_count":(\d+)/ ? $1 : 0;
                   my $k = /"snapshots_count":(\d+)/ ? $1 : 0;
                   printf "%.1f GB, %d files, %d snapshots", $s/1073741824, $n, $k')"

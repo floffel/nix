@@ -6,8 +6,10 @@ After=local-fs.target network-online.target
 
 [Service]
 Type=oneshot
-# The repository URL, the repository password and the Garage key.  Kept out of
-# the repository on purpose; see scratch/install-px-s3-backup.sh.
+# The repository URL and the Garage key.  Kept out of the git repository on
+# purpose; see scratch/install-px-s3-backup.sh.  There is deliberately no
+# repository password (the key has an empty passphrase), so a leftover
+# RESTIC_PASSWORD here would make every restic call fail.
 EnvironmentFile=/etc/px-backup.env
 # systemd gives the unit no $HOME, and without one restic silently runs *without*
 # its local cache: every run then re-downloads the index and re-reads metadata from

@@ -398,11 +398,13 @@ cd / && zstd -dc /var/backups/host-secrets/host-secrets-<date>.tar.zst | tar -xf
 zstd -dc <archive> | tar -C /tmp/restore -xf - var/lib/secrets/postgres/matrix/db-password
 ```
 
-The archives are plaintext, root-only (`0700`/`0600`), and stay on the host --
-what leaves the host is the restic repository, which encrypts and compresses
-before anything is uploaded.  The one secret that does *not* survive a total
-loss on its own is the restic repository password in `/etc/px-backup.env`: it
-must be stored off-host by hand, or the bucket is unreadable.
+The archives are plaintext, root-only (`0700`/`0600`), and stay on the host;
+what leaves the host is the restic repository, which compresses and
+deduplicates on the way out.  Nothing here claims confidentiality: the
+repository key has an empty passphrase (see "Backups: host and guests into
+Garage S3"), so the protection of these secrets is the network position of the
+bucket, not cryptography.  The upside is that there is no password to lose --
+a rebuilt host needs nothing but the Garage key to read every backup.
 
 #### Mail hardening & email features
 
@@ -1145,9 +1147,29 @@ Since 2026-11-01 the nightly backup no longer writes to the NAS.  One job,
 | Installer | `scratch/install-px-s3-backup.sh` (idempotent; run on the host) |
 | Units | `scratch/systemd/px-s3-backup.{service,timer}` -- 23:30 + 20 min jitter, `Persistent=true` |
 | Repository | `s3:http://192.168.1.132:3900/pxbackup` (Garage, plaintext HTTP, path style) |
-| Credentials | `/etc/px-backup.env` (`0600`): repo URL + repo password + Garage key |
+| Credentials | `/etc/px-backup.env` (`0600`): repo URL + Garage key -- **no repository password** |
 | Retention | per tag: 14 daily, 8 weekly, 12 monthly, 2 yearly; `--max-repack-size 5G` |
 | Integrity | `restic check` every night, `--read-data-subset=5%` on Sundays |
+
+**The repository has no password.**  The bucket is trusted: Garage listens only
+on the internal network and the destination system backs the bucket up in its
+own right.  restic always encrypts, so "no password" is implemented as a key
+with an empty passphrase plus `--insecure-no-password` on every call -- nobody
+has to keep a secret alive, and a host rebuild needs only the Garage key.  The
+trade-off is explicit: whoever holds that key (or LAN access to `:3900`) can
+read every dump, including all TLS keys, DB passwords and OIDC secrets.
+Encryption can come back without re-uploading a single byte, because the
+password only ever wraps the master key:
+
+```bash
+set -a; . /etc/px-backup.env; set +a
+restic --insecure-no-password key add --new-password-file /path/to/pw
+restic --insecure-no-password key remove <id-of-the-empty-key>
+```
+
+Then put `RESTIC_PASSWORD=` back into `/etc/px-backup.env` and drop the flag
+from `px-s3-backup.sh` and `backup-host-secrets.sh` (both refuse to run if the
+flag and a password are mixed, which is the failure mode to avoid).
 
 Five decisions are worth keeping when editing this:
 
@@ -1186,9 +1208,10 @@ pvesh set /cluster/backup/backup-328af684-64f2 -enabled 1   # roll back the job
 systemctl list-timers px-s3-backup.timer host-secrets-backup.timer
 journalctl -u px-s3-backup.service -n 50
 set -a; . /etc/px-backup.env; set +a
+alias restic='restic --insecure-no-password'
 restic snapshots                      # one host snapshot + one per guest, per day
 restic stats                          # total size / files / snapshot count
-restic cat config                     # reachability + password sanity in one line
+restic cat config                     # reachability + key sanity in one line
 ```
 
 Restore is a three-step dance now that dumps are objects instead of files in
@@ -1196,6 +1219,7 @@ the PVE GUI (the Storage -> Restore browser no longer lists anything):
 
 ```bash
 set -a; . /etc/px-backup.env; set +a
+alias restic='restic --insecure-no-password'
 restic snapshots --tag guest-104                       # pick an ID
 restic restore <ID> --target /tmp/r104 --include /vzdump-lxc-104-2026-11-01.tar
 pct stop 104 && pct restore 104 /tmp/r104/vzdump-lxc-104-2026-11-01.tar
@@ -1243,7 +1267,6 @@ walk and the hashing.  Three ways out, in increasing order of ambition:
   this job.  Garage is single-node with `replica = 1`, so those buckets have one
   copy on one disk: raise `replica` to 2 (or add a second node / bucket
   replication) before treating S3 as durable storage.
-* **The restic repository password**, which lives only in `/etc/px-backup.env`.
-  Copy it somewhere off this machine -- without it the bucket is unrecoverable,
-  no matter how many replicas Garage has.
-* Garage keys that were pasted into chat should be rotated.
+* Garage keys that were pasted into chat should be rotated (the bucket is
+  readable by anyone holding one, and there is no repository password in
+  front of it any more).

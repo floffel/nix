@@ -137,7 +137,12 @@ s3_fresh() {
   fi
   (
     set -a; . "$RESTIC_ENV"; set +a
-    newest=$(timeout 300 restic snapshots --json --no-lock --tag host 2>/dev/null \
+    # The bucket repository has an empty passphrase, which restic only accepts
+    # together with --insecure-no-password and never together with a password
+    # from the environment -- hence the unset.
+    unset RESTIC_PASSWORD
+    newest=$(timeout 300 restic --insecure-no-password snapshots --json --no-lock \
+             --tag host 2>/dev/null \
              | tr , \n | sed -n 's/.*"time":"\([^"]*\)".*/\1/p' | sort | tail -1)
     [ -n "$newest" ] || { echo "ERROR: the repository has no snapshot tagged host" >&2; exit 1; }
     epoch=$(date -d "$newest" +%s) || { echo "ERROR: cannot read the snapshot time $newest" >&2; exit 1; }

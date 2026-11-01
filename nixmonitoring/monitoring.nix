@@ -9,7 +9,7 @@
   # stored in Grafana's sqlite DB (/var/lib/grafana/grafana.db, which lives in
   # the container's persistent rootfs). Losing secret_key makes those blobs
   # undecryptable, so both files must persist — but they never need to leave
-  # the container, hence no NAS mount. Idempotent: existing files are kept.
+  # the container, hence no bind mount at all. Idempotent: existing files are kept.
   systemd.services.grafana = {
     after = [ "influxdb-init.service" ];
   };

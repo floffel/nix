@@ -44,7 +44,7 @@ in
   # Generate Dovecot + Postfix LDAP config files from the shared mail
   # token (provisioned by nixidm's kanidm-mail-token service on every
   # Kanidm start).  Runs before dovecot and postfix so the files exist
-  # at service startup.  The token file lives on the shared NAS mount
+  # at service startup.  The token file lives on the shared host-disk mount
   # and is refreshed automatically; this service just renders the
   # per-consumer config files from it.
   systemd.services.mail-ldap-config = {
@@ -138,7 +138,7 @@ in
   # mail-ldap-config above only runs once at boot, so without a watcher
   # nixmail keeps presenting the destroyed token after every kanidm
   # restart. This path unit re-triggers the render + reloads the consumers
-  # whenever the shared token file changes on the NAS mount, keeping the
+  # whenever the shared token file changes on its mount, keeping the
   # baked-in bind credentials in sync.
   systemd.paths.mail-ldap-config = {
     description = "Watch the shared mail LDAP token for rotation";
@@ -1091,7 +1091,7 @@ EOF
       SECRET=/var/lib/secrets/ssl/minnecker.com/managesieve-master-password
       API_SECRET=/var/lib/secrets/mail/api/master-password
       if [ ! -s "$SECRET" ]; then
-        echo "ERROR: $SECRET is missing; generate it on the NAS with 'openssl rand -hex 32'" >&2
+        echo "ERROR: $SECRET is missing; generate it with 'openssl rand -hex 32'" >&2
         exit 1
       fi
       install -d -m 0750 -o dovecot2 -g dovecot2 /run/dovecot-auth

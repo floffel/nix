@@ -1396,7 +1396,7 @@ in
     phpExtraExtensions = allPkgs: [ allPkgs.redis ];
 
     # Redis password injected via JSON secret file generated at boot
-    # from the shared NAS mount. Must not go through settings because
+    # from the shared host-disk mount. Must not go through settings because
     # that would land it in the Nix store.
     secretFile = "/run/nextcloud-redis-secrets.json";
 
@@ -1608,10 +1608,10 @@ in
   };
 
   # Generate Nextcloud Redis secrets JSON file from the password provisioned
-  # on nixpostgres (shared via NAS bind mount). This oneshot runs before
+  # on nixpostgres (shared via the host-disk bind mount). This oneshot runs before
   # nextcloud-setup so the secretFile is present when config.php is written.
   systemd.services.nextcloud-redis-secrets = {
-    description = "Generate Nextcloud Redis secrets from shared NAS password file";
+    description = "Generate Nextcloud Redis secrets from the shared password file";
     wantedBy = [ "nextcloud-setup.service" ];
     before = [ "nextcloud-setup.service" ];
     serviceConfig = {
@@ -1622,7 +1622,7 @@ in
       set -euo pipefail
       pwf="/var/lib/secrets/redis/nextcloud-password"
       if [ ! -f "$pwf" ]; then
-        echo "Error: $pwf not found — NAS mount missing or password not provisioned yet" >&2
+        echo "Error: $pwf not found — secrets mount missing or password not provisioned yet" >&2
         exit 1
       fi
       pw=$(cat "$pwf")
@@ -1691,7 +1691,7 @@ in
 
   # Inject the Redis password at runtime — the livekit module generates a
   # config in the read-only Nix store, so we build our own at /run/ with
-  # the password from the shared NAS mount and point ExecStart at it.
+  # the password from the shared host-disk mount and point ExecStart at it.
   systemd.services.livekit = {
     serviceConfig.RuntimeDirectory = "livekit";
     serviceConfig.SupplementaryGroups = [ "livekit-keys" ];

@@ -140,8 +140,8 @@
       # after a DB restore/recreate. The previous unconditional destroy +
       # regenerate on every Kanidm start created a desync window: consumers on
       # nixmail (and nixnginx) hold the old token in long-lived LDAP
-      # connection pools and cached config files, and the Proxmox/NAS shared
-      # mount does not deliver inotify events across the network boundary, so
+      # connection pools and cached config files, and a bind mount that was
+      # replaced does not deliver inotify events, so
       # a path watcher cannot reliably push the rotated token to them. After
       # the 5-minute AUTH_TOKEN_GRACE_WINDOW elapses, searches with the now-
       # destroyed token fail with "SessionExpired". By validating the existing

@@ -130,7 +130,7 @@
       Type = "oneshot";
       User = "postgres";
       Group = "postgres";
-      # /var/lib/secrets/postgres is the rw NAS bind mount on this container.
+      # /var/lib/secrets/postgres is the rw host-disk bind mount on this container.
       ReadWritePaths = [ "/var/lib/secrets/postgres" ];
     };
     path = [ config.services.postgresql.package pkgs.util-linux pkgs.coreutils ];
@@ -208,8 +208,8 @@ SQL
 
   # Auto-provision the redis nextcloud password on the shared secrets mount,
   # mirroring the postgresql-password-provisioning pattern: a oneshot unit that
-  # runs before redis-nextcloud.service, creates the password file on the NAS
-  # bind mount if missing, and fails loudly if the mount is absent.
+  # runs before redis-nextcloud.service, creates the password file on the
+  # host-disk bind mount if missing, and fails loudly if the mount is absent.
   systemd.services.redis-nextcloud-password-provisioning = {
     description = "Provision Redis nextcloud password on the shared secrets mount";
     wantedBy = [ "redis-nextcloud.service" ];

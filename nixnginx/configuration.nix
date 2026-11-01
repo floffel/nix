@@ -101,6 +101,9 @@
     (pkgs.writeText "crowdsec-local-config" (builtins.toJSON config.services.crowdsec.localConfig))
     (pkgs.writeText "crowdsec-hub" (builtins.toJSON config.services.crowdsec.hub))
     config.environment.etc."crowdsec/parsers/s02-enrich/99-local-whitelist-hosts.yaml".source
+    # The hook below only runs on a start, so a change to it must restart the
+    # unit as well; a unit-file change on its own is only daemon-reload'd.
+    config.systemd.services.crowdsec.preStart
   ];
 
   # Belt and braces for the tmpfiles problem above: drop stage symlinks that

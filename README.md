@@ -1019,37 +1019,53 @@ whitelist = {
 
 Update the last two entries if the ISP renumbers the connection.
 
-Two upstream footguns make this easy to get wrong, and both bit during the
-first attempt at this fix:
+Three upstream footguns make this easy to get wrong. All three bit during the
+first attempts at this fix, and each one fails **silently** — the generated
+file looks right while the running agent behaves differently:
 
-- **`nixos-rebuild switch` does not restart `crowdsec.service`.** The unit has
-  no restart trigger covering the generated config, so the switch rewrites
-  `/etc/crowdsec` while the running agent keeps the old ruleset. The change
-  looks deployed but is inert. `restartTriggers` for settings, `localConfig`,
-  the hub list and the stage file are set explicitly now. Check with
-  `systemctl show crowdsec.service -p ActiveEnterTimestamp` — it must be newer
-  than the switch.
-- **Never put stage files in `services.crowdsec.localConfig.parsers`/`.scenarios`.**
-  The module installs them as tmpfiles.d `L+` entries named
-  `<derivation-hash>-parsers-s02-enrich.yaml`, and tmpfiles never prunes them.
-  After an edit, two files declare the same `name:`, and CrowdSec drops one
-  arbitrarily:
+1. **`nixos-rebuild switch` does not restart `crowdsec.service`.** The unit has
+   no restart trigger covering the generated config, so the switch rewrites
+   `/etc/crowdsec` while the running agent keeps the old ruleset. Explicit
+   `restartTriggers` are set now (settings, `localConfig`, hub list, stage file,
+   prune script). Verify with
+   `systemctl show crowdsec.service -p ActiveEnterTimestamp` — it must be newer
+   than the switch. A *unit-file-only* change is merely `daemon-reload`ed, so
+   the hook itself is a trigger too.
+2. **Never put stage files in `services.crowdsec.localConfig.parsers`/`.scenarios`.**
+   The module installs them as tmpfiles.d `L+` entries named
+   `<derivation-hash>-parsers-s02-enrich.yaml`, and tmpfiles never prunes them.
+   After an edit, two files declare the same `name:` and CrowdSec drops one
+   arbitrarily:
 
-  ```text
-  level=warning msg="multiple parsers named local/whitelist-hosts:
-                     ignoring /etc/crowdsec/parsers/s02-enrich/dzyjixpr….yaml"
-  ```
+   ```text
+   level=warning msg="multiple parsers named local/whitelist-hosts:
+                      ignoring /etc/crowdsec/parsers/s02-enrich/dzyjixpr….yaml"
+   ```
 
-  The new file may lose, silently restoring the previous allowlist. Keep stage
-  files at a fixed `environment.etc` path (replaced in place) — which is what
-  this config does — and `crowdsec.service`'s `preStart` prunes any
-  store-pointing orphan that the active tmpfiles rules no longer declare.
+   The new file may lose, silently restoring the previous allowlist. Keep stage
+   files at a fixed `environment.etc` path (replaced in place), which is what
+   this config does, and let `crowdsec-stage-prune.service` drop any
+   store-pointing orphan that the active tmpfiles rules no longer declare. It is
+   pulled in via `wants` + `before`, so it runs on every CrowdSec start, and
+   `Wants` (not `Requires`) keeps a pruning failure from taking the agent down.
+3. **`systemd.services.crowdsec.preStart` is silently discarded.** The module's
+   `extraConfig` contains an empty `ExecStartPre=`, and systemd treats that as
+   "reset the list", throwing away anything contributed earlier. Use a separate
+   ordered unit instead. And note that CrowdSec's own units run with an **empty
+   `PATH`** — `find`, `readlink`, `grep` and `rm` are not on it; give the unit an
+   explicit `path = [ … ]`. Avoid `find … | while` in a `set -e` script as well:
+   a failing `find` inside a pipeline still leaves the pipeline exiting 0, so the
+   hook becomes a no-op that looks successful.
 
-  Note when writing that `preStart` hook: the unit runs with an **empty
-  `PATH`**, so `find`, `readlink`, `grep` and `rm` are not available. Use the
-  shell's own globbing plus absolute store paths — and avoid `find … | while`,
-  because a failing `find` in a pipeline still exits 0 and the hook becomes a
-  silent no-op.
+Confirm the whole chain with the recipe under "Is it down, or am I banned?"
+below: fire ~20 parallel requests to nonexistent paths from an allowlisted
+address and check that **no new alert** appears — before the fix the same
+traffic produced `crowdsecurity/http-probing` within seconds.
+
+```bash
+seq 20 | xargs -P20 -I{} curl -6 -g -s -o /dev/null https://cloud.minnecker.com/.probe-{}
+pct exec 104 -- cscli alerts list | head -5      # newest id must not have moved
+```
 
 ### "Is it down, or am I banned?"
 
@@ -1090,3 +1106,5 @@ as the packet never leaving `enp35s0`, and a dead route as an RST.
 > own addresses (`http-probing` on the v6 /128, `nginx-req-limit-exceeded` on
 > the v4). The IPv6 floating IP, its DNAT rules and the reply path were all
 > correct from the start; the counters in `CROWDSEC_CHAIN` were the smoking gun.
+> Cleared with `cscli decisions delete`, all vhosts answer over IPv6 again, and
+> the household is now allowlisted so it cannot recur.

@@ -37,6 +37,7 @@
 #   idm-users.sh policy get <group>
 #   idm-users.sh policy enable <group>                        # turn on account policy for the group
 #   idm-users.sh policy min-credential <group> <any|mfa|passkey|attested_passkey>
+#   idm-users.sh policy auth-expiry <group> <seconds>       # session lifetime (idm_all_persons = everyone)
 #
 #   idm-users.sh svc-token create <account> <display_name> <label> [expiry_iso] [--readwrite]
 #   idm-users.sh svc-token status <account>
@@ -498,7 +499,16 @@ cmd_policy() {
       k group account-policy credential-type-minimum "$group" "$level"
       echo "Set '$group' credential floor to '$level'."
       ;;
-    *) die "unknown policy subcommand '$sub' (try: get enable min-credential)" ;;
+    auth-expiry)
+      local group="${1:-}"; local secs="${2:-}"
+      [ -n "$group" ] && [ -n "$secs" ] || die "usage: policy auth-expiry <group> <seconds>"
+      case "$secs" in (*[!0-9]*|'') die "seconds must be a positive integer" ;; esac
+      # Stored on the group as `authsession_expiry` (one word, no underscore
+      # between auth and session) -- the CLI name is auth-expiry.
+      k group account-policy auth-expiry "$group" "$secs"
+      echo "Sessions for members of '$group' now expire after $secs s ($((secs / 86400)) days)."
+      ;;
+    *) die "unknown policy subcommand '$sub' (try: get enable min-credential auth-expiry)" ;;
   esac
 }
 

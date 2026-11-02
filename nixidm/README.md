@@ -254,6 +254,36 @@ kanidm -D idm_admin group account-policy enable <group>
 kanidm -D idm_admin group account-policy credential-type-minimum <group> mfa
 ```
 
+### Session lifetime (how often you have to log in)
+Session expiry is also account policy, so it lives on `idm_all_persons` for
+everyone. This deployment sets it to **180 days** declaratively
+(`kanidm-session-policy` in `kanidm.nix`), which is what keeps a browser
+session — and the `kanidm` CLI's cached token, which dies with the session —
+usable for months.
+
+```bash
+# read it (unset = Kanidm's built-in default, a few hours)
+kanidm -D idm_admin group get idm_all_persons | grep authsession_expiry
+
+# change it, e.g. 90 days
+kanidm -D idm_admin group account-policy auth-expiry idm_all_persons 7776000
+```
+
+Two traps worth knowing:
+
+* The attribute is spelled **`authsession_expiry`** in the entry, not
+  `auth_session_expiry`. Over REST, `PATCH {"attrs":{"auth_session_expiry":…}}`
+  fails with `invalidattributename`, which reads like "this attribute does not
+  exist" and sends you hunting for a policy object that isn't there.
+* Per-group policy resolves to the **strictest** value among a user's groups,
+  the same way the credential floor does — so a short expiry on any group a
+  user belongs to wins over a long one on `idm_all_persons`.
+
+Changing the expiry does not extend sessions that already exist; it applies to
+sessions issued afterwards. Mail clients are separate: they hold OAuth2 refresh
+tokens, whose lifetime is the `oauth2_refresh_token_expiry` attribute on the
+`mail` client, not this setting.
+
 ### Deleting a User
 ```bash
 kanidm -D idm_admin person delete username

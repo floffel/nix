@@ -222,6 +222,85 @@
     '';
   };
 
+  # How long a Kanidm login stays valid before a re-login is required.
+  #
+  # The account policy for every person lives on the builtin dynamic group
+  # `idm_all_persons`; Kanidm's built-in default is a few hours, which in
+  # practice means signing in again several times a day.  180 days keeps a
+  # browser session (and the CLI's cached token, which expires with the
+  # session) usable over a long holiday.
+  #
+  # The entry attribute is spelled `authsession_expiry` -- the CLI calls the
+  # same setting `auth-expiry`, and PATCHing `auth_session_expiry` is rejected
+  # with invalidattributename, so the real name is used here.  Idempotent: it
+  # only writes when the value differs, so a rebuild is a no-op.
+  systemd.services.kanidm-session-policy = {
+    description = "Ensure the Kanidm session lifetime for all persons";
+    wantedBy = [ "kanidm.service" ];
+    after = [ "kanidm.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    path = [ pkgs.curl pkgs.jq ];
+    script = ''
+      set -uo pipefail
+
+      # 180 days.  Comfortably beyond the "at least two months" this
+      # deployment settled on; lower it here if that ever feels too long.
+      SESSION_EXPIRY_SECONDS=15552000
+
+      IDM_PASSWORD=$(cat /var/lib/secrets/kanidm/idm-admin-password)
+      COOKIE_JAR=$(mktemp)
+      trap 'rm -f "$COOKIE_JAR"' EXIT
+      API="https://localhost:8443"
+
+      for i in $(seq 1 30); do
+        curl -sk "$API/v1/health/live" >/dev/null 2>&1 && break
+        sleep 2
+      done
+
+      curl -sk -c "$COOKIE_JAR" -X POST "$API/v1/auth" -H "Content-Type: application/json" \
+        -d '{"step":{"init2":{"username":"idm_admin","issue":"token","privileged":false}}}' >/dev/null
+      curl -sk -b "$COOKIE_JAR" -X POST "$API/v1/auth" -H "Content-Type: application/json" \
+        -d '{"step":{"begin":"password"}}' >/dev/null
+      BEARER=$(curl -sk -b "$COOKIE_JAR" -X POST "$API/v1/auth" -H "Content-Type: application/json" \
+        -d "{\"step\":{\"cred\":{\"password\":\"$IDM_PASSWORD\"}}}" | jq -r '.state.success // empty')
+      if [ -z "$BEARER" ]; then
+        echo "ERROR: could not authenticate as idm_admin" >&2
+        exit 1
+      fi
+
+      UUID=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+        "$API/v1/group/idm_all_persons" | jq -r '.attrs.uuid[0] // empty')
+      if [ -z "$UUID" ]; then
+        echo "ERROR: idm_all_persons not found" >&2
+        exit 1
+      fi
+
+      CURRENT=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+        "$API/v1/group/$UUID" | jq -r '.attrs.authsession_expiry[0] // "unset"')
+      if [ "$CURRENT" = "$SESSION_EXPIRY_SECONDS" ]; then
+        echo "Session expiry already ${SESSION_EXPIRY_SECONDS}s ($((SESSION_EXPIRY_SECONDS / 86400)) days)."
+        exit 0
+      fi
+
+      echo "Setting session expiry from '$CURRENT' to ${SESSION_EXPIRY_SECONDS}s..."
+      curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+        -X PATCH "$API/v1/group/$UUID" -H "Content-Type: application/json" \
+        -d "{\"attrs\":{\"authsession_expiry\":[\"$SESSION_EXPIRY_SECONDS\"]}}" >/dev/null
+
+      NOW=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+        "$API/v1/group/$UUID" | jq -r '.attrs.authsession_expiry[0] // "unset"')
+      if [ "$NOW" != "$SESSION_EXPIRY_SECONDS" ]; then
+        echo "ERROR: session expiry is '$NOW', expected $SESSION_EXPIRY_SECONDS" >&2
+        exit 1
+      fi
+      echo "Session expiry is now $NOW s ($((NOW / 86400)) days) for all persons."
+    '';
+  };
+
+
   services.kanidm = {
     # Use the build of kanidm that ships the kanidm-provision tooling used by the
     # declarative provisioning hook below. The versioned package is required

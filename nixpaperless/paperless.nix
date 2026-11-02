@@ -35,6 +35,7 @@ let
         pkgs.coreutils
         pkgs.file
         pkgs.gawk
+        pkgs.gnugrep
         pkgs.gnused
         pkgs.ghostscript
         pkgs.poppler-utils

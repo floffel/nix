@@ -16,6 +16,17 @@ export LC_ALL=C
 #IN="$1"
 IN="$DOCUMENT_WORKING_PATH"
 
+# Fail loudly if a tool is missing.  Silent degradation here is worse than a
+# rejected document: the ink-coverage probe below pipes ghostscript through
+# grep, so a missing grep makes every page look blank and the script would
+# strip the whole document instead of just the empty pages.
+for tool in file pdfinfo gs qpdf awk grep tr seq; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    >&2 echo "del_empty_pages: required tool '$tool' is not on PATH, refusing to touch $IN."
+    exit 1
+  }
+done
+
 # Check for PDF format
 TYPE=$(file -b "$IN")
 

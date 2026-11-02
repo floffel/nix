@@ -60,19 +60,48 @@ expose the primary (MFA) password over LDAP.
 #### Unattended services (Paperless-ngx auto-purge, scripts, …)
 
 A service cannot run an OAuth2 browser flow, so anything that logs in over
-IMAP/SMTP unattended **must** use PLAIN and therefore needs a POSIX password on
-its account.  `server@minnecker.com` is such an account: Paperless-ngx polls it
-for documents (see `nixpaperless/README.md`).  Set it interactively from inside
-CT 105 — the Kanidm CLI insists on a tty and reads the password itself, so it
-cannot be scripted:
+IMAP/SMTP unattended **must** use PLAIN.  `server@minnecker.com` is such an
+account: Paperless-ngx polls it for documents (see `nixpaperless/README.md`).
+Two things are needed, and neither is obvious:
+
+1. **The account must be POSIX-enabled.**  Kanidm refuses LDAP simple bind for
+   an account without the posix extension, and `posix set-password` on its own
+   does not add it.  `person posix set` without arguments is enough — Kanidm
+   allocates the `gidnumber` and a matching group by itself:
+
+   ```bash
+   kanidm -D idm_admin person posix set server
+   kanidm -D idm_admin person posix show server     # must print a gidnumber
+   ```
+
+2. **The CLI insists on a tty** and reads the password itself, so it cannot be
+   scripted with a plain pipe.  Either run it interactively, or give it a pty:
+
+   ```bash
+   export HOME=/root SHELL=/run/current-system/sw/bin/bash
+   script -qec 'kanidm -D idm_admin person posix set-password server' /dev/null
+   ```
+
+   (`SHELL` has to point at a real bash — NixOS has no `/bin/sh` or
+   `/bin/bash`, and `script` fails without it.  It then asks for the password
+   twice.)
+
+The password lives in exactly one place besides Kanidm: the
+`paperless_mail_mailaccount` row in the Paperless database, which is what the
+fetcher authenticates with.  If the two drift apart the symptom is upstream and
+easy to miss — Paperless logs `MailError: Error while authenticating account
+server@minnecker.com` every 10 minutes while the mailbox itself is perfectly
+reachable.  Verify directly with IMAP, and re-sync the DB row after a rotation:
 
 ```bash
-pct exec 105 -- kanidm -D idm_admin person posix set-password server
+python3 -c 'import imaplib; m=imaplib.IMAP4_SSL("mx.minnecker.com",993); \
+  print(m.login("server@minnecker.com", open("/dev/stdin").read().strip()))'
 ```
 
-If the password is missing or wrong, the symptom is upstream: Paperless logs
-`AUTHENTICATIONFAILED` for its auto-purge run every 10 minutes while the
-mailbox itself is perfectly reachable.
+Note that **no other account in this deployment is POSIX-enabled** — every
+human uses XOAUTH2 — so `server` is deliberately the only single-factor
+mailbox.  Keep it that way: a POSIX password is a weaker credential and it
+grants nothing but mail access to that one mailbox.
 
 ---
 

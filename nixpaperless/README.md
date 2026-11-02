@@ -158,7 +158,7 @@ set.  Dropping a copy of an existing document into `consume/` came back as
 `Not consuming … duplicate of … (#117)`, which exercises consumer → celery →
 Postgres → the pre-consume script in one shot.
 
-### Mail fetch rule (needs one manual step)
+### Mail fetch rule
 
 The archive had a `paperless_mail` account + rule that pulls attachments out of
 the `paperless` folder of `server@minnecker.com`.  Both migrated, but the
@@ -167,19 +167,35 @@ so it was re-pointed at `mx.minnecker.com:993` with SSL (`hosts.nix` resolves
 that straight to `nixmail`, and the name matches the wildcard certificate, so
 the TLS verification paperless performs succeeds).
 
-Authentication still fails, and it has to be fixed by a human: Kanidm has no
-`--password` flag and no admin-side password setter — the documented path is a
-single-use reset token.  So:
+Live and working since 2026-11-02.  What it took:
 
-1. redeem <https://idm.minnecker.com/ui/reset?token=…> (created 2026-11-02,
-   expires after 24 h; `./scratch/idm-users.sh user reset-token server 86400`
-   on `nixidm` mints a new one), and
-2. either reuse the mailbox password that paperless already holds (Settings →
-   Mail Accounts shows the account; no change needed if the password matches),
-   or set a new one and update it there.
+1. `server@minnecker.com` had **no credential at all** (`person credential
+   status` → `EmptyResponse`), so nothing could ever have authenticated as it.
+2. IMAP from an unattended service means PLAIN, which means LDAP simple bind,
+   which means a **POSIX** credential — see the "Unattended services" section
+   of `nixmail/README.md` for the two-step recipe (`person posix set` first,
+   then `posix set-password` under a pty).
+3. The password is stored in the `paperless_mail_mailaccount` row and must
+   match Kanidm.  Set Kanidm first, then copy the same value into the row:
 
-Until then the celery task logs `AUTHENTICATIONFAILED` every ten minutes and
-nothing else happens — the rule is enabled but inert.
+   ```bash
+   # /tmp/pwsync.py, run with: paperless-manage shell < /tmp/pwsync.py
+   from paperless_mail.models import MailAccount
+   a = MailAccount.objects.get(pk=1)
+   a.password = "<the posix password>"
+   a.save()
+   ```
+
+Verify without waiting for the scheduler:
+
+```bash
+cd /var/lib/paperless && paperless-manage mail_fetcher
+```
+
+It prints nothing and exits 0 on success; on a credential mismatch it raises
+`paperless_mail.mail.MailError: Error while authenticating account
+server@minnecker.com`.  Celery beat runs the same task every 10 minutes, so a
+broken credential shows up as that traceback on a ten-minute rhythm.
 
 Deliberate changes during the move:
 

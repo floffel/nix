@@ -45,6 +45,22 @@ Then append the shared-password mount (LXC config, applied on container
 lxc.mount.entry: /var/lib/secrets/postgres/paperless var/lib/secrets/postgres/paperless none bind,ro 0 0
 ```
 
+Both the parent (`/var/lib/secrets/postgres`) **and** the leaf
+(`.../postgres/paperless`) have to exist inside the container's rootfs, or the
+bind fails with `mount_entry: 2101 No such file or directory` and the container
+refuses to start — LXC does not create the mount point for `lxc.mount.entry`.
+Create them once, while the container is stopped:
+
+```bash
+pct mount 115                       # 'pct unmount 115' afterwards, not 'umount'
+mkdir -p /var/lib/lxc/115/rootfs/var/lib/secrets/postgres/paperless
+pct unmount 115
+```
+
+Do not "comment out" a mount line in `/etc/pve/lxc/115.conf` to debug it: the
+next `pct` write URL-encodes the colon (`lxc.mount.entry%3A`) and the option
+never comes back.  Delete the line and re-append it instead.
+
 Inside the container, the usual git flow:
 
 ```bash
@@ -56,6 +72,30 @@ ln -s /root/nixos-config/hosts.nix /etc/nixos/hosts.nix
 cd /root && nixos-rebuild switch
 ```
 
+## Deploying changes
+
+`pct exec` does not give a login environment (`HOME` ends up empty, so `nix`
+cannot find its channel and fails with *"file 'nixpkgs/nixos' was not found in
+the Nix search path"*), and the variable survives neither `ssh` + `systemd-run`
++ `pct exec` nesting nor a `bash -c` string of nested quotes.  Push a script
+instead:
+
+```bash
+# /root/ct-deploy.sh, pushed into every container (see the root README)
+export HOME=/root
+export PATH=/root/.nix-profile/bin:/run/current-system/sw/bin:/usr/bin:/bin
+export NIX_PATH=nixpkgs=/nix/var/nix/profiles/per-user/root/channels/nixos:nixos-config=/etc/nixos/configuration.nix:/nix/var/nix/profiles/per-user/root/channels
+cd /root/nixos-config && git pull --ff-only && cd /root && nixos-rebuild switch --fast
+```
+
+and run it detached, so a dropped VPN session cannot interrupt a rebuild:
+
+```bash
+systemd-run --unit=paperless-deploy --collect --property=Type=oneshot \
+  /bin/sh -c 'pct exec 115 -- /run/current-system/sw/bin/bash /root/ct-deploy.sh \
+              > /var/log/paperless-deploy.log 2>&1'
+```
+
 ## Blank-page removal (`del_empty_pages`)
 
 `PAPERLESS_PRE_CONSUME_SCRIPT` points at `nixpaperless/del-empty-pages.sh`,
@@ -65,8 +105,13 @@ wrapped by a store derivation that provides bash, `file`, ghostscript,
 is OCR'd and stored, which is what kept the archive lean on the old machine.
 
 Paperless execs the script directly, so the wrapper's `#!/bin/bash` shebang and
-its `PATH` are both load-bearing — the script uses `set -o pipefail` and five
-external tools that a hardened paperless unit does not otherwise carry.
+its `PATH` are both load-bearing: the script uses `set -o pipefail` and eight
+external tools that a hardened paperless unit does not otherwise carry —
+including `grep`, which the ink-coverage probe pipes ghostscript through.  With
+`grep` missing every page measures 0 % ink and the script strips whole
+documents instead of the blank pages, so the script now checks its tools up
+front and refuses to touch anything, and the wrapper carries
+`bash coreutils file gawk gnugrep gnused ghostscript poppler-utils qpdf`.
 
 ## Migration from saver CT 110 (2026-11-02)
 
@@ -76,20 +121,42 @@ valkey, four systemd units under `paperless.target`, version 2.20.3.
 
 Steps taken (`document_exporter`/`document_importer` is the supported path
 across databases, and the manifest is a full Django dump — users, groups,
-permissions, saved views, correspondents, tags, custom fields):
+permissions, saved views, storage paths, tags):
 
 ```bash
-# 1. old box: quiesce, then export (documents + thumbnails + DB manifest)
-pct exec 110 -- systemctl stop paperless.target
-pct exec 110 -- sudo -u paperless /usr/lib/paperless/bin/python \
-  /usr/share/paperless/src/manage.py document_exporter /root/paperless-export
+# 1. old box: quiesce, then export (documents + thumbnails + DB manifest).
+#    manage.py does not read /etc/paperless.conf on its own and resolves its
+#    config path relative to the working directory, so source the env file and
+#    cd into the source tree first — otherwise the exporter silently looks at
+#    the compiled-in default paths.
+systemctl stop paperless.target
+set -a; . /etc/paperless.conf; set +a
+cd /usr/share/paperless/src
+sudo -E -u paperless /usr/bin/paperless-manage document_exporter \
+  /var/tmp/pex-20261102 --no-progress-bar            # 466 MB, ~40 s
 
-# 2. stream to px, then import into the empty Postgres DB
-pct exec 115 -- systemctl stop paperless-scheduler paperless-web \
-  paperless-task-queue paperless-consumer
-pct exec 115 -- sudo -u paperless paperless-manage document_importer /root/paperless-import
-pct exec 115 -- systemctl start paperless-scheduler
+# 2. relay through the laptop (saver has no route to px) and keep a copy
+ssh saver 'pct exec 110 -- /bin/tar cf - -C /var/tmp pex-20261102' \
+  | tee /tmp/pex-20261102.tar \
+  | ssh px 'pct exec 115 -- /run/current-system/sw/bin/tar xf - -C /var/tmp'
+
+# 3. import into the empty Postgres database, then come back up
+systemctl stop paperless-scheduler paperless-web paperless-task-queue paperless-consumer
+paperless-manage document_importer /var/tmp/pex-20261102 --no-progress-bar
+systemctl start paperless-scheduler
 ```
+
+`document_importer` refuses to run against a database that already holds users
+or documents, which is the safety net: it cannot overwrite a populated archive.
+
+Verified after the import (manifest objects vs. rows in PostgreSQL, every model
+matching): **306 documents**, 25 tags, 6 storage paths, 3 document types, 1
+saved view + rule, 1 note, 1175 audit-log entries, 1 mail account + 1 mail rule,
+and the single archive user (Django password hashes carry over, so existing
+logins keep working).  `media/` holds 919 files / 493 MB — exactly the exported
+set.  Dropping a copy of an existing document into `consume/` came back as
+`Not consuming … duplicate of … (#117)`, which exercises consumer → celery →
+Postgres → the pre-consume script in one shot.
 
 Deliberate changes during the move:
 

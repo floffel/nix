@@ -112,6 +112,40 @@ fi
 nixos-rebuild switch
 ```
 
+### 🔌 Detached deploys: `pct exec` has no login environment
+
+Running `nixos-rebuild` through `ssh` + `pct exec` works interactively and fails
+from a detached job, because `pct exec` hands the container an empty `HOME` and
+`nix` then cannot locate its channel:
+
+```
+error: file 'nixpkgs/nixos' was not found in the Nix search path (add it using $NIX_PATH or -I)
+```
+
+Nesting `bash -c "..."` inside `systemd-run` inside `ssh` makes it worse — quotes
+and variables get eaten on the way through.  The pattern that survives all three
+layers is a **pushed script file** that sets its own environment:
+
+```bash
+cat > /root/ct-deploy.sh <<'EOS'
+export HOME=/root
+export PATH=/root/.nix-profile/bin:/run/current-system/sw/bin:/usr/bin:/bin
+export NIX_PATH=nixpkgs=/nix/var/nix/profiles/per-user/root/channels/nixos:nixos-config=/etc/nixos/configuration.nix:/nix/var/nix/profiles/per-user/root/channels
+cd /root/nixos-config && git pull --ff-only && cd /root && nixos-rebuild switch --fast
+EOS
+pct push <vmid> /root/ct-deploy.sh /root/ct-deploy.sh
+```
+
+Then run it detached, with the wrapper owning its output:
+
+```bash
+systemd-run --unit=deploy-<vmid> --collect --property=Type=oneshot \
+  /root/deploy-<vmid>.sh          # the script does: exec > /var/log/deploy-<vmid>.log 2>&1
+```
+
+A rebuild that dies with a dropped VPN session is a half-activated container, so
+long rebuilds never run inside the SSH session that the edge provides.
+
 ### 📋 Container Names and Specific Setup Steps
 The deployment process is identical for all containers, with the following exceptions:
 

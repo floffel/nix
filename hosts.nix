@@ -50,6 +50,8 @@
       fd01::24 nixopenwebui.hosts.local.minnecker.com nixopenwebui
       10.20.20.25 nixpaperless.hosts.local.minnecker.com nixpaperless
       fd01::25 nixpaperless.hosts.local.minnecker.com nixpaperless
+      10.20.20.26 niximmich.hosts.local.minnecker.com niximmich
+      fd01::26 niximmich.hosts.local.minnecker.com niximmich
     '';
   };
 }

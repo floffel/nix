@@ -74,8 +74,11 @@ Two things are needed, and neither is obvious:
    kanidm -D idm_admin person posix show server     # must print a gidnumber
    ```
 
-2. **The CLI insists on a tty** and reads the password itself, so it cannot be
-   scripted with a plain pipe.  Either run it interactively, or give it a pty:
+2. **The account needs a POSIX password**, and setting it is the awkward part.
+   `kanidm person posix set-password` insists on a tty and reads the password
+   itself, so it cannot be scripted with a plain pipe.  Two ways that work:
+
+   Interactively, or with a pty:
 
    ```bash
    export HOME=/root SHELL=/run/current-system/sw/bin/bash
@@ -84,11 +87,38 @@ Two things are needed, and neither is obvious:
 
    (`SHELL` has to point at a real bash — NixOS has no `/bin/sh` or
    `/bin/bash`, and `script` fails without it.  It then asks for the password
-   twice.)
+   twice.  Note the CLI also needs a *valid idm_admin session*; a stale one
+   aborts with `not a terminal`, which reads like a pty problem and is not
+   one.  Piping the password into `script` just hangs.)
+
+   Fully non-interactive over the REST API — the reliable path, no tty needed.
+   Authenticate as `idm_admin` with the three-step `/v1/auth` flow (see
+   `kanidm-mail-token` in `nixidm/kanidm.nix`), then:
+
+   ```bash
+   # PUT, not POST: POST/PATCH on this path return 405.
+   # The body key is "value", not "password"; a wrong key gives a 422 that at
+   # least names the field it wanted.
+   curl -sk -b "$JAR" -H "Authorization: Bearer $BEARER" \
+     -H 'Content-Type: application/json' \
+     -X PUT "$API/v1/person/server/_unix/_credential" \
+     -d '{"value":"<posix password>"}'
+   ```
+
+   Verify from outside, which also proves the Dovecot LDAP bind path:
+
+   ```bash
+   python3 -c 'import imaplib; m=imaplib.IMAP4_SSL("mx.minnecker.com",993); \
+     print(m.login("server@minnecker.com", open("/dev/stdin").read().strip()))'
+   ```
 
 The password lives in exactly one place besides Kanidm: the
 `paperless_mail_mailaccount` row in the Paperless database, which is what the
-fetcher authenticates with.  If the two drift apart the symptom is upstream and
+fetcher authenticates with.  Both sides currently hold the *original*
+credential the old install used, recovered during the 2026-11-02 migration
+from `paperless_mail_mailaccount.id=1` on saver CT 110 — the value was never
+invented, and Kanidm and Paperless were written with the same string in the
+same step.  If the two drift apart the symptom is upstream and
 easy to miss — Paperless logs `MailError: Error while authenticating account
 server@minnecker.com` every 10 minutes while the mailbox itself is perfectly
 reachable.  Verify directly with IMAP, and re-sync the DB row after a rotation:

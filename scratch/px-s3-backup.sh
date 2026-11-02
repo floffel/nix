@@ -297,7 +297,10 @@ if [ "$MODE" != host ]; then
     OK=$((OK + 1))
   done
   log "guests: $OK/$TOTAL ok"
-  [ "$OK" -gt 0 ] || fail=1
+  # A dry run never counts an OK (nothing is uploaded), so it must not be
+  # judged by that counter -- otherwise --dry-run always exits 1 and looks
+  # like a failed night.
+  if [ "$DRY_RUN" -eq 0 ]; then [ "$OK" -gt 0 ] || fail=1; fi
   if [ ${#FAILED_GUESTS[@]} -gt 0 ]; then
     echo "ERROR: failed guests: ${FAILED_GUESTS[*]}" >&2
   fi

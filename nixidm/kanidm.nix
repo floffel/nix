@@ -281,11 +281,11 @@
       CURRENT=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
         "$API/v1/group/$UUID" | jq -r '.attrs.authsession_expiry[0] // "unset"')
       if [ "$CURRENT" = "$SESSION_EXPIRY_SECONDS" ]; then
-        echo "Session expiry already ${SESSION_EXPIRY_SECONDS}s ($((SESSION_EXPIRY_SECONDS / 86400)) days)."
+        echo "Session expiry already $SESSION_EXPIRY_SECONDS s ($((SESSION_EXPIRY_SECONDS / 86400)) days)."
         exit 0
       fi
 
-      echo "Setting session expiry from '$CURRENT' to ${SESSION_EXPIRY_SECONDS}s..."
+      echo "Setting session expiry from '$CURRENT' to $SESSION_EXPIRY_SECONDS s..."
       curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
         -X PATCH "$API/v1/group/$UUID" -H "Content-Type: application/json" \
         -d "{\"attrs\":{\"authsession_expiry\":[\"$SESSION_EXPIRY_SECONDS\"]}}" >/dev/null

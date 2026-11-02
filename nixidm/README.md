@@ -280,9 +280,38 @@ Two traps worth knowing:
   user belongs to wins over a long one on `idm_all_persons`.
 
 Changing the expiry does not extend sessions that already exist; it applies to
-sessions issued afterwards. Mail clients are separate: they hold OAuth2 refresh
-tokens, whose lifetime is the `oauth2_refresh_token_expiry` attribute on the
-`mail` client, not this setting.
+sessions issued afterwards.
+
+#### OAuth2 clients (mail apps, and everything else using SSO tokens)
+
+A client that logged in through Kanidm does not re-read this policy: it holds
+an access token, and Kanidm caps that token at the session lifetime. What keeps
+a mail app working for months is the **refresh token**, whose lifetime is a
+per-client attribute — `oauth2_refresh_token_expiry` on the resource server.
+`kanidm-session-policy` sets it to **180 days on every registered client**
+(the client list is read from Kanidm, so new clients are covered after the
+next restart). Without it, an XOAUTH2 mailbox works for a few hours and then
+starts reporting authentication failures while the browser SSO still looks
+fine.
+
+```bash
+# read it for one client (unset = Kanidm default)
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  https://localhost:8443/v1/oauth2/mail | jq .attrs.oauth2_refresh_token_expiry
+```
+
+The trap: there is **no** `PATCH /v1/oauth2/<name>` — every write to that path
+answers `404 nomatchingentries` (also for an unknown attribute, so it looks
+like the attribute does not exist). One attribute is written with
+
+```
+POST /v1/oauth2/<name>/_attr/oauth2_refresh_token_expiry
+Content-Type: application/json
+
+["15552000"]
+```
+
+i.e. a bare JSON array of values. `PUT`/`PATCH` on `_attr/<attr>` return 405.
 
 ### Deleting a User
 ```bash

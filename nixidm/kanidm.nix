@@ -222,20 +222,29 @@
     '';
   };
 
-  # How long a Kanidm login stays valid before a re-login is required.
+  # How long a login stays valid before a re-login is required.
   #
-  # The account policy for every person lives on the builtin dynamic group
-  # `idm_all_persons`; Kanidm's built-in default is a few hours, which in
-  # practice means signing in again several times a day.  180 days keeps a
-  # browser session (and the CLI's cached token, which expires with the
-  # session) usable over a long holiday.
+  # Two lifetimes are managed here, both set to the same value:
   #
-  # The entry attribute is spelled `authsession_expiry` -- the CLI calls the
-  # same setting `auth-expiry`, and PATCHing `auth_session_expiry` is rejected
-  # with invalidattributename, so the real name is used here.  Idempotent: it
-  # only writes when the value differs, so a rebuild is a no-op.
+  #   * The interactive session of every person.  The account policy lives on
+  #     the builtin dynamic group `idm_all_persons`; Kanidm's built-in default
+  #     is a few hours, which in practice means signing in again several times
+  #     a day.  The entry attribute is spelled `authsession_expiry` -- the CLI
+  #     calls the same setting `auth-expiry`, and PATCHing
+  #     `auth_session_expiry` is rejected with invalidattributename, so the
+  #     real name is used here.
+  #
+  #   * The refresh-token lifetime of every OAuth2 client
+  #     (`oauth2_refresh_token_expiry` on the resource server).  Without it a
+  #     client such as a mail app can only present its access token, which
+  #     Kanidm caps at the session lifetime, and an XOAUTH2 login then breaks
+  #     as soon as the token expires.  A refresh token lets the client renew
+  #     silently for the whole window.
+  #
+  # Idempotent: each value is only written when it differs, so a rebuild is a
+  # no-op.
   systemd.services.kanidm-session-policy = {
-    description = "Ensure the Kanidm session lifetime for all persons";
+    description = "Ensure the Kanidm session and OAuth2 refresh-token lifetimes";
     wantedBy = [ "kanidm.service" ];
     after = [ "kanidm.service" ];
     serviceConfig = {
@@ -282,21 +291,50 @@
         "$API/v1/group/$UUID" | jq -r '.attrs.authsession_expiry[0] // "unset"')
       if [ "$CURRENT" = "$SESSION_EXPIRY_SECONDS" ]; then
         echo "Session expiry already $SESSION_EXPIRY_SECONDS s ($((SESSION_EXPIRY_SECONDS / 86400)) days)."
-        exit 0
+      else
+        echo "Setting session expiry from '$CURRENT' to $SESSION_EXPIRY_SECONDS s..."
+        curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+          -X PATCH "$API/v1/group/$UUID" -H "Content-Type: application/json" \
+          -d "{\"attrs\":{\"authsession_expiry\":[\"$SESSION_EXPIRY_SECONDS\"]}}" >/dev/null
+
+        NOW=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+          "$API/v1/group/$UUID" | jq -r '.attrs.authsession_expiry[0] // "unset"')
+        if [ "$NOW" != "$SESSION_EXPIRY_SECONDS" ]; then
+          echo "ERROR: session expiry is '$NOW', expected $SESSION_EXPIRY_SECONDS" >&2
+          exit 1
+        fi
+        echo "Session expiry is now $NOW s ($((NOW / 86400)) days) for all persons."
       fi
 
-      echo "Setting session expiry from '$CURRENT' to $SESSION_EXPIRY_SECONDS s..."
-      curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
-        -X PATCH "$API/v1/group/$UUID" -H "Content-Type: application/json" \
-        -d "{\"attrs\":{\"authsession_expiry\":[\"$SESSION_EXPIRY_SECONDS\"]}}" >/dev/null
-
-      NOW=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
-        "$API/v1/group/$UUID" | jq -r '.attrs.authsession_expiry[0] // "unset"')
-      if [ "$NOW" != "$SESSION_EXPIRY_SECONDS" ]; then
-        echo "ERROR: session expiry is '$NOW', expected $SESSION_EXPIRY_SECONDS" >&2
-        exit 1
-      fi
-      echo "Session expiry is now $NOW s ($((NOW / 86400)) days) for all persons."
+      # Every registered OAuth2 client gets the same refresh-token lifetime.
+      # The client list is read from Kanidm instead of being hardcoded, so a
+      # newly added client is covered on the next restart without touching
+      # this script.
+      #
+      # Endpoint note: there is no PATCH /v1/oauth2/<name> here.  A single
+      # attribute is written with POST /v1/oauth2/<name>/_attr/<attr> and a
+      # bare JSON array of values; PUT/PATCH on that path returns 405.
+      for RS in $(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+        "$API/v1/oauth2" | jq -r '.[].attrs.name[0]'); do
+        RT=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+          "$API/v1/oauth2/$RS" | jq -r '.attrs.oauth2_refresh_token_expiry[0] // "unset"')
+        if [ "$RT" = "$SESSION_EXPIRY_SECONDS" ]; then
+          echo "oauth2 '$RS': refresh token expiry already $SESSION_EXPIRY_SECONDS s."
+          continue
+        fi
+        echo "oauth2 '$RS': refresh token expiry '$RT' -> $SESSION_EXPIRY_SECONDS s..."
+        curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+          -H "Content-Type: application/json" \
+          -X POST "$API/v1/oauth2/$RS/_attr/oauth2_refresh_token_expiry" \
+          -d "[\"$SESSION_EXPIRY_SECONDS\"]" >/dev/null
+        RT=$(curl -sk -b "$COOKIE_JAR" -H "Authorization: Bearer $BEARER" \
+          "$API/v1/oauth2/$RS" | jq -r '.attrs.oauth2_refresh_token_expiry[0] // "unset"')
+        if [ "$RT" != "$SESSION_EXPIRY_SECONDS" ]; then
+          echo "ERROR: oauth2 '$RS' refresh token expiry is '$RT'" >&2
+          exit 1
+        fi
+        echo "oauth2 '$RS': refresh token expiry is now $RT s ($((RT / 86400)) days)."
+      done
     '';
   };
 

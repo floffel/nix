@@ -14,7 +14,9 @@
 #   host      the files no vzdump job covers: /var/lib/secrets (the shared
 #             secrets), the pmxcfs configs behind /etc/pve (LXC configs,
 #             storage.cfg, jobs.cfg, ...), host network/SSH/systemd config,
-#             /usr/local/sbin, /root/backups and the restic credentials
+#             /usr/local/sbin, /root/dnsbackup (the DNS zone history
+#             imported from saver), /root/backups and the restic
+#             credentials themselves.
 #             themselves.
 #   guest-N   one vzdump stream per guest, uncompressed (restic compresses),
 #             stored as vzdump/vzdump-<type>-<vmid>-<date>.tar(.vma).
@@ -85,6 +87,7 @@ PATHS=(
   /etc/rclone-pxbackup.conf
   "$ENV_FILE"
   /usr/local/sbin
+  /root/dnsbackup
   /root/backups
 )
 

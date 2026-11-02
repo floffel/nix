@@ -139,6 +139,8 @@
             (vh: proxyPass vh == "http://vaultwarden" && forceSsl vh))
           (checkVhost "wiki.minnecker.com"
             (vh: proxyPass vh == "http://wikijs" && forceSsl vh))
+          (checkVhost "paperless.minnecker.com"
+            (vh: proxyPass vh == "http://paperless" && forceSsl vh))
           (checkVhost "meet.minnecker.com"
             (vh: proxyPass vh == "http://jitsi" && forceSsl vh))
           (checkVhost "kie.minnecker.com"
@@ -160,6 +162,7 @@
           "matrix.minnecker.com: proxyPass http://matrix + forceSSL"
           "vault.minnecker.com: proxyPass http://vaultwarden + forceSSL"
           "wiki.minnecker.com: proxyPass http://wikijs + forceSSL"
+          "paperless.minnecker.com: proxyPass http://paperless + forceSSL"
           "meet.minnecker.com: proxyPass http://jitsi + forceSSL"
           "kie.minnecker.com: proxyPass http://kiellm + forceSSL"
           "rspamd.minnecker.com: proxyPass http://nixmail + forceSSL"
@@ -301,6 +304,7 @@
         nixjitsi = mkCheck "nixjitsi" ./nixjitsi/configuration.nix;
         nixvpn = mkCheck "nixvpn" ./nixvpn/configuration.nix;
         nixopenwebui = mkCheck "nixopenwebui" ./nixopenwebui/configuration.nix;
+        nixpaperless = mkCheck "nixpaperless" ./nixpaperless/configuration.nix;
 
         fail2ban-filters-nixnginx = checkFail2banFilters "nixnginx" ./nixnginx/configuration.nix;
 
@@ -776,6 +780,25 @@ PY
         vm-nixopenwebui = mkServiceTest "nixopenwebui-vm"
           ./nixopenwebui/configuration.nix
           [ "open-webui.service" ];
+
+        vm-nixpaperless = runTest {
+          name = "nixpaperless-vm";
+          nodes.machine = { ... }: {
+            imports = [ ./nixpaperless/configuration.nix testHelpers testPostgres ];
+          };
+          testScript = ''
+            start_all()
+            machine.wait_for_unit("multi-user.target", timeout=300)
+            machine.wait_for_unit("postgresql.service", timeout=120)
+            # The first boot runs the whole Django migration set, so give the
+            # units room; later boots are fast.
+            machine.wait_for_unit("paperless-secrets.service", timeout=120)
+            machine.wait_for_unit("paperless-scheduler.service", timeout=600)
+            machine.wait_for_unit("paperless-web.service", timeout=600)
+            machine.wait_for_open_port(8000)
+            machine.log("paperless web server listening on 8000")
+          '';
+        };
       };
     };
 }

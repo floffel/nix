@@ -30,7 +30,7 @@ flake-update:
 
 # NixOS module evaluation — catches option renames, type mismatches, missing imports
 test-eval:
-    @echo "=== Module evaluation (15 containers + assertions) ==="
+    @echo "=== Module evaluation (16 containers + assertions) ==="
     nix flake check --accept-flake-config 2>&1 | grep -v "unknown flake output"
 
 # Config integrity assertions — catches routing misconfigs, missing filter definitions
@@ -45,7 +45,7 @@ test-config:
 
 # VM integration tests — boots containers in QEMU VMs (requires KVM + x86_64-linux)
 test-vm:
-    @echo "=== VM integration tests (15 containers) ==="
+    @echo "=== VM integration tests (16 containers) ==="
     @echo "This will take 30-60 minutes. Requires native Linux with KVM."
     nix build .#vmTests.x86_64-linux.vm-nixnginx --accept-flake-config --no-link -L
     nix build .#vmTests.x86_64-linux.vm-nixpostgres --accept-flake-config --no-link -L
@@ -55,6 +55,7 @@ test-vm:
     nix build .#vmTests.x86_64-linux.vm-nixidm --accept-flake-config --no-link -L
     nix build .#vmTests.x86_64-linux.vm-nixmonitoring --accept-flake-config --no-link -L
     nix build .#vmTests.x86_64-linux.vm-nixmail --accept-flake-config --no-link -L
+    nix build .#vmTests.x86_64-linux.vm-nixpaperless --accept-flake-config --no-link -L
     nix build .#vmTests.x86_64-linux.vm-mail-roundtrip --accept-flake-config --no-link -L
     @echo "=== VM security tests passed (nixnginx, nixpostgres, nixnsd, nixunbound, nixforgejo, nixidm, nixmonitoring, nixmail, vm-mail-roundtrip) ==="
 

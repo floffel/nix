@@ -117,6 +117,7 @@ The deployment process is identical for all containers, with the following excep
 
 *   **`nixmail` (Mail Server)**: Automatically handles linking the extra `nixmail.nix` module if the `CONTAINER` variable is set to `"nixmail"` in the script above.
 *   **`nixvpn` (WireGuard Gateway)**: Requires installing `wireguard-tools` to generate keys and setting up client configs (see below).
+*   **`nixpaperless` (Paperless-ngx)**: Needs the shared Postgres password mount before its first start (`lxc.mount.entry: /var/lib/secrets/postgres/paperless var/lib/secrets/postgres/paperless none bind,ro 0 0`), otherwise `paperless-secrets` fails and the four paperless units refuse to start. Create command, migration notes and the blank-page pre-consume script: [`nixpaperless/README.md`](nixpaperless/README.md).
 *   **`nixforgejo-runner` (Forgejo Runner)**: Requires Nesting and Keyctl options enabled in the Proxmox Web UI (Options -> Features) to run nested Docker containers. For CI VM integration tests (`just test-vm`), also enable `/dev/kvm` passthrough by adding to `/etc/pve/lxc/<id>.conf`:
   ```ini
   lxc.cgroup2.devices.allow: c 10:232 rwm
@@ -250,6 +251,7 @@ This is the live state, taken with `pct config` on 2026-11-01.
 | `nixmatrix` | `/var/lib/secrets/postgres/matrix` | `var/lib/secrets/postgres/matrix` | `ro` | Matrix DB passwords (`db-password`, `mas-db-password`) |
 | `nixvaultwarden` | `/var/lib/secrets/postgres/vaultwarden` | `var/lib/secrets/postgres/vaultwarden` | `ro` | Vaultwarden DB password |
 | `nixwikijs` | `/var/lib/secrets/postgres/wikijs` | `var/lib/secrets/postgres/wikijs` | `ro` | Wiki.js DB password |
+| `nixpaperless` | `/var/lib/secrets/postgres/paperless` | `var/lib/secrets/postgres/paperless` | `ro` | Paperless-ngx DB password (assembled into `/run/paperless/env` by `paperless-secrets`) |
 | `nixpostgresql` | `/var/lib/secrets/redis` | `var/lib/secrets/redis` | `rw` | Redis auth token (writer) |
 | `nixnginx` | `/var/lib/secrets/redis` | `var/lib/secrets/redis` | `ro` | Redis auth token for Nextcloud's caching/framing |
 | `nixidm` | `/var/lib/secrets/mail/ldap` | `var/lib/secrets/mail/ldap` | `rw` | Mail LDAP token + pre-rendered `nginx-ldap.conf` (sole writer, isolated subdir) |
@@ -705,6 +707,18 @@ Below are the key files and credentials required per container:
 #### 🔑 nixvaultwarden (Vaultwarden)
 * **Admin Token**: Auto-provisioned on first boot by the `vaultwarden-admin-token` service into `/var/lib/secrets/vaultwarden/env-template` (a random `ADMIN_TOKEN` generated with `openssl rand -base64 48`). The file is created with `0600` / `vaultwarden:vaultwarden` ownership and left untouched on subsequent starts. To retrieve the generated value (or rotate it), inspect/replace the file directly.
   The database password is **not** in this file. On every start, the `vaultwarden-secrets` unit assembles `/run/vaultwarden/env` from this template plus the DB password read from the shared Postgres secrets mount at `/var/lib/secrets/postgres/vaultwarden/db-password` (provisioned on `nixpostgres`, read-only here), producing the final `DATABASE_URL=postgresql://vaultwarden:<password>@nixpostgres/vaultwarden`. The same unit also injects `SSO_CLIENT_SECRET` from the shared OAuth2 secrets mount at `/var/lib/secrets/oauth2/vaultwarden/secret` (provisioned on `nixidm`, read-only here) — no manual copy to the consumer is needed.
+
+#### 📄 nixpaperless (Paperless-ngx)
+* **Database password**: no manual step beyond the mount. `nixpostgresql` writes
+  `/var/lib/secrets/postgres/paperless/db-password` (derived from
+  `ensureUsers`), CT 115 mounts it read-only and the `paperless-secrets` oneshot
+  assembles `/run/paperless/env` with `PAPERLESS_DBPASS` before every start of
+  the four paperless units.
+* **Django secret key**: container-local by design —
+  `/var/lib/paperless/nixos-paperless-secret-key`, generated on first start,
+  0400 `paperless:paperless`, inside the data volume that `vzdump` backs up.
+* **No OAuth2/Kanidm login (yet)**: authentication is paperless' own user table;
+  the users migrated from the old install keep their passwords.
 
 #### 📝 nixwikijs (Wiki.js)
 * **Database Password**: No local secret file is needed. On every start, the `wikijs-secrets` unit assembles `/run/wikijs/env` from the DB password read from the shared Postgres secrets mount at `/var/lib/secrets/postgres/wikijs/db-password` (provisioned on `nixpostgres`, read-only here), producing `WIKI_DB_PASS=<password>`.

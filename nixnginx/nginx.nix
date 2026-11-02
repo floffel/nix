@@ -214,6 +214,7 @@ in
       mas.servers = { "nixmatrix:8080" = { }; };
       jitsi.servers = { "nixjitsi:80" = { }; };
       wikijs.servers = { "nixwikijs:3000" = { }; };
+      paperless.servers = { "nixpaperless:8000" = { }; };
       vaultwarden.servers = { "nixvaultwarden:8080" = { }; };
       ki.servers = { "192.168.1.196:8080" = { }; };
       # OpenAI-compatible LLM endpoint on the same host as `ki` but on the
@@ -942,6 +943,37 @@ in
         };
         extraConfig = ''
           charset utf-8;
+          client_max_body_size 500M;
+        '';
+      };
+
+      # paperless.minnecker.com (Paperless-ngx Proxy)
+      "paperless.minnecker.com" = {
+        forceSSL = true;
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+        locations."/" = {
+          proxyPass = "http://paperless";
+          extraConfig = ''
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            error_log /var/log/nginx/paperless.error.log;
+          '';
+        };
+        # The UI watches /ws/status for consumer/scheduler progress; without
+        # the websocket upgrade a finished scan never shows up in the browser.
+        locations."/ws/status" = {
+          proxyPass = "http://paperless";
+          proxyWebsockets = true;
+        };
+        extraConfig = ''
+          charset utf-8;
+          # Scans are uploaded straight from the multifunction printer.
           client_max_body_size 500M;
         '';
       };

@@ -18,6 +18,7 @@
       { name = "wikijs"; ensureDBOwnership = true; }
       { name = "matrix"; ensureDBOwnership = true; }
       { name = "mas"; ensureDBOwnership = true; }
+      { name = "paperless"; ensureDBOwnership = true; }
     ];
     authentication = lib.mkForce ''
       local all all trust

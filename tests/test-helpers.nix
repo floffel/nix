@@ -68,7 +68,7 @@
         -subj "/CN=*.substitution.art" 2>/dev/null
 
       THE_PASS="$(openssl rand -base64 12)"
-      for role in forgejo nextcloud roundcube matrix vaultwarden wikijs; do
+      for role in forgejo nextcloud roundcube matrix vaultwarden wikijs paperless; do
         role_dir="/var/lib/secrets/postgres/$role"
         mkdir -p "$role_dir"
         echo "$THE_PASS" > "$role_dir/db-password"

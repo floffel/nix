@@ -37,7 +37,7 @@ let
         pkgs.gawk
         pkgs.gnused
         pkgs.ghostscript
-        pkgs.poppler_utils
+        pkgs.poppler-utils
         pkgs.qpdf
       ]}
     ''

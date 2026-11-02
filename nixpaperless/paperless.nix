@@ -80,7 +80,7 @@ in
       PAPERLESS_WEBSERVER_WORKERS = 2;
       PAPERLESS_CONSUMER_ENABLE_BARCODES = true;
       PAPERLESS_SCRATCH_DIR = "/var/lib/paperless/uploads";
-      PAPERLESS_PRE_CONSUME_SCRIPT = "${delEmptyPages}";
+      PAPERLESS_PRE_CONSUME_SCRIPT = "${delEmptyPages}/bin/del-empty-pages";
     };
   };
 

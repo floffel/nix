@@ -287,6 +287,42 @@ migration artefact: they are mail delivered on `nixmail` after the MX switch
 recognisable by the `.nixmail` hostname suffix in the filename, plus the
 folders Dovecot creates for every account by default.
 
+### Arrival dates (2026-11-02)
+
+After the copy, 439 messages in florian's mailbox reported an IMAP internal
+date **newer** than their own `Date:` header — 277 of them stamped 2020-10-25,
+which is the day the archive was bulk-imported at the previous provider, while
+still containing mail from 2017.  The maildir file name encodes the arrival
+time, so those files were renamed to the header time (`mv`, same directory,
+same `:2,FLAGS` suffix) followed by `doveadm force-resync`.  Rule applied:
+rename when the header is more than two days older than the encoded time; the
+generated rename list is what makes it reversible.
+
+Measured over all 57 275 messages, not a sample:
+
+* **0** messages had an internal date *older* than their `Date:` header, so the
+  copy never stamped anything as older than it is — worth knowing before
+  chasing that theory again.
+* 14 messages (recent, in `.Trash`) carried a malformed timezone,
+  `-0-300` instead of `-0300`.  Clients that cannot parse a `Date` fall back to
+  an epoch date, so these are the ones that genuinely render as ancient.  The
+  header was rewritten and the now-stale `,S=…,W=…` stat keys dropped from the
+  file name so Dovecot re-stats the file.
+
+Two things that look like bugs and are not:
+
+* **`Date:` header vs internal date.**  Clients normally display the header.
+  Re-stamping changes `INTERNALDATE` and arrival-order sorting only.
+* **UID order.**  Mail that had already been delivered on `nixmail` kept its
+  UIDs (florian's INBOX: 267–395, 19 Oct → 2 Nov) and the 2 443 migrated
+  messages were appended after them (396–2881, spanning 2020-10-25 →
+  2026-10-19), because Dovecot assigns UIDs in the order it discovers files.
+  Old mail therefore looks "newer" to anything that orders by UID, and clients
+  treat it as freshly arrived.  It is not an IMAP error.  Fixing the order
+  would mean bumping `UIDVALIDITY` per folder, which forces every client to
+  re-download everything (~13 GB for one mailbox) — deliberately not done.
+  Migrated mail arrives `\Seen`, so it does not show up as unread.
+
 ### Rollback
 
 The source tree on `saver` was only ever read.  To go back, point the MX record

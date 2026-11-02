@@ -117,7 +117,16 @@
         vhosts = nixnginxCfg.services.nginx.virtualHosts or {};
         checkVhost = name: check:
           let vh = vhosts.${name} or null; in if vh == null then false else check vh;
-        hasPhpLocation = vh: builtins.hasAttr "~ \\.php(/.*)?$" vh.locations;
+        # The NixOS Nextcloud module owns this location and has renamed it
+        # twice: "~ \\.php(/.*)?$" became "~ \\.php(?:$|/)".  Match on the
+        # pattern instead of the exact key, and require the FastCGI pass that
+        # makes it a PHP location at all.
+        hasPhpLocation = vh:
+          let keys = builtins.attrNames (vh.locations or {});
+          in
+            builtins.any (k: builtins.match ".*\\.php.*" k != null) keys
+            && builtins.any (l: builtins.match ".*fastcgi_pass.*" (l.extraConfig or "") != null)
+              (builtins.attrValues (vh.locations or {}));
         proxyPass = vh: vh.locations."/".proxyPass or "";
         forceSsl = vh: vh.forceSSL or false;
         assertions = [

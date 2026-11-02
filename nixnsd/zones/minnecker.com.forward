@@ -58,7 +58,9 @@ r			 IN CNAME   px
 ns2			 IN A	    78.47.124.81
 ns2			 IN AAAA    2a01:4f8:c0c:2ea9::2
 
-www			 IN CNAME  riese
+; Static site content moved to nixnginx (CT104) — the old server (riese)
+; is retired, so www now follows every other service to px.
+www			 IN CNAME  px
 
 local		0        IN A 127.0.0.1
 vault		0	 IN A 10.20.20.14

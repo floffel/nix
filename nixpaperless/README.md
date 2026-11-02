@@ -158,6 +158,29 @@ set.  Dropping a copy of an existing document into `consume/` came back as
 `Not consuming … duplicate of … (#117)`, which exercises consumer → celery →
 Postgres → the pre-consume script in one shot.
 
+### Mail fetch rule (needs one manual step)
+
+The archive had a `paperless_mail` account + rule that pulls attachments out of
+the `paperless` folder of `server@minnecker.com`.  Both migrated, but the
+account was pointed at `172.16.16.31:143` — the old box, unroutable from `px` —
+so it was re-pointed at `mx.minnecker.com:993` with SSL (`hosts.nix` resolves
+that straight to `nixmail`, and the name matches the wildcard certificate, so
+the TLS verification paperless performs succeeds).
+
+Authentication still fails, and it has to be fixed by a human: Kanidm has no
+`--password` flag and no admin-side password setter — the documented path is a
+single-use reset token.  So:
+
+1. redeem <https://idm.minnecker.com/ui/reset?token=…> (created 2026-11-02,
+   expires after 24 h; `./scratch/idm-users.sh user reset-token server 86400`
+   on `nixidm` mints a new one), and
+2. either reuse the mailbox password that paperless already holds (Settings →
+   Mail Accounts shows the account; no change needed if the password matches),
+   or set a new one and update it there.
+
+Until then the celery task logs `AUTHENTICATIONFAILED` every ten minutes and
+nothing else happens — the rule is enabled but inert.
+
 Deliberate changes during the move:
 
 * SQLite → PostgreSQL (repo convention; the consumer and the web UI contend on

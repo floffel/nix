@@ -353,6 +353,92 @@ Two things that look like bugs and are not:
   re-download everything (~13 GB for one mailbox) — deliberately not done.
   Migrated mail arrives `\Seen`, so it does not show up as unread.
 
+### "Many mails missing" - they were folders, not messages (2026-11-03)
+
+Reported right after the copy.  Nothing had been lost: all 56 257 source
+messages were compared md5-by-md5 against the destination and the content is
+complete (see the next section).  What was missing was the *folder list*,
+because IMAP has two views of a mailbox tree and the migration only populated
+one of them:
+
+* `LIST` walks the maildir tree - what actually exists on disk.
+* `LSUB` reads the per-user `subscriptions` file - what a mail client
+  displays.  Thunderbird, Apple Mail and most webmail UIs build the folder
+  pane from `LSUB` alone, so an unsubscribed folder and everything inside it
+  simply do not exist as far as the client is concerned.
+
+The copy carried messages and Dovecot index files but not `subscriptions`, so
+each account kept only the handful of folders it had subscribed on `nixmail`
+before the migration and the entire imported tree stayed hidden:
+
+| account (`@minnecker.com`) | folders on the server | visible before | visible after |
+| --- | --: | --: | --: |
+| florian | 724 | 115 | 722 |
+| helena  | 207 |  58 | 207 |
+| travel  |  47 |   4 |  47 |
+| sabine  |  26 |  19 |  26 |
+| bodo    |  17 |  16 |  17 |
+| minni   |  14 |   6 |  16 |
+| carolin |  10 |   1 |  10 |
+| server  |   2 |   0 |   2 |
+
+Fixed through the supported API, one call per folder (1 047 calls, 0
+failures):
+
+```bash
+doveadm mailbox list -u florian@minnecker.com |
+  while IFS= read -r mb; do
+    doveadm mailbox subscribe -u florian@minnecker.com "$mb"
+  done
+```
+
+Two entries stay out of `LSUB` on purpose: `Migration-2026-11` and
+`mail_shared` are `\Noselect` parents, and Dovecot never reports a
+`\Noselect` mailbox as subscribed.  Their children are subscribed, so clients
+render them normally.  `minni` has two *extra* entries (`plus`, `something`)
+left over from folders deleted on `nixmail` before the migration - they exist
+on neither side and are cosmetic.
+
+Diagnosing this without guessing, from inside CT 103: log in over IMAP as the
+user with the master user (`<user>*mailapi`, password in
+`/run/dovecot-auth/master-users`, see the Authentication section) and compare
+the `LSUB` and `LIST` counts.  `LSUB < LIST` means hidden mail.  Note that the
+`curl` in this image has no IMAP support; speaking IMAP over the loopback
+plaintext port (`auth_allow_cleartext = yes`) works.
+
+### Six messages that really were missing (2026-11-03)
+
+The full-tree md5 comparison found five messages present on `saver` and absent
+on `nixmail`, all in `minni`'s `INBOX`, all unseen, dated 19-21 Oct 2026.  The
+warning Dovecot printed when they were re-installed explains the mechanism:
+
+```
+Mailbox INBOX: Expunged message reappeared, giving a new UID (old uid=842, ...)
+```
+
+They *had* been copied and indexed (UIDs 842-846) and were then expunged
+again, because a later pass removed the files from disk while the index still
+knew them - the classic symptom of a second sync run with a narrower file
+list.  They were restored from `saver` into
+`/var/vmail/minnecker.com/minni/maildir/new/` (additive only, existing files
+skipped, `dovecot:dovecot` `0600`); `INBOX` went 810 to 815 and the content
+hashes match the source byte for byte.
+
+A sixth message sat outside the reach of the migration entirely.  `mail_path`
+changed on `saver` at some point, so florian's home directory also holds an
+orphan `.Drafts/` belonging to the previous layout.  Dovecot cannot see it at
+all - it is outside `mail_location`, so `doveadm` never lists it and no
+`dsync`/LDA pass could ever have copied it.  It contains one 343-byte draft
+(`test`, 10 Jan 2026), now moved into
+`/var/vmail/minnecker.com/florian/maildir/.Drafts/cur/` under a valid maildir
+name; `Drafts` is 257 messages.
+
+With both fixes applied the copy is exact.  Every message that exists anywhere
+on `saver`, including the one Dovecot could not address, is present on
+`nixmail`.  The only 14 remaining content differences are the `-0-300`
+timezone repairs from 2026-11-02, each confirmed by matching the microsecond
+and pid part of its maildir file name on both sides.
+
 ### Rollback
 
 The source tree on `saver` was only ever read.  To go back, point the MX record

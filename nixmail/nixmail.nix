@@ -1025,6 +1025,115 @@ EOF
     };
   };
 
+  # Secondary mail addresses.  A Kanidm account can carry several `mail`
+  # values (a legacy @sbminnecker.de or @sbminni.de one next to the canonical
+  # @minnecker.com one).  Postfix already rewrites those to the canonical
+  # address: ldap-aliases.cf maps any `mail` value to <uid>@minnecker.com and
+  # virtual_alias_maps is consulted before virtual_mailbox_maps, so delivery
+  # has always been correct.
+  #
+  # Dovecot was the half that was not linked.  It derives storage from the
+  # *login string* (mail_path = /var/vmail/%{user|domain|lower}/...), while
+  # authentication matches on *any* `mail` value.  So logging in with a
+  # secondary address authenticates against the real account and then opens a
+  # path that was never created: a silently empty mailbox that looks exactly
+  # like lost mail.  Link each secondary address to its canonical Maildir so
+  # any address of an account opens the same mailbox.
+  #
+  # Symlinks rather than auth_username_maps on purpose: a broken username map
+  # locks everyone out of IMAP, a broken link affects one address.  Do not
+  # "fix" this by deleting the secondary `mail` values instead - that removes
+  # the recipients from ldap-recipients.cf and the @domain catch-all would
+  # start redirecting that mail to florian.
+  systemd.services.mail-alias-mailboxes = {
+    description = "Link secondary mail addresses to their canonical Dovecot Maildir";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "dovecot.service" ];
+    requires = [ "dovecot.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      # Must return to inactive so the timer can re-run it, see the note on
+      # mail-shared-mailboxes above.
+    };
+    path = with pkgs; [ dovecot coreutils openldap gawk ];
+    script = ''
+      set -euo pipefail
+      export LDAPTLS_REQCERT=never
+      TOKEN=$(cat /var/lib/secrets/mail/ldap/ldap-token)
+      LDAPSEARCH=${pkgs.openldap}/bin/ldapsearch
+      ACCOUNTS=$(mktemp)
+      EXPECTED=$(mktemp)
+      trap 'rm -f "$ACCOUNTS" "$EXPECTED"' EXIT
+
+      # One line per account: every mail value, comma separated.
+      "$LDAPSEARCH" -LLL -x -H ldaps://ldap -D dn=token -w "$TOKEN" \
+        -b dc=minnecker,dc=com '(&(objectClass=person)(mail=*))' mail 2>/dev/null |
+      awk '
+        /^dn: / { if (m != "") print m; m=""; next }
+        /^mail: / { m = (m == "" ? substr($0,7) : m "," substr($0,7)) }
+        END { if (m != "") print m }
+      ' > "$ACCOUNTS" || true
+
+      # A failed query must not be mistaken for "all aliases were deleted".
+      if [ ! -s "$ACCOUNTS" ]; then
+        echo "No mail accounts read from LDAP, leaving links untouched." >&2
+        exit 0
+      fi
+
+      while IFS= read -r mails; do
+        [ -n "$mails" ] || continue
+        canonical=''''
+        for m in ''${mails//,/ }; do
+          # Wildcard values (*@domain) are catch-all declarations, not logins.
+          case "$m" in \**) continue ;; esac
+          case "$m" in *@minnecker.com) canonical="$m" ;; esac
+        done
+        [ -n "$canonical" ] || continue
+        canon_user=''${canonical%%@*}
+        target="/var/vmail/minnecker.com/$canon_user/maildir"
+        [ -d "$target" ] || continue
+        for m in ''${mails//,/ }; do
+          case "$m" in \**) continue ;; esac
+          [ "$m" = "$canonical" ] && continue
+          alias_user=''${m%%@*}
+          alias_domain=''${m#*@}
+          link="/var/vmail/$alias_domain/$alias_user/maildir"
+          [ "$link" = "$target" ] && continue
+          install -d -m 0770 -o dovecot -g dovecot "$link/.."
+          ln -sfn "$target" "$link"
+          chown -h dovecot:dovecot "$link"
+          printf '%s\n' "$link" >> "$EXPECTED"
+          # The link is the same directory as the canonical Maildir, so the
+          # folder tree and its subscriptions are shared.  Subscribe anyway:
+          # an unsubscribed folder is an invisible folder to most clients.
+          doveadm mailbox list -u "$m" 2>/dev/null | while IFS= read -r mb; do
+            [ -n "$mb" ] && doveadm mailbox subscribe -u "$m" "$mb" >/dev/null 2>&1 || true
+          done
+        done
+      done < "$ACCOUNTS"
+
+      # Prune links for addresses that were removed from Kanidm.  Only
+      # top-level maildir symlinks are candidates; real mailboxes are
+      # directories and are never matched.
+      find /var/vmail -mindepth 3 -maxdepth 3 -type l -name maildir 2>/dev/null |
+      while read -r link; do
+        if ! grep -Fxq "$link" "$EXPECTED" 2>/dev/null; then
+          rm -f "$link"
+          rmdir "''${link%/maildir}" 2>/dev/null || true
+          echo "pruned $link"
+        fi
+      done
+    '';
+  };
+
+  systemd.timers.mail-alias-mailboxes = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:0/5";
+      Persistent = true;
+    };
+  };
+
   # Read-only IMAP bridge for Open WebUI. Open WebUI calls it as an OpenAPI
   # tool server and forwards the authenticated user's address in
   # X-OpenWebUI-User-Email; the bridge impersonates exactly that mailbox via

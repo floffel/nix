@@ -12,6 +12,71 @@ All user configuration, aliases, catch-alls, and valid domains are configured dy
 
 ---
 
+## 🔀 Secondary addresses: aliases, logins and shared mailboxes
+
+A Kanidm account may carry several `mail` values — typically the canonical
+`<user>@minnecker.com` plus one or more legacy addresses on the other
+family domains.  Nothing links those values to each other in the mail server;
+they are simply several names for one account, and each consumer resolves them
+differently:
+
+* **Postfix** matches any `mail` value and rewrites it through
+  `ldap-aliases.cf` (`mail=%s` → `uid` → `%s@minnecker.com`).  Because
+  `virtual_alias_maps` is consulted *before* `virtual_mailbox_maps`, mail to a
+  secondary address has always been rewritten to the canonical mailbox.
+  Check any address with:
+
+  ```bash
+  postmap -q someone@legacy.example \
+    ldap:/var/lib/secrets/mail/postfix/ldap-aliases.cf
+  ```
+
+  A secondary address that resolves to *nothing* is not an account at all and
+  falls through to the `@domain` catch-all in `mapFiles."catchall"`.
+
+* **Dovecot** authenticates on any `mail` value as well, but it derives the
+  storage path from the *login string*
+  (`mail_path = /var/vmail/%{user|domain|lower}/%{user|username|lower}/maildir/`).
+  That is the gap: logging in with a secondary address authenticated against
+  the real account and then opened a path that had never been created — an
+  empty mailbox that looks exactly like deleted mail.  Nothing was ever stored
+  under those paths, so there was no mail to move.
+
+  `systemd.services.mail-alias-mailboxes` closes it.  Every 5 minutes it reads
+  all `mail` values from LDAP, treats the `@minnecker.com` value of an account
+  as canonical, and symlinks each other address to the canonical Maildir, so
+  any address of an account opens the same mailbox.  It then subscribes the
+  whole folder tree for that identity (see *"Many mails missing" below* — an
+  unsubscribed folder is an invisible folder).  Stale links for removed
+  addresses are pruned; only top-level `maildir` **symlinks** are candidates,
+  so real mailboxes (directories) can never be matched.  If the LDAP query
+  returns nothing, the unit exits without touching anything.
+
+  Symlinks rather than `auth_username_maps` on purpose: a broken username map
+  locks every user out of IMAP, a broken link affects a single address.
+
+* **Do not delete secondary `mail` values to "clean this up".**  They are what
+  makes those addresses valid recipients; remove one and the `@domain`
+  catch-all starts routing that mail to florian instead.
+
+**Shared mailboxes** are a separate, deliberate mechanism: Kanidm groups named
+`mail_shared_<owner>` (the owner's mailbox is `<owner>@minnecker.com`).  Each
+member gets a `.mail_shared.<owner>` symlink inside their own Maildir, mirrored
+sub-folders for the same reason as above, and a Dovecot ACL.  Because an alias
+Maildir is the *same directory* as the canonical one, alias logins inherit the
+owner's shares automatically.
+
+Both units are driven entirely by LDAP and contain no personal data in this
+repository.  To see the current state:
+
+```bash
+systemctl status mail-alias-mailboxes mail-shared-mailboxes
+find /var/vmail -mindepth 3 -maxdepth 3 -type l -name maildir   # alias links
+find /var/vmail -type l -name '.mail_shared.*'                  # shared links
+```
+
+---
+
 ## 🔐 Authentication
 
 Mail clients authenticate via one of two mechanisms:

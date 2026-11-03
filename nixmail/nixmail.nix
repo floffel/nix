@@ -1082,7 +1082,7 @@ EOF
 
       while IFS= read -r mails; do
         [ -n "$mails" ] || continue
-        canonical=''''
+        canonical=
         for m in ''${mails//,/ }; do
           # Wildcard values (*@domain) are catch-all declarations, not logins.
           case "$m" in \**) continue ;; esac

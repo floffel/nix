@@ -52,8 +52,21 @@ differently:
   so real mailboxes (directories) can never be matched.  If the LDAP query
   returns nothing, the unit exits without touching anything.
 
-  Symlinks rather than `auth_username_maps` on purpose: a broken username map
-  locks every user out of IMAP, a broken link affects a single address.
+  There is no cleaner way to express this.  Dovecot 2.4 removed both
+  `auth_username_maps` and passdb/userdb `override_fields` — verified against
+  the 2.4.5 binaries on `nixmail` — so a login cannot be pointed at another
+  account's path by configuration, and the Maildirs have to be linked.  That
+  has one sharp edge: as soon as anything opens the alias mailbox Dovecot
+  creates a real directory at that path, and a later `ln -s` would then
+  silently produce a nested `maildir/maildir` link.  The unit handles the
+  three cases separately and never deletes: a directory holding messages is
+  left alone with a warning, an empty one is moved aside under
+  `/var/lib/dovecot/alias-replaced/` first, so every change is reversible.
+
+  The canonical address is the account name itself (`<uid>@minnecker.com`),
+  not the first or last `@minnecker.com` value on the entry — functional
+  addresses such as `abuse@`, `postmaster@`, `quarantine@` and `reports@` sit
+  on florian's account too and would otherwise be mistaken for it.
 
 * **Do not delete secondary `mail` values to "clean this up".**  They are what
   makes those addresses valid recipients; remove one and the `@domain`

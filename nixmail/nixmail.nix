@@ -1045,6 +1045,34 @@ EOF
   # "fix" this by deleting the secondary `mail` values instead - that removes
   # the recipients from ldap-recipients.cf and the @domain catch-all would
   # start redirecting that mail to florian.
+  # Secondary mail addresses.  A Kanidm account can carry several `mail`
+  # values (a legacy @sbminnecker.de or @sbminni.de one next to the canonical
+  # @minnecker.com one).  Postfix already rewrites those to the canonical
+  # address: ldap-aliases.cf maps any `mail` value to <uid>@minnecker.com and
+  # virtual_alias_maps is consulted before virtual_mailbox_maps, so delivery
+  # has always been correct.
+  #
+  # Dovecot was the half that was not linked.  It authenticates on any `mail`
+  # value but derives storage from the *login string*
+  # (mail_path = /var/vmail/%{user|domain|lower}/%{user|username|lower}/maildir/),
+  # so logging in with a secondary address authenticated against the real
+  # account and then opened a path that had never been created: a silently
+  # empty mailbox that looks exactly like deleted mail.
+  #
+  # Dovecot 2.4 has no way to express that indirection - both
+  # `auth_username_maps` and passdb/userdb `override_fields` were removed, so
+  # there is no supported way to point one login at another path.  Linking the
+  # Maildirs is therefore the only option, and it has one sharp edge: the
+  # instant anything opens that mailbox Dovecot creates a real directory
+  # there, after which `ln -s` would silently create a nested
+  # maildir/maildir symlink.  The unit below therefore distinguishes the three
+  # cases explicitly and never deletes: an unexpected directory holding
+  # messages is left alone, an empty one is moved aside under /var/lib/dovecot
+  # so the change is reversible.
+  #
+  # Do not "fix" this by deleting the secondary `mail` values instead - that
+  # removes those addresses from ldap-recipients.cf and the @domain catch-all
+  # would start redirecting their mail to florian.
   systemd.services.mail-alias-mailboxes = {
     description = "Link secondary mail addresses to their canonical Dovecot Maildir";
     wantedBy = [ "multi-user.target" ];
@@ -1061,17 +1089,20 @@ EOF
       export LDAPTLS_REQCERT=never
       TOKEN=$(cat /var/lib/secrets/mail/ldap/ldap-token)
       LDAPSEARCH=${pkgs.openldap}/bin/ldapsearch
+      REPLACED=/var/lib/dovecot/alias-replaced
       ACCOUNTS=$(mktemp)
       EXPECTED=$(mktemp)
       trap 'rm -f "$ACCOUNTS" "$EXPECTED"' EXIT
 
-      # One line per account: every mail value, comma separated.
+      # One line per account: <uid> and every mail value it owns.
       "$LDAPSEARCH" -LLL -x -H ldaps://ldap -D dn=token -w "$TOKEN" \
-        -b dc=minnecker,dc=com '(&(objectClass=person)(mail=*))' mail 2>/dev/null |
+        -b dc=minnecker,dc=com '(&(objectClass=person)(mail=*))' uid mail 2>/dev/null |
       awk '
-        /^dn: / { if (m != "") print m; m=""; next }
-        /^mail: / { m = (m == "" ? substr($0,7) : m "," substr($0,7)) }
-        END { if (m != "") print m }
+        function flush() { if (u != "" && m != "") print u "\t" m; u = ""; m = "" }
+        /^dn: / { flush(); next }
+        /^uid: / { u = substr($0, 6) }
+        /^mail: / { m = (m == "" ? substr($0, 7) : m "," substr($0, 7)) }
+        END { flush() }
       ' > "$ACCOUNTS" || true
 
       # A failed query must not be mistaken for "all aliases were deleted".
@@ -1080,29 +1111,52 @@ EOF
         exit 0
       fi
 
-      while IFS= read -r mails; do
-        [ -n "$mails" ] || continue
-        canonical=
+      while IFS=$(printf '\t') read -r uid mails; do
+        [ -n "$uid" ] || continue
+        # The canonical address is the account name itself, not simply the
+        # first or last @minnecker.com value: functional addresses such as
+        # abuse@, postmaster@ or reports@ live on the same account too.
+        canonical="$uid@minnecker.com"
+        case ",$mails," in
+          *",$canonical,"*) ;;
+          *) echo "No canonical address for $uid, skipping" >&2; continue ;;
+        esac
+        target="/var/vmail/minnecker.com/$uid/maildir"
+        [ -d "$target" ] || continue
+
         for m in ''${mails//,/ }; do
           # Wildcard values (*@domain) are catch-all declarations, not logins.
-          case "$m" in \**) continue ;; esac
-          case "$m" in *@minnecker.com) canonical="$m" ;; esac
-        done
-        [ -n "$canonical" ] || continue
-        canon_user=''${canonical%%@*}
-        target="/var/vmail/minnecker.com/$canon_user/maildir"
-        [ -d "$target" ] || continue
-        for m in ''${mails//,/ }; do
           case "$m" in \**) continue ;; esac
           [ "$m" = "$canonical" ] && continue
           alias_user=''${m%%@*}
           alias_domain=''${m#*@}
           link="/var/vmail/$alias_domain/$alias_user/maildir"
           [ "$link" = "$target" ] && continue
-          install -d -m 0770 -o dovecot -g dovecot "$link/.."
-          ln -sfn "$target" "$link"
+
+          if [ -L "$link" ]; then
+            ln -sfn "$target" "$link"
+          elif [ -d "$link" ]; then
+            count=$(find "$link" \( -path '*/cur/*' -o -path '*/new/*' \) -type f | wc -l)
+            if [ "$count" -gt 0 ]; then
+              echo "REFUSING to touch $link: it holds $count messages" >&2
+              continue
+            fi
+            install -d -m 0750 -o dovecot -g dovecot "$REPLACED"
+            backup="$REPLACED/$alias_domain-$alias_user-$(date +%Y%m%d%H%M%S)"
+            mv "$link" "$backup"
+            echo "Moved empty $link aside to $backup"
+            ln -sfn "$target" "$link"
+          else
+            install -d -m 0770 -o dovecot -g dovecot "''${link%/*}"
+            ln -sfn "$target" "$link"
+          fi
           chown -h dovecot:dovecot "$link"
+          # The domain directory is created implicitly by install -d and ends up
+          # root-owned; the mailbox itself works either way, but keep it tidy.
+          chown dovecot:dovecot "''${link%/*/*}" 2>/dev/null || true
+          chmod 0770 "''${link%/*/*}" 2>/dev/null || true
           printf '%s\n' "$link" >> "$EXPECTED"
+
           # The link is the same directory as the canonical Maildir, so the
           # folder tree and its subscriptions are shared.  Subscribe anyway:
           # an unsubscribed folder is an invisible folder to most clients.

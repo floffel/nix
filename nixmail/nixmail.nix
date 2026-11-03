@@ -1156,13 +1156,12 @@ EOF
           chown dovecot:dovecot "''${link%/*/*}" 2>/dev/null || true
           chmod 0770 "''${link%/*/*}" 2>/dev/null || true
           printf '%s\n' "$link" >> "$EXPECTED"
-
-          # The link is the same directory as the canonical Maildir, so the
-          # folder tree and its subscriptions are shared.  Subscribe anyway:
-          # an unsubscribed folder is an invisible folder to most clients.
-          doveadm mailbox list -u "$m" 2>/dev/null | while IFS= read -r mb; do
-            [ -n "$mb" ] && doveadm mailbox subscribe -u "$m" "$mb" >/dev/null 2>&1 || true
-          done
+          # No folder subscription is needed here: the link points at the
+          # canonical Maildir, so the alias login reads the very same
+          # `subscriptions` file as the real account.  Subscribing through it
+          # again would rewrite that file once per folder per alias on every
+          # run, which for florian's four functional addresses meant about
+          # 2 900 doveadm calls every five minutes for no effect.
         done
       done < "$ACCOUNTS"
 

@@ -1076,25 +1076,49 @@ removed structurally, in three places:
    instantly on any further hit — reachable by any CLI that retries a few
    missing files. Hub scenarios cannot be edited in place (cscli re-creates the
    symlinks at every start), so `services.crowdsec.localConfig.scenarios`
-   provides `local/http-probing-relaxed` with `capacity: 25` and no blackhole.
+   provides `local/http-probing-relaxed` with `capacity: 100` and no blackhole.
+   The number is measured, not guessed: one `forgejo-cli` run enumerates the
+   optional PR-template paths of a repository
+   (`raw/{docs,.github,.gitea}%2F{pull_request_template,PULL_REQUEST_TEMPLATE}.{yml,yaml,md}`),
+   which is ~50 distinct 404s within seconds, and a `git push` with stale
+   credentials adds ~40 more on `info/refs`. Both are ordinary tooling; both
+   used to take the household offline.
 3. **`scenarios_not_containing` on the bouncer** for
    `crowdsecurity/http-probing` and `crowdsecurity/nginx-req-limit-exceeded`.
    Both measure "this client was already throttled", so they double-punish;
    filtering them keeps the alerts (still visible in `cscli alerts list` and
    Grafana) and drops only the ban. Everything else — sensitive files, path
    traversal, CVE probing, brute force, bad user agents — bans at hub defaults.
+4. **Shorter sentences for the rate-shaped scenarios** via
+   `services.crowdsec.localConfig.profiles` (see below).
 
 Only the two static Proxmox host addresses stay allowlisted
 (`environment.etc."crowdsec/parsers/s02-enrich/99-local-whitelist-hosts.yaml"`),
 because every DNAT/hairpin connection to a container arrives from one of them.
 
-Ban length is **4 h for everything**: this host installs no remediation profile,
-so the LAPI default applies and a scenario-level `duration` is silently ignored.
-To shorten it, add `services.crowdsec.localConfig.profiles`.
+#### How long a ban lasts
 
-Three upstream footguns make this config easy to get wrong. All three bit during
-the first attempts, and each fails **silently** — the generated file looks right
-while the running agent behaves differently:
+A scenario-level `duration:` key is ignored — the sentence comes from the
+remediation **profiles**, evaluated in order, first match wins (`on_success =
+"break"`). `nixnginx/configuration.nix` therefore declares them explicitly:
+
+| Profile | Scenarios | Sentence |
+| --- | --- | --- |
+| `local_probing_remediation` | `local/http-probing-relaxed`, `crowdsecurity/http-probing`, `crowdsecurity/nginx-req-limit-exceeded`, `crowdsecurity/http-crawl-non_statics` | 30 m |
+| `local_auth_bf_remediation` | `crowdsecurity/http-generic-bf`, `LePresidente/http-generic-401-bf`, `LePresidente/http-generic-403-bf` | 1 h |
+| `default_ip_remediation` | any other IP-scoped remediation | 4 h |
+| `default_range_remediation` | any other range-scoped remediation | 4 h |
+
+30 m is enough to break a scanner's rhythm and a real offender simply comes
+back, while an actual attack (sensitive files, path traversal, CVE probing,
+bad user agents) still costs a working quarter-day.
+
+What a profile cannot do is decide *not to record* an alert — for that use the
+bouncer's `scenarios_not_containing` (§3 above).
+
+Four upstream footguns make this config easy to get wrong. Three of them bit
+during the first attempts; all four fail **silently** — the generated file looks
+right while the running agent behaves differently:
 
 1. **`nixos-rebuild switch` does not restart `crowdsec.service`.** The unit has
    no restart trigger covering the generated config, so the switch rewrites
@@ -1121,7 +1145,14 @@ while the running agent behaves differently:
    store-pointing orphan that the active tmpfiles rules no longer declare. It is
    pulled in via `wants` + `before`, so it runs on every CrowdSec start, and
    `Wants` (not `Requires`) keeps a pruning failure from taking the agent down.
-3. **`systemd.services.crowdsec.preStart` is silently discarded.** The module's
+3. **`services.crowdsec.localConfig.profiles` replaces, it does not extend.**
+   The upstream module's default for that option *is* the two 4 h catch-all
+   profiles, so the moment you list your own, `default_ip_remediation` and
+   `default_range_remediation` disappear and every scenario you did not name
+   stops being remediated — with no warning, because the "you configured no
+   profiles" message only fires on an empty list. Re-declare both defaults
+   whenever you touch this option.
+4. **`systemd.services.crowdsec.preStart` is silently discarded.** The module's
    `extraConfig` contains an empty `ExecStartPre=`, and systemd treats that as
    "reset the list", throwing away anything contributed earlier. Use a separate
    ordered unit instead. CrowdSec's units also run with an **empty `PATH`**, so

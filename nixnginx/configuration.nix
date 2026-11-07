@@ -100,8 +100,9 @@
   # egress: a CLI or sync client that retries a handful of missing raw files
   # (this is what actually fired) took the whole household offline. Hub scenarios
   # cannot be edited in place — cscli re-creates the symlinks on every start —
-  # so this is a local replacement with a higher threshold, a shorter sentence
-  # and no blackhole, and the hub copy is stopped from banning further below.
+  # so this is a local replacement with a much higher threshold and no
+  # blackhole, the hub copy is stopped from banning further below, and the
+  # sentence itself is set by the remediation profiles below.
   services.crowdsec.localConfig.scenarios = [
     {
       type = "leaky";
@@ -110,12 +111,17 @@
       filter = "evt.Meta.service == 'http' && evt.Meta.http_status in ['404', '403', '400'] && evt.Parsed.static_ressource == 'false'";
       groupby = "evt.Meta.source_ip + '/' + evt.Parsed.target_fqdn";
       distinct = "evt.Meta.http_path";
-      capacity = 25;
+      # 100 distinct paths, not the hub's 10 and not the 25 this had first.
+      # Measured from the access log: a single `forgejo-cli` run enumerates the
+      # optional PR-template paths of a repository
+      # (raw/{docs,.github,.gitea}%2F{pull_request_template,PULL_REQUEST_TEMPLATE}.{yml,yaml,md}),
+      # which is ~50 distinct 404s in a few seconds, and a `git push` with
+      # broken credentials adds another ~40. That is ordinary tooling, and it
+      # banned the household. Real scanners blow past 100 without trying hard.
+      capacity = 100;
       leakspeed = "10s";
-      # No `duration` here on purpose. Decision length is set by a remediation
-      # profile, and this host installs none, so every ban is the LAPI default
-      # of 4h — a scenario-level `duration` is silently ignored. Shortening the
-      # sentence means adding services.crowdsec.localConfig.profiles.
+      # No `duration` here: a scenario-level duration is ignored, the sentence
+      # comes from the remediation profiles below.
       reprocess = true;
       labels = {
         remediation = true;
@@ -139,6 +145,57 @@
   # visible in `cscli alerts list` and Grafana; only the ban is dropped. Every
   # other scenario (sensitive files, path traversal, CVE probing, brute force,
   # bad user agents) keeps banning at the hub defaults.
+  # How long a ban lasts. Supplying this list replaces the upstream module's
+  # default — which is exactly the two catch-all profiles re-declared at the
+  # bottom — so forgetting them silently turns remediation off for every
+  # scenario except the ones named above. Profiles are tried in order and
+  # `on_success = "break"` stops at the first match, so the specific ones have
+  # to be listed before the catch-alls.
+  #
+  # 4 h fits an attack and not a rate-shaped false positive from the operator's
+  # own dynamic NAT address: the same forgejo-cli/git noise that fired the
+  # probing scenarios took cloud, matrix, git, idm, wiki and vaultwarden
+  # offline for a quarter of the working day. Volume-shaped scenarios therefore
+  # get a short cool-down (the offender comes straight back if it is real), and
+  # everything that indicates an actual attack keeps 4 h.
+  services.crowdsec.localConfig.profiles = [
+    {
+      # "this IP made a lot of similar requests" —CLIs, sync clients and
+      # crawlers trip these as much as scanners do.
+      name = "local_probing_remediation";
+      filters = [
+        "Alert.Remediation == true && Alert.GetScope() == 'Ip' && Alert.Scenario in ['local/http-probing-relaxed', 'crowdsecurity/http-probing', 'crowdsecurity/nginx-req-limit-exceeded', 'crowdsecurity/http-crawl-non_statics']"
+      ];
+      decisions = [ { type = "ban"; duration = "30m"; } ];
+      on_success = "break";
+    }
+    {
+      # Authentication floods. Kept longer than the probing noise because it is
+      # a real signal, but not 4 h: five 401 answers inside ~50 s is also what
+      # a git client with stale credentials does, and that is the most likely
+      # way for the operator to lock himself out.
+      name = "local_auth_bf_remediation";
+      filters = [
+        "Alert.Remediation == true && Alert.GetScope() == 'Ip' && Alert.Scenario in ['crowdsecurity/http-generic-bf', 'LePresidente/http-generic-401-bf', 'LePresidente/http-generic-403-bf']"
+      ];
+      decisions = [ { type = "ban"; duration = "1h"; } ];
+      on_success = "break";
+    }
+    # Re-declared upstream defaults: everything else that asks for remediation.
+    {
+      name = "default_ip_remediation";
+      filters = [ "Alert.Remediation == true && Alert.GetScope() == 'Ip'" ];
+      decisions = [ { type = "ban"; duration = "4h"; } ];
+      on_success = "break";
+    }
+    {
+      name = "default_range_remediation";
+      filters = [ "Alert.Remediation == true && Alert.GetScope() == 'Range'" ];
+      decisions = [ { type = "ban"; duration = "4h"; } ];
+      on_success = "break";
+    }
+  ];
+
   services.crowdsec-firewall-bouncer.settings.scenarios_not_containing = [
     "crowdsecurity/http-probing"
     "crowdsecurity/nginx-req-limit-exceeded"

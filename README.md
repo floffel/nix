@@ -1116,6 +1116,28 @@ bad user agents) still costs a working quarter-day.
 What a profile cannot do is decide *not to record* an alert — for that use the
 bouncer's `scenarios_not_containing` (§3 above).
 
+Verified with a natural A/B two minutes after the switch, on real traffic:
+`195.178.110.53` alerted `crowdsecurity/http-probing` → decision expires in
+**30 m**; `57.129.145.103` alerted `crowdsecurity/http-open-proxy` (not named,
+falls through to the catch-all) → **4 h**. Same engine, same restart, two
+sentences — which also proves the re-declared defaults survived the override and
+that `Alert.Scenario in [...]` compiles.
+
+#### Talking to the LAPI by hand
+
+Needed for any A/B like the above, and non-obvious enough to waste twenty
+minutes on. CrowdSec 1.7.8 on this box serves its API **without the `/api`
+prefix** (`/v1/alerts`, `/v1/decisions/stream`, `/health`) — everything under
+`/api/v1/…` returns 404, which looks like a dead listener but is not. Machine
+login is `POST /v1/watchers/login` with a JSON body
+`{"machine_id":…,"password":…}` (Basic auth and `X-User`/`X-Password` headers
+both fail: the handler binds the body first and answers `missing: EOF`), and the
+JWT it returns in the body goes into `X-Token` on the next call. Credentials:
+`/var/lib/crowdsec/local-api-credentials` — **YAML**, not JSON.
+
+Checking that a decision really expired is easiest with
+`cscli decisions list -i <ip>`, which prints the remaining `expiration`.
+
 Four upstream footguns make this config easy to get wrong. Three of them bit
 during the first attempts; all four fail **silently** — the generated file looks
 right while the running agent behaves differently:

@@ -9,9 +9,34 @@ let
     ACTION=$1
     FQDN=$2
     VALUE=$3
-    DOMAIN=$(echo "$FQDN" | sed -e 's/\.$//' -e 's/^_acme-challenge\.//')
-    ZONE_FILE="/var/lib/nsd/zones/''${DOMAIN}"
+    ZONESDIR=/var/lib/nsd/zones
     KEYDIR="/var/lib/nsd/dnssec"
+
+    # The owner name lego wants the TXT for, fully qualified. lego hands us the
+    # CNAME target whenever it followed a CNAME, so this is either
+    # _acme-challenge.<zone> or, after a wildcard-synthesized CNAME, a plain
+    # host name that only exists as a record inside the parent zone.
+    NAME=$(echo "$FQDN" | sed -e 's/\.$//')
+
+    # Find the zone that actually serves NAME by walking up the label chain:
+    # _acme-challenge.minnecker.com -> minnecker.com, and the CNAME target
+    # px.minnecker.com -> minnecker.com too, because px is not a zone of its
+    # own. A file only counts as a zone when it is non-empty and carries an
+    # SOA, so a stale or emptied leftover can never be signed again.
+    ZONE=""
+    CAND="$NAME"
+    while [ -n "$CAND" ]; do
+      if [ -s "$ZONESDIR/$CAND" ] && grep -qE 'IN[[:space:]]+SOA' "$ZONESDIR/$CAND"; then
+        ZONE="$CAND"
+        ZONE_FILE="$ZONESDIR/$CAND"
+        break
+      fi
+      CAND=''${CAND#*.}
+    done
+    if [ -z "$ZONE" ]; then
+      echo "dns-hook: no served zone for $NAME, refusing to modify anything" >&2
+      exit 1
+    fi
 
     # Bump the SOA serial and re-sign the modified zone. The zones are
     # DNSSEC-signed, so an appended challenge record must be signed to keep
@@ -33,9 +58,22 @@ let
       # Re-sign the zone. signzone keeps the in-file serial (explicit -N
       # numbers are rejected by this BIND build), so only the bump above
       # matters.
-      dnssec-signzone -S -K "$KEYDIR" -o "$DOMAIN" -O full "$WORK" || {
+      dnssec-signzone -S -K "$KEYDIR" -o "$ZONE" -O full "$WORK" || {
         rm -f "$WORK" "$WORK.signed"
-        echo "dns-hook: dnssec-signzone failed for $DOMAIN" >&2
+        echo "dns-hook: dnssec-signzone failed for $ZONE" >&2
+        exit 1
+      }
+      # A short-lived challenge record must never be able to take
+      # authoritative DNS down, so only signed output that verifies may
+      # replace the live zone. Same two gates nsd-dnssec applies.
+      dnssec-verify -o "$ZONE" "$WORK.signed" || {
+        rm -f "$WORK" "$WORK.signed"
+        echo "dns-hook: dnssec-verify failed for $ZONE, live zone untouched" >&2
+        exit 1
+      }
+      nsd-checkzone "$ZONE" "$WORK.signed" || {
+        rm -f "$WORK" "$WORK.signed"
+        echo "dns-hook: nsd-checkzone failed for $ZONE, live zone untouched" >&2
         exit 1
       }
       mv -f "$WORK.signed" "$ZONE_FILE"
@@ -45,15 +83,20 @@ let
     }
 
     if [ "$ACTION" = "present" ]; then
-      # Append the TXT record to the zone file
-      echo "_acme-challenge IN TXT \"$VALUE\"" >> "$ZONE_FILE"
+      # Append the TXT record for exactly the name lego asked about.
+      printf '%s\t300 IN TXT\t"%s"\n' "$NAME." "$VALUE" >> "$ZONE_FILE"
       resign_zone
       # Wait for Hetzner secondary DNS nameservers to sync via AXFR
       sleep 120
     elif [ "$ACTION" = "cleanup" ]; then
-      # Remove the TXT record line
-      sed -i "/_acme-challenge IN TXT/d" "$ZONE_FILE"
-      resign_zone
+      # Delete only the line carrying this challenge value. The owner name can
+      # hold other records (px.minnecker.com has A and AAAA), so never match
+      # on the name alone.
+      LINE=$(grep -n "IN TXT.*\"$VALUE\"" "$ZONE_FILE" | tail -1 | cut -d: -f1)
+      if [ -n "$LINE" ]; then
+        sed -i "''${LINE}d" "$ZONE_FILE"
+        resign_zone
+      fi
       # Wait a bit before returning to ensure Let's Encrypt secondary validation is fully complete
       sleep 30
     fi

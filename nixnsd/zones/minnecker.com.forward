@@ -67,6 +67,12 @@ vault		0	 IN A 10.20.20.14
 vault		0	 IN AAAA fd01::14
 
 backendmail		 IN CNAME  px
+; ACME DNS-01 guard. The "*" wildcard below synthesizes a CNAME to px for every
+; name that does not exist, and lego follows that CNAME out of this zone — the
+; challenge TXT then lands in a zone file that is not served, the challenge
+; never goes public and renewal fails silently. A record at this exact name
+; stops the wildcard expansion. The value means nothing; keep the record.
+_acme-challenge		 300	 IN TXT  "acme-wildcard-guard"
 *			 IN CNAME  px
 mail		 IN CNAME  px
 ; Temporary access to the old Roundcube on riese during/after the MX switch.

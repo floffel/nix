@@ -96,9 +96,13 @@ let
   # this box reloads nginx when they rotate — the ACME module's `reloadServices`
   # cannot reach across containers. Derive the list from the vhosts so a new
   # certificate is watched without touching this binding.
+  # `?` rather than a direct read: the implicit `default` vhost never sets
+  # these, and accessing an unset submodule option aborts evaluation.
+  vhostCerts = v:
+    (lib.optional (v ? sslCertificate) v.sslCertificate)
+    ++ (lib.optional (v ? sslCertificateKey) v.sslCertificateKey);
   certFiles = lib.unique (lib.filter (p: p != null && p != "")
-    (lib.concatMap (v: [ v.sslCertificate v.sslCertificateKey ])
-      (lib.attrValues config.services.nginx.virtualHosts)));
+    (lib.concatMap vhostCerts (lib.attrValues config.services.nginx.virtualHosts)));
 in
 {
   # 1. Custom Nginx Service Configuration

@@ -508,6 +508,30 @@ certificates to `/var/lib/secrets/ssl/<domain>/` (`fullchain.pem` and
 `key.pem`). `nixnginx` and `nixidm` read them read-only from the same host
 path (see the table above).
 
+**Renewal has to reach a running nginx.** The certificates change on a mount in
+a *different* container, so the ACME module's `reloadServices` cannot help and
+nothing reloaded nginx after a renewal — the edge kept presenting the previous
+certificate until the next restart, which is how a renewal that reports success
+still ends with an expired certificate in production. `nixnginx/nginx.nix`
+therefore derives the certificate paths straight from the vhosts and watches
+them with `systemd.paths.nginx-cert-reload` (`PathChanged=`, which fires on the
+content/mtime change that `postRun`'s `cp` produces; the containing directory is
+not touched), whose service runs `systemctl try-reload-or-restart nginx`.
+
+**The DNS-01 hook fights the zone wildcard.** `minnecker.com` ends in
+`* IN CNAME px`, and a wildcard synthesizes records for *undefined* names, so
+`_acme-challenge.minnecker.com` answered with a CNAME to `px`. lego follows that
+CNAME and hands the hook `px.minnecker.com`, which is only a record inside the
+parent zone and not a zone of its own — the challenge TXT then went into a file
+nothing serves, and the hook's cleanup emptied that file again, after which
+`dnssec-signzone` refused to load it ("no TTL specified", then "failed to find an
+SOA at the zone apex"). Two guards, both in `nixnsd`: the zone carries a
+`_acme-challenge` TXT so the name is defined and no wildcard CNAME is
+synthesized, and the hook resolves the name it was given to a zone that exists
+and contains an SOA — walking up the labels — or refuses to write at all. The
+hook also gates replacing a live zone behind `dnssec-verify` and `nsd-checkzone`,
+like `nsd-dnssec` already does, so a challenge record cannot take DNS down.
+
 #### Shared OAuth2 client secrets
 Each non-public OAuth2/OIDC client's basic secret lives in its own directory on
 the host disk and is bind-mounted into **both** `nixidm` (read-write, so the Kanidm
@@ -1071,23 +1095,37 @@ removed structurally, in three places:
    `crowdsecurity/nginx-req-limit-exceeded` scenario turns that into a 4 h
    firewall ban. Raised to `50r/s`/`burst=150`/`limit_conn addr 80`. This is the
    fix; the CrowdSec knobs below only soften what is left.
-2. **A relaxed replacement for `http-probing`.** The hub scenario bans on 10
-   distinct 404/403/400 paths within 10 s, and its `blackhole: 5m` re-bans
-   instantly on any further hit — reachable by any CLI that retries a few
-   missing files. Hub scenarios cannot be edited in place (cscli re-creates the
+2. **Relaxed replacements for the two volume-shaped hub scenarios.**
+   `crowdsecurity/http-probing` bans on 10 distinct 404/403/400 paths within
+   10 s and its `blackhole: 5m` re-bans instantly on any further hit —
+   reachable by any CLI that retries a few missing files.
+   `crowdsecurity/http-crawl-non_statics` bans on 40 distinct non-static files
+   and carries `blackhole: 1m`, so it re-bans on the first request after the
+   cool-down. Hub scenarios cannot be edited in place (cscli re-creates the
    symlinks at every start), so `services.crowdsec.localConfig.scenarios`
-   provides `local/http-probing-relaxed` with `capacity: 100` and no blackhole.
-   The number is measured, not guessed: one `forgejo-cli` run enumerates the
-   optional PR-template paths of a repository
+   provides `local/http-probing-relaxed` (`capacity: 400`) and
+   `local/http-crawl-relaxed` (`capacity: 600`, `leakspeed: 1s`), neither with a
+   blackhole. The numbers are measured, not guessed: one `forgejo-cli` run
+   enumerates the optional PR-template paths of a repository
    (`raw/{docs,.github,.gitea}%2F{pull_request_template,PULL_REQUEST_TEMPLATE}.{yml,yaml,md}`),
    which is ~50 distinct 404s within seconds, and a `git push` with stale
    credentials adds ~40 more on `info/refs`. Both are ordinary tooling; both
    used to take the household offline.
+   The thresholds left over from the first fix were still too low. On
+   2026-11-20 a single logged-in browse session of a repository's pull-request
+   list produced **101** distinct 404s and **46** non-static file requests —
+   Forgejo answers an anonymous request for an issue in a private repository
+   with 404, and the links on that page are exactly such requests — and banned
+   the operator's own dynamic address twice. A real scanner walks thousands of
+   paths and holds several requests per second, so the raised thresholds still
+   separate the two.
 3. **`scenarios_not_containing` on the bouncer** for
-   `crowdsecurity/http-probing` and `crowdsecurity/nginx-req-limit-exceeded`.
-   Both measure "this client was already throttled", so they double-punish;
+   `crowdsecurity/http-probing`, `crowdsecurity/nginx-req-limit-exceeded` and
+   `crowdsecurity/http-crawl-non_statics`.
+   The first two measure "this client was already throttled", so they double-punish;
    filtering them keeps the alerts (still visible in `cscli alerts list` and
-   Grafana) and drops only the ban. Everything else — sensitive files, path
+   Grafana) and drops only the ban; the third is replaced by
+   `local/http-crawl-relaxed`. Everything else — sensitive files, path
    traversal, CVE probing, brute force, bad user agents — bans at hub defaults.
 4. **Shorter sentences for the rate-shaped scenarios** via
    `services.crowdsec.localConfig.profiles` (see below).
@@ -1104,21 +1142,24 @@ remediation **profiles**, evaluated in order, first match wins (`on_success =
 
 | Profile | Scenarios | Sentence |
 | --- | --- | --- |
-| `local_probing_remediation` | `local/http-probing-relaxed`, `crowdsecurity/http-probing`, `crowdsecurity/nginx-req-limit-exceeded`, `crowdsecurity/http-crawl-non_statics` | 30 m |
+| `local_probing_remediation` | `local/http-probing-relaxed`, `local/http-crawl-relaxed`, `crowdsecurity/http-probing`, `crowdsecurity/nginx-req-limit-exceeded`, `crowdsecurity/http-crawl-non_statics` | 10 m |
 | `local_auth_bf_remediation` | `crowdsecurity/http-generic-bf`, `LePresidente/http-generic-401-bf`, `LePresidente/http-generic-403-bf` | 1 h |
 | `default_ip_remediation` | any other IP-scoped remediation | 4 h |
 | `default_range_remediation` | any other range-scoped remediation | 4 h |
 
-30 m is enough to break a scanner's rhythm and a real offender simply comes
+10 m is enough to break a scanner's rhythm and a real offender simply comes
 back, while an actual attack (sensitive files, path traversal, CVE probing,
-bad user agents) still costs a working quarter-day.
+bad user agents) still costs a working quarter-day. The rate-shaped scenarios
+are exactly the ones the operator's own NAT address trips, so for those the
+sentence is a cool-down rather than a punishment.
 
 What a profile cannot do is decide *not to record* an alert — for that use the
 bouncer's `scenarios_not_containing` (§3 above).
 
 Verified with a natural A/B two minutes after the switch, on real traffic:
 `195.178.110.53` alerted `crowdsecurity/http-probing` → decision expires in
-**30 m**; `57.129.145.103` alerted `crowdsecurity/http-open-proxy` (not named,
+**30 m** (since shortened to 10 m); `57.129.145.103` alerted
+`crowdsecurity/http-open-proxy` (not named,
 falls through to the catch-all) → **4 h**. Same engine, same restart, two
 sentences — which also proves the re-declared defaults survived the override and
 that `Alert.Scenario in [...]` compiles.

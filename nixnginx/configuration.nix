@@ -111,14 +111,21 @@
       filter = "evt.Meta.service == 'http' && evt.Meta.http_status in ['404', '403', '400'] && evt.Parsed.static_ressource == 'false'";
       groupby = "evt.Meta.source_ip + '/' + evt.Parsed.target_fqdn";
       distinct = "evt.Meta.http_path";
-      # 100 distinct paths, not the hub's 10 and not the 25 this had first.
+      # 400 distinct paths, not the hub's 10 and not the 25 this had first.
       # Measured from the access log: a single `forgejo-cli` run enumerates the
       # optional PR-template paths of a repository
       # (raw/{docs,.github,.gitea}%2F{pull_request_template,PULL_REQUEST_TEMPLATE}.{yml,yaml,md}),
       # which is ~50 distinct 404s in a few seconds, and a `git push` with
       # broken credentials adds another ~40. That is ordinary tooling, and it
-      # banned the household. Real scanners blow past 100 without trying hard.
-      capacity = 100;
+      # banned the household.
+      #
+      # 100 was still too low: a logged-in browse session of one repository's
+      # pull-request list fired 101 distinct 404s on 2026-11-20 (Forgejo answers
+      # an anonymous request for a private issue with a 404, and the links on
+      # that page are exactly such requests), which banned the operator's own
+      # dynamic NAT address for 30 m. 400 keeps a wide margin over ordinary
+      # tooling and browsing; a real scanner walks thousands of paths.
+      capacity = 400;
       leakspeed = "10s";
       # No `duration` here: a scenario-level duration is ignored, the sentence
       # comes from the remediation profiles below.
@@ -133,14 +140,43 @@
         classification = [ "attack.T1595" ];
       };
     }
+    {
+      type = "leaky";
+      name = "local/http-crawl-relaxed";
+      description = "Aggressive crawl on non static resources, relaxed for shared NAT egress";
+      filter = "evt.Meta.log_type in ['http_access-log', 'http_error-log'] && evt.Parsed.static_ressource == 'false' && evt.Parsed.verb in ['GET', 'HEAD']";
+      groupby = "evt.Meta.source_ip + '/' + evt.Meta.target_fqdn";
+      distinct = "evt.Parsed.file_name";
+      # 600 distinct files instead of the hub's 40. The hub copy banned the
+      # operator on 2026-11-20 with 46 events from ordinary browsing, and its
+      # `blackhole: 1m` re-banned on every further request. With a 1 s leak the
+      # bucket only fills if a client holds several requests per second for
+      # minutes, which is what scraping looks like; a person clicking around or
+      # a sync client does not get there.
+      capacity = 600;
+      leakspeed = "1s";
+      # No `duration` here either — see the remediation profiles below.
+      reprocess = true;
+      labels = {
+        remediation = true;
+        service = "http";
+        behavior = "http:crawl";
+        label = "Aggressive Crawl (relaxed)";
+        confidence = 1;
+        spoofable = 0;
+        classification = [ "attack.T1595" ];
+      };
+    }
   ];
 
-  # Stop the hub copies of the two rate-limit-shaped scenarios from banning.
-  # Both measure "this client was already throttled", so they double-punish and
-  # they are the two that fire on legitimate heavy clients:
+  # Stop the hub copies of these three scenarios from banning. They are the
+  # ones that fire on legitimate heavy clients:
   #   * nginx-req-limit-exceeded — nginx answered 429 on its own; the throttle
   #     IS the mitigation, a firewall ban on top only hits the household.
   #   * http-probing — replaced by local/http-probing-relaxed above.
+  #   * http-crawl-non_statics — replaced by local/http-crawl-relaxed above,
+  #     and its `blackhole: 1m` re-bans on the next request after the cool-down,
+  #     which is how one browse session turns into a rolling ban.
   # Filtering happens in the bouncer, so the alerts are still recorded and stay
   # visible in `cscli alerts list` and Grafana; only the ban is dropped. Every
   # other scenario (sensitive files, path traversal, CVE probing, brute force,
@@ -164,9 +200,9 @@
       # crawlers trip these as much as scanners do.
       name = "local_probing_remediation";
       filters = [
-        "Alert.Remediation == true && Alert.GetScope() == 'Ip' && Alert.Scenario in ['local/http-probing-relaxed', 'crowdsecurity/http-probing', 'crowdsecurity/nginx-req-limit-exceeded', 'crowdsecurity/http-crawl-non_statics']"
+        "Alert.Remediation == true && Alert.GetScope() == 'Ip' && Alert.Scenario in ['local/http-probing-relaxed', 'local/http-crawl-relaxed', 'crowdsecurity/http-probing', 'crowdsecurity/nginx-req-limit-exceeded', 'crowdsecurity/http-crawl-non_statics']"
       ];
-      decisions = [ { type = "ban"; duration = "30m"; } ];
+      decisions = [ { type = "ban"; duration = "10m"; } ];
       on_success = "break";
     }
     {
@@ -199,6 +235,7 @@
   services.crowdsec-firewall-bouncer.settings.scenarios_not_containing = [
     "crowdsecurity/http-probing"
     "crowdsecurity/nginx-req-limit-exceeded"
+    "crowdsecurity/http-crawl-non_statics"
   ];
 
   # Upstream sets no restart trigger that covers the generated CrowdSec config,

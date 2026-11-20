@@ -90,6 +90,15 @@ let
       };
     };
   };
+
+  # The certificate files the vhosts below actually read. Certificates are
+  # renewed on nixnsd and arrive here over the shared NAS mount, so nothing on
+  # this box reloads nginx when they rotate — the ACME module's `reloadServices`
+  # cannot reach across containers. Derive the list from the vhosts so a new
+  # certificate is watched without touching this binding.
+  certFiles = lib.unique (lib.filter (p: p != null && p != "")
+    (lib.concatMap (v: [ v.sslCertificate v.sslCertificateKey ])
+      (lib.attrValues config.services.nginx.virtualHosts)));
 in
 {
   # 1. Custom Nginx Service Configuration
@@ -1844,4 +1853,27 @@ in
       chmod 600 /var/lib/coturn/shared-secret
     fi
   '';
+
+  # A renewed certificate is only useful once nginx picks it up. Because the
+  # files change on a mount rather than through a local ACME unit, watch them
+  # and reload on change; otherwise the edge keeps presenting the previous
+  # certificate until the next restart and a successful renewal still ends in
+  # an expired certificate in production.
+  systemd.services.nginx-cert-reload = {
+    description = "Reload nginx after a certificate rotation on the shared mount";
+    after = [ "nginx.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      # try-reload-or-restart so a rotation while nginx is down still lands.
+      ExecStart = "${pkgs.systemd}/bin/systemctl try-reload-or-restart nginx.service";
+    };
+  };
+
+  systemd.paths.nginx-cert-reload = {
+    description = "Watch the certificate files nginx serves";
+    wantedBy = [ "multi-user.target" ];
+    # PathChanged fires on content or mtime change, which is what postRun's
+    # `cp` produces — the containing directory is not touched.
+    pathConfig.PathChanged = certFiles;
+  };
 }

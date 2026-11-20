@@ -96,11 +96,15 @@ let
   # this box reloads nginx when they rotate — the ACME module's `reloadServices`
   # cannot reach across containers. Derive the list from the vhosts so a new
   # certificate is watched without touching this binding.
-  # `?` rather than a direct read: the implicit `default` vhost never sets
-  # these, and accessing an unset submodule option aborts evaluation.
+  # The implicit `default` vhost declares sslCertificate/sslCertificateKey but
+  # never defines them, and reading one aborts evaluation ("was accessed but
+  # has no value defined") while `?` still reports true because the option is
+  # declared. tryEval is the only way to ask for a value that exists.
   vhostCerts = v:
-    (lib.optional (v ? sslCertificate) v.sslCertificate)
-    ++ (lib.optional (v ? sslCertificateKey) v.sslCertificateKey);
+    let
+      maybe = name: let r = lib.tryEval v.${name}; in lib.optional r.success r.value;
+    in
+      maybe "sslCertificate" ++ maybe "sslCertificateKey";
   certFiles = lib.unique (lib.filter (p: p != null && p != "")
     (lib.concatMap vhostCerts (lib.attrValues config.services.nginx.virtualHosts)));
 in

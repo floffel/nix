@@ -1,6 +1,11 @@
 { config, pkgs, lib, ... }:
 
 let
+  # Where parsedmarc reads its DMARC/TLS-RPT reports from.  Dovecot stores the
+  # IMAP mailbox "Reports" as this hidden Maildir folder.
+  reportsMaildir = "/var/vmail/minnecker.com/florian/maildir/.Reports";
+  reportsUser = "florian@minnecker.com";
+
   # parsedmarc config rendered from our own ini (the NixOS module's generated
   # ini + stock unit are unsuitable: they assume a DynamicUser and IMAP.
   # See the parsedmarc section below).
@@ -10,7 +15,7 @@ let
       save_forensic = false;
     };
     maildir = {
-      maildir_path = "/var/vmail/minnecker.com/florian/maildir/.Reports";
+      maildir_path = reportsMaildir;
       create = true;
       delete = true;
     };
@@ -1321,6 +1326,36 @@ EOF
     };
   };
 
+  # Maildir visibility check: message files on disk vs. what Dovecot indexes
+  # vs. what clients are subscribed to.  Both mail scares on this host were
+  # invisible *folders*, not lost messages, and neither a disk-usage nor a
+  # queue check can see them.  See mail-health-metrics.py.
+  systemd.services.mail-health-exporter = {
+    description = "Export Maildir visibility metrics to Prometheus textfile";
+    serviceConfig.Type = "oneshot";
+    path = [ pkgs.dovecot pkgs.python3 pkgs.coreutils ];
+    script = ''
+      set -euo pipefail
+      OUT=/var/lib/node-exporter-textfile/mail-health.prom
+      TMP=$(mktemp /var/lib/node-exporter-textfile/.mail-health-prom.XXXXXX)
+      trap 'rm -f "$TMP"' EXIT
+      ${pkgs.python3}/bin/python3 ${./mail-health-metrics.py} > "$TMP"
+      if [ -s "$TMP" ]; then
+        chmod 0644 "$TMP"
+        mv -f "$TMP" "$OUT"
+      fi
+    '';
+  };
+  systemd.timers.mail-health-exporter = {
+    description = "Periodically check that every message on disk is reachable";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*:0/15";
+      Persistent = true;
+      Unit = "mail-health-exporter.service";
+    };
+  };
+
 
 
   # Postfix HELO/relay rejects and SASL/Dovecot auth failures are handled by
@@ -1531,7 +1566,8 @@ EOF
     # the timer still catches up a missed daily run after a reboot.
     wantedBy = lib.mkForce [ ];
     serviceConfig = lib.mkForce {
-      Type = "simple";
+      # one-shot scan; ExecStartPost must only run once parsedmarc exited
+      Type = "oneshot";
       User = "dovecot";
       Group = "dovecot";
       RuntimeDirectory = "parsedmarc";
@@ -1540,6 +1576,14 @@ EOF
         install -m 0640 -o dovecot -g dovecot ${parsedmarcIni} /run/parsedmarc/parsedmarc.ini
       ''}";
       ExecStart = "${pkgs.parsedmarc}/bin/parsedmarc -c /run/parsedmarc/parsedmarc.ini";
+      # parsedmarc's Maildir connection archives processed reports with
+      # Python's mailbox.Maildir, which NESTES subfolders: it writes
+      # .Reports/.Archive/<category>.  Dovecot's maildir++ layout keeps every
+      # mailbox in ONE flat directory of the Maildir root, so that tree is not
+      # a mailbox at all -- the archived reports were on disk but invisible to
+      # every IMAP client.  Flatten them into real mailboxes
+      # (Reports/Archive/<category>) after each run.
+      ExecStartPost = "+${pkgs.python3}/bin/python3 ${./maildir-flatten-nested.py} --maildir /var/vmail/minnecker.com/florian/maildir --user ${reportsUser} --nested .Reports/.Archive";
       RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
       PrivateUsers = false;
       ProtectHome = true;

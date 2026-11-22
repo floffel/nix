@@ -90,6 +90,71 @@ find /var/vmail -type l -name '.mail_shared.*'                  # shared links
 
 ---
 
+## 📊 Visibility: folders that exist but cannot be seen
+
+"The mail is gone" has twice meant *the folder is invisible*, not *the message
+is missing*, and both causes are invisible to a disk-usage or queue check.  A
+message is reachable only if **all three** views agree:
+
+| view | source | how it fails |
+| --- | --- | --- |
+| on disk | `cur/`, `new/` under the Maildir | — |
+| indexed | Dovecot's namespace + index | folder in a layout Dovecot cannot address |
+| subscribed | `LSUB` | folder exists but no client lists it (November 2026) |
+
+**Dovecot's maildir++ layout keeps every mailbox in ONE flat directory of the
+Maildir root**: the mailbox `Reports/Archive/Aggregate` lives in
+`.Reports.Archive.Aggregate`.  A *nested* path such as
+`.Reports/.Archive/Aggregate` is not a mailbox at all — Dovecot cannot address
+it, so everything inside is unreachable from IMAP while sitting on disk with
+perfect ownership.  That is exactly what parsedmarc did: its Maildir connection
+archives processed reports with Python's `mailbox.Maildir`, whose
+`add_folder()` nests subfolders inside the parent directory.  32 report
+messages were parked there.
+
+`maildir-flatten-nested.py` repairs such a tree — it creates the correct
+mailbox through `doveadm` (so Dovecot owns the skeleton), moves the messages
+in, restores `dovecot:dovecot` `0700`/`0600`, drops the nested directories it
+emptied, then force-resyncs and subscribes.  It never deletes a file and never
+removes a directory it did not empty.  It runs as `ExecStartPost` of
+`parsedmarc.service`, so each daily run archives into real mailboxes
+(`Reports/Archive/{Aggregate,SMTP-TLS,Invalid,Forensic}`).  Run it by hand with:
+
+```bash
+systemctl start parsedmarc.service            # or invoke directly, from a shell
+/run/current-system/sw/bin/python3 /root/nixos-config/nixmail/maildir-flatten-nested.py \
+  --maildir /var/vmail/minnecker.com/florian/maildir \
+  --user florian@minnecker.com --nested .Reports/.Archive --dry-run
+```
+
+`mail-health-exporter.service` (timer, every 15 min) checks the invariant for
+every canonical mailbox and writes `/var/lib/node-exporter-textfile/mail-health.prom`:
+
+* `mail_messages_unindexed` — messages on disk Dovecot does not index, **must be 0**
+* `mail_nested_maildir_dirs` — folders in an unreadable layout, **must be 0**
+* `mail_hidden_folders` — `LIST` minus `LSUB`; two `\Noselect` parents
+  (`Migration-2026-11`, `mail_shared`) are legitimately hidden, so 2 is normal
+* `mail_health_ok` — 0 as soon as any mailbox stops reconciling
+
+The exporter also logs to the journal (`journalctl -u mail-health-exporter`),
+and the per-account on-disk/indexed counts are exported too, so a drift shows
+up in Grafana before anyone opens a mail client.
+
+```bash
+# reconcile by hand: disk vs. index for one account
+find /var/vmail/minnecker.com/florian/maildir -type f -regex '.*/\(cur\|new\)/[^/]+' \
+  | grep -v '/\.mail_shared' | wc -l
+doveadm mailbox status -u florian@minnecker.com messages '*' \
+  | grep -v '^mail_shared' | sed -n 's/.*messages=\([0-9]*\)$/\1/p' | awk '{s+=$1} END{print s}'
+```
+
+`LSUB < LIST` means hidden mail — subscribe the tree as described in the
+migration section below.  A *negative* delta (indexed more than on disk) is a
+message Dovecot still believes in whose file is gone; `doveadm force-resync -u
+<user> '<folder>'` drops it.
+
+---
+
 ## 🔐 Authentication
 
 Mail clients authenticate via one of two mechanisms:

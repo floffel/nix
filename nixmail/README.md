@@ -120,11 +120,15 @@ removes a directory it did not empty.  It runs as `ExecStartPost` of
 `parsedmarc.service`, so each daily run archives into real mailboxes
 (`Reports/Archive/{Aggregate,SMTP-TLS,Invalid,Forensic}`).  Run it by hand with:
 
+There is no `python3` in the system profile (both units get it through their
+own `PATH`), so take the interpreter *and* the store copy of the script from the
+unit.  `systemctl show --value` prints systemd's structured form, hence the
+`argv[]` extraction:
+
 ```bash
-systemctl start parsedmarc.service            # or invoke directly, from a shell
-/run/current-system/sw/bin/python3 /root/nixos-config/nixmail/maildir-flatten-nested.py \
-  --maildir /var/vmail/minnecker.com/florian/maildir \
-  --user florian@minnecker.com --nested .Reports/.Archive --dry-run
+systemctl start parsedmarc.service              # runs parse + flatten
+eval "$(systemctl show -p ExecStartPost --value parsedmarc.service \
+        | sed -n 's/.*argv\[\]=\([^;]*\);.*/\1/p')" --dry-run
 ```
 
 `mail-health-exporter.service` (timer, every 15 min) checks the invariant for
@@ -132,8 +136,10 @@ every canonical mailbox and writes `/var/lib/node-exporter-textfile/mail-health.
 
 * `mail_messages_unindexed` — messages on disk Dovecot does not index, **must be 0**
 * `mail_nested_maildir_dirs` — folders in an unreadable layout, **must be 0**
-* `mail_hidden_folders` — `LIST` minus `LSUB`; two `\Noselect` parents
-  (`Migration-2026-11`, `mail_shared`) are legitimately hidden, so 2 is normal
+* `mail_hidden_folders` — `LIST` minus `LSUB`; one is legitimate per `\Noselect`
+  parent the account has (`Migration-2026-11` for the migrated accounts,
+  `mail_shared` for accounts with shares), so 0–2 is normal and anything above
+  is a folder no client will show
 * `mail_health_ok` — 0 as soon as any mailbox stops reconciling
 
 The exporter also logs to the journal (`journalctl -u mail-health-exporter`),
@@ -141,7 +147,7 @@ and the per-account on-disk/indexed counts are exported too, so a drift shows
 up in Grafana before anyone opens a mail client.
 
 ```bash
-# reconcile by hand: disk vs. index for one account
+# reconcile by hand: disk vs. index for one account (0 expected for both)
 find /var/vmail/minnecker.com/florian/maildir -type f -regex '.*/\(cur\|new\)/[^/]+' \
   | grep -v '/\.mail_shared' | wc -l
 doveadm mailbox status -u florian@minnecker.com messages '*' \

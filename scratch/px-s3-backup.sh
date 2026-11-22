@@ -21,6 +21,12 @@
 #   guest-N   one vzdump stream per guest, uncompressed (restic compresses),
 #             stored as vzdump/vzdump-<type>-<vmid>-<date>.tar(.vma).
 #
+# Snapshots carrying the tag "archive" are exempt from retention (see
+# --keep-tag below).  That is for one-off, never-repeated dumps -- the data
+# rescued off the retired server lives in /var/lib/px-archive and is tagged
+# this way -- because keep-daily/weekly/monthly/yearly would otherwise drop a
+# snapshot that is never renewed.
+#
 # There is deliberately NO repository password: the bucket is trusted (Garage is
 # reachable only from the internal network and is backed up in its own right at
 # the destination), so the master key is stored with an empty passphrase and
@@ -89,6 +95,7 @@ PATHS=(
   /usr/local/sbin
   /root/dnsbackup
   /root/backups
+  /var/lib/px-archive
 )
 
 MODE=all
@@ -187,7 +194,10 @@ if [ "$MODE" != guests ]; then
     if [ "$DRY_RUN" -eq 0 ] && [ -n "$SNAP_ID" ]; then
       LISTING=$(timeout 300 "${RESTIC[@]}" ls "$SNAP_ID" 2>/dev/null)
       for p in "${RESOLVED[@]}"; do
-        if ! printf '%s\n' "$LISTING" | grep -qF -- "$p"; then
+        # Read from a here-string, not a pipe: with pipefail set, `printf | grep
+        # -q` reports failure whenever grep exits on its first match before
+        # printf is done, so a path that *is* present gets reported missing.
+        if ! grep -qF -- "$p" <<<"$LISTING"; then
           echo "ERROR: snapshot $SNAP_ID has no entry for $p" >&2
           fail=1
         fi
@@ -311,6 +321,7 @@ fi
 if [ "$RUN_FORGET" -eq 1 ]; then
   log "retention: keep-daily=$KEEP_DAILY keep-weekly=$KEEP_WEEKLY keep-monthly=$KEEP_MONTHLY keep-yearly=$KEEP_YEARLY, grouped by tag"
   if ! timeout 6h "${RESTIC[@]}" forget --prune --group-by tag \
+        --keep-tag archive \
         --keep-daily "$KEEP_DAILY" --keep-weekly "$KEEP_WEEKLY" \
         --keep-monthly "$KEEP_MONTHLY" --keep-yearly "$KEEP_YEARLY" \
         --max-repack-size "$MAX_REPACK"; then

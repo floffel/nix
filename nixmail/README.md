@@ -112,13 +112,27 @@ archives processed reports with Python's `mailbox.Maildir`, whose
 `add_folder()` nests subfolders inside the parent directory.  32 report
 messages were parked there.
 
-`maildir-flatten-nested.py` repairs such a tree — it creates the correct
-mailbox through `doveadm` (so Dovecot owns the skeleton), moves the messages
-in, restores `dovecot:dovecot` `0700`/`0600`, drops the nested directories it
-emptied, then force-resyncs and subscribes.  It never deletes a file and never
-removes a directory it did not empty.  It runs as `ExecStartPost` of
-`parsedmarc.service`, so each daily run archives into real mailboxes
-(`Reports/Archive/{Aggregate,SMTP-TLS,Invalid,Forensic}`).  Run it by hand with:
+**The real fix is in the ini, not in a repair script**: `delete` belongs to the
+`[mailbox]` section.  parsedmarc reads `mailbox_config["delete"]` and ignores
+the same key in `[maildir]`, so the deletion this config always asked for never
+happened and every report fell through to the archive move.  With
+`[mailbox] delete = true` a report is removed once it has been parsed, so
+nothing is ever written into a path Dovecot cannot read.
+
+Two things stay, deliberately:
+
+* `parsedmarc.service` keeps `maildir-flatten-nested.py` as `ExecStartPost`.
+  parsedmarc still *creates* its archive folders on every run (`create_folders`
+  defaults to true even when deleting), so the empty nested scaffolding appears
+  daily and this prunes it.  If deletion ever regressed it would also move the
+  messages into real mailboxes: it creates the mailbox through `doveadm` (so
+  Dovecot owns the skeleton), moves the files in, restores
+  `dovecot:dovecot` `0700`/`0600`, drops only directories it emptied, then
+  force-resyncs and subscribes.  It never deletes a message.
+* the 32 reports found this way are still in `Reports/Archive/*` as ordinary
+  mailboxes.  They are the only raw reports ever kept;
+  `doveadm mailbox delete -u florian@minnecker.com 'Reports/Archive/*'`
+  removes them if you would rather not sync machine mail to your clients.
 
 There is no `python3` in the system profile (both units get it through their
 own `PATH`), so take the interpreter *and* the store copy of the script from the
@@ -126,7 +140,7 @@ unit.  `systemctl show --value` prints systemd's structured form, hence the
 `argv[]` extraction:
 
 ```bash
-systemctl start parsedmarc.service              # runs parse + flatten
+systemctl start parsedmarc.service              # runs parse + prune
 eval "$(systemctl show -p ExecStartPost --value parsedmarc.service \
         | sed -n 's/.*argv\[\]=\([^;]*\);.*/\1/p')" --dry-run
 ```

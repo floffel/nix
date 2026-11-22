@@ -17,6 +17,16 @@ let
     maildir = {
       maildir_path = reportsMaildir;
       create = true;
+    };
+    # What happens to a report after it has been parsed.  parsedmarc reads
+    # these keys ONLY from [mailbox] (cli.py: mailbox_config["delete"]); the
+    # same key inside [maildir] is silently ignored -- which is why raw reports
+    # were kept for months although this config asked for deletion, and why
+    # they ended up in parsedmarc's archive folder.
+    #
+    # reports_folder deliberately stays at its default "INBOX": for the Maildir
+    # input that means the root of maildir_path, i.e. our .Reports folder.
+    mailbox = {
       delete = true;
     };
     # One human-readable digest per parsedmarc run, submitted to our own
@@ -1526,7 +1536,10 @@ EOF
   #
   # parsedmarc runs as the dovecot mail user (see the systemd override
   # below) so it can read that Maildir. Reports are deleted after parsing
-  # (raw aggregates aren't worth keeping once ingested). The digest is
+  # (raw aggregates aren't worth keeping once ingested) -- via [mailbox]
+  # delete, NOT [maildir] delete: parsedmarc ignores the latter, and with it
+  # ignored every report was instead moved into an archive folder that Dovecot
+  # cannot read (see the visibility note below). The digest is
   # sent via our own submission on loopback WITHOUT authentication
   # (the recipient is a local virtual address, so reject_unauth_destination
   # passes and the alias/catch-all maps resolve it), so there is NO
@@ -1576,13 +1589,15 @@ EOF
         install -m 0640 -o dovecot -g dovecot ${parsedmarcIni} /run/parsedmarc/parsedmarc.ini
       ''}";
       ExecStart = "${pkgs.parsedmarc}/bin/parsedmarc -c /run/parsedmarc/parsedmarc.ini";
-      # parsedmarc's Maildir connection archives processed reports with
-      # Python's mailbox.Maildir, which NESTES subfolders: it writes
+      # parsedmarc creates its archive folders unconditionally (create_folders
+      # defaults to True even with delete=true), and its Maildir connection
+      # builds them with Python's mailbox.Maildir, which NESTS subfolders:
       # .Reports/.Archive/<category>.  Dovecot's maildir++ layout keeps every
-      # mailbox in ONE flat directory of the Maildir root, so that tree is not
-      # a mailbox at all -- the archived reports were on disk but invisible to
-      # every IMAP client.  Flatten them into real mailboxes
-      # (Reports/Archive/<category>) after each run.
+      # mailbox in ONE flat directory of the Maildir root, so such a tree is
+      # not a mailbox at all -- anything written into it is invisible to every
+      # IMAP client.  With [mailbox] delete no messages end up there, but the
+      # empty scaffolding still appears every run, so this prunes it -- and it
+      # would still rescue the messages themselves if deletion ever regressed.
       ExecStartPost = "+${pkgs.python3}/bin/python3 ${./maildir-flatten-nested.py} --maildir /var/vmail/minnecker.com/florian/maildir --user ${reportsUser} --nested .Reports/.Archive";
       RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
       PrivateUsers = false;

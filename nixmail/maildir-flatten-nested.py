@@ -24,6 +24,9 @@ This tool repairs that.  For every nested Maildir below --nested it
 5. force-resyncs and subscribes the mailbox so clients see it immediately.
 
 It never deletes a file and never removes a directory it did not empty.
+The only files it ever unlinks are the housekeeping markers of a folder it has
+just emptied (`maildirfolder` and Dovecot's own `dovecot-*`/`.dovecot*` index
+files), because those are what keep an empty nested directory on disk.
 """
 
 from __future__ import annotations
@@ -44,6 +47,11 @@ def run(cmd: list[str]) -> subprocess.CompletedProcess:
 
 def log(msg: str) -> None:
     print(msg, file=sys.stderr)
+
+
+def is_housekeeping(name: str) -> bool:
+    """Dovecot/maildir bookkeeping files -- never message content."""
+    return name == "maildirfolder" or name.startswith(("dovecot-", ".dovecot"))
 
 
 def mail_dirs(root: str, nested: str) -> list[str]:
@@ -105,6 +113,14 @@ def prune(path: str, stop_at: str) -> int:
             if os.path.isdir(child) and not os.listdir(child):
                 os.rmdir(child)
                 removed += 1
+        # A folder holding nothing but its own markers carries no mail.  Python's
+        # mailbox.Maildir leaves a `maildirfolder` marker behind, and without
+        # dropping it the emptied nested scaffolding can never go away.
+        leftovers = os.listdir(dirpath)
+        if leftovers and all(is_housekeeping(n) for n in leftovers):
+            for name in leftovers:
+                os.remove(os.path.join(dirpath, name))
+            removed += len(leftovers)
         if dirpath != stop_at and os.path.isdir(dirpath) and not os.listdir(dirpath):
             os.rmdir(dirpath)
             removed += 1

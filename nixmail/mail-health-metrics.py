@@ -40,7 +40,12 @@ def run(cmd: list[str]) -> subprocess.CompletedProcess:
 
 
 def accounts() -> list[str]:
-    """Canonical mailboxes: a real `maildir` directory, not an alias symlink."""
+    """Canonical mailboxes: a real `maildir` directory, not an alias symlink.
+
+    Secondary addresses are symlinked onto the canonical Maildir (see the
+    "Secondary addresses" section of the README), so counting them again would
+    only duplicate the canonical account's numbers.
+    """
     out = []
     for domain in sorted(os.listdir(VMAIL)):
         dpath = os.path.join(VMAIL, domain)
@@ -50,7 +55,8 @@ def accounts() -> list[str]:
             upath = os.path.join(dpath, user)
             if os.path.islink(upath) or not os.path.isdir(upath):
                 continue
-            if os.path.isdir(os.path.join(upath, "maildir")):
+            maildir = os.path.join(upath, "maildir")
+            if os.path.isdir(maildir) and not os.path.islink(maildir):
                 out.append(f"{user}@{domain}")
     return out
 
@@ -108,7 +114,13 @@ def main() -> int:
     rows = []
     unhealthy = 0
     for user in accounts():
-        maildir = os.path.join(VMAIL, *user.split("@")[1], user.split("@")[0], "maildir")
+        local, _, domain = user.partition("@")
+        maildir = os.path.join(VMAIL, domain, local, "maildir")
+        if not os.path.isdir(maildir):
+            # Never let a wrong path look like an empty, healthy mailbox.
+            log.warning("%s: Maildir %s does not exist", user, maildir)
+            unhealthy = 1
+            continue
         on_disk, nested = disk_view(maildir)
         view = dovecot_view(user)
         if view is None:

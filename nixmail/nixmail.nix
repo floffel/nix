@@ -270,6 +270,13 @@ in
         postscreen_dnsbl_sites = "zen.spamhaus.org=127.0.0.[2..11]*3,bl.spamcop.net=127.0.0.2*2";
 
         smtp_tls_security_level = "may";
+        # Record the TLS status of every outbound delivery.  With level 0 the
+        # delivery line says only `tls=may`, which is the *policy*, so it is
+        # impossible to tell from the log whether STARTTLS actually happened --
+        # which is exactly what a remote 451 "Server configuration error" needs
+        # you to rule out.  Level 1 logs cipher, certificate subject and issuer
+        # once per delivery; a few dozen lines a day here.
+        smtp_tls_loglevel = "1";
 
         # TLS certificates for direct client connections (previously
         # terminated by the nginx mail proxy on ports 465/993/587/143).

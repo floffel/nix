@@ -152,8 +152,6 @@
             (vh: proxyPass vh == "http://paperless" && forceSsl vh))
           (checkVhost "meet.minnecker.com"
             (vh: proxyPass vh == "http://jitsi" && forceSsl vh))
-          (checkVhost "immich.minnecker.com"
-            (vh: proxyPass vh == "http://immich" && forceSsl vh))
           (checkVhost "kie.minnecker.com"
             (vh: proxyPass vh == "http://kiellm" && forceSsl vh))
           (checkVhost "rspamd.minnecker.com"
@@ -175,7 +173,6 @@
           "wiki.minnecker.com: proxyPass http://wikijs + forceSSL"
           "paperless.minnecker.com: proxyPass http://paperless + forceSSL"
           "meet.minnecker.com: proxyPass http://jitsi + forceSSL"
-          "immich.minnecker.com: proxyPass http://immich + forceSSL"
           "kie.minnecker.com: proxyPass http://kiellm + forceSSL"
           "rspamd.minnecker.com: proxyPass http://nixmail + forceSSL"
           "mta-sts.minnecker.com: forceSSL + = /.well-known/mta-sts.txt location"

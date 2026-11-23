@@ -604,6 +604,14 @@ and pid part of its maildir file name on both sides.
 
 ### Rollback
 
-The source tree on `saver` was only ever read.  To go back, point the MX record
-and `oldmail.minnecker.com`-style client settings at `saver` again — no data
-was consumed or rewritten by the migration.
+The source tree on `saver` was only ever read, so nothing was consumed or
+rewritten by the migration — every message still exists byte for byte where it
+was.
+
+That rollback path is **closed as of 2026-11-23**: `saver` is being
+decommissioned, the `oldmail.minnecker.com` vhost that proxied its Roundcube
+has been removed from `nixnginx`, and the `riese` A/AAAA records are gone from
+the zone. `mail.minnecker.com` on `nixmail` is the only mail entry point now.
+The archive under `/var/lib/px-archive/saver-2026-11-22` on `px`, and the
+nightly `vzdump` snapshots of the old guests in the `pxbackup` bucket, are what
+a restore would have to come from.

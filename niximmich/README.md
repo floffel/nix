@@ -3,7 +3,8 @@
 Photo and video backup for the phones, replacing the Docker Compose stack that
 ran on saver CT 111.
 
-* URL: <https://immich.minnecker.com> (wildcard cert, proxied by `nixnginx`)
+* URL: none since 2026-11-23 — the `immich.minnecker.com` vhost and the `immich`
+  upstream were removed from `nixnginx` (see [Status](#status))
 * Container: `niximmich`, CT **116**, `10.20.20.26` / `fd01::26`, rootfs
   `fast:40G`, 2 cores / 4 GB
 * App: `services.immich` — units `immich-server` (port 2283) and
@@ -13,12 +14,31 @@ ran on saver CT 111.
 * Files: `/var/lib/immich` on the container's own ZFS volume, covered by the
   nightly restic pass through `vzdump 116`
 
-## Status
+## Status: dropped, parked
 
-Container created and the configuration committed, but the service is **not
-activated yet** — see [Blockers](#blockers). The first `nixos-rebuild switch`
-currently stops at the immich package being marked insecure in nixpkgs
-26.05.
+**Decision (2026-11-23): immich is not coming back.** While retiring the old
+server the photo library was reviewed and dropped along with `oldmail`: the
+library itself lives only on the powered-off NAS (`192.168.1.203`), so there was
+nothing to migrate, and re-importing it into Immich would mean accepting that
+Immich keeps the only copy of the photos on a container rootfs.
+
+What that changed:
+
+* `nixnginx` lost the `immich.minnecker.com` vhost and the `immich` upstream.
+* `flake.nix` lost the matching `checkVhost` assertion.
+* `immich.minnecker.com` still *resolves* — the zone has a `* IN CNAME px`
+  wildcard — but nginx has no vhost for it, so it falls through to the default
+  catch-all site.
+
+What is deliberately **not** removed: CT 116 (`pct destroy 116` is a destructive
+infra step and needs an explicit go-ahead), this directory, the `hosts.nix`
+entry and the `mkCheck "niximmich"` flake output. The configuration therefore
+still builds and CT 116 is still rebuildable if the decision is ever revisited;
+it just has no route from the internet.
+
+Before the drop, the service was never activated: the first
+`nixos-rebuild switch` stopped at the immich package being marked insecure in
+nixpkgs 26.05, and CT 116 has no `immich-server` unit and no `/var/lib/immich`.
 
 ## Why PostgreSQL is local here
 
@@ -86,8 +106,9 @@ After that `/root/ct-deploy.sh` works as everywhere else.
 
 ## Blockers
 
-Two things stand between the committed config and a running service. Neither
-is a code problem in this repository.
+Kept for the record: these are the reasons the service never went live, and the
+decision above makes them moot. Two things stood between the committed config
+and a running service. Neither was a code problem in this repository.
 
 ### 1. The immich package in nixpkgs 26.05 is EOL and flagged insecure
 

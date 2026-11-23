@@ -129,7 +129,13 @@ in
       User = "jupyter";
       Group = "jupyter";
       WorkingDirectory = workDir;
-      StateDirectory = "jupyter";
+      # Declared, not created at runtime: systemd makes both directories before
+      # ExecStart and hands them to the service user.  Listing `jupyter/work`
+      # matters — the unit's WorkingDirectory is that path, and a missing
+      # WorkingDirectory is a status=200/CHDIR start failure, which is how the
+      # very first boot of this container behaved before any notebooks were
+      # seeded.
+      StateDirectory = [ "jupyter" "jupyter/work" ];
       EnvironmentFile = envFile;
       # The python environment doubles as the kernel, and matplotlib, jupyter
       # and ipywidgets all cache under $HOME / XDG dirs — point those at the

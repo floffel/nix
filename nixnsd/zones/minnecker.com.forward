@@ -74,5 +74,6 @@ _acme-challenge		 300	 IN TXT  "acme-wildcard-guard"
 *			 IN CNAME  px
 mail		 IN CNAME  px
 matrix		 IN CNAME  px
+lab		 IN CNAME  px
 livekit		 IN CNAME  px
 kie		 IN CNAME  px

@@ -52,6 +52,8 @@
       fd01::25 nixpaperless.hosts.local.minnecker.com nixpaperless
       10.20.20.26 niximmich.hosts.local.minnecker.com niximmich
       fd01::26 niximmich.hosts.local.minnecker.com niximmich
+      10.20.20.27 nixjupyter.hosts.local.minnecker.com nixjupyter
+      fd01::27 nixjupyter.hosts.local.minnecker.com nixjupyter
     '';
   };
 }

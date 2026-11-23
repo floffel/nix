@@ -152,6 +152,8 @@
             (vh: proxyPass vh == "http://paperless" && forceSsl vh))
           (checkVhost "meet.minnecker.com"
             (vh: proxyPass vh == "http://jitsi" && forceSsl vh))
+          (checkVhost "lab.minnecker.com"
+            (vh: proxyPass vh == "http://jupyter" && forceSsl vh))
           (checkVhost "kie.minnecker.com"
             (vh: proxyPass vh == "http://kiellm" && forceSsl vh))
           (checkVhost "rspamd.minnecker.com"
@@ -173,6 +175,7 @@
           "wiki.minnecker.com: proxyPass http://wikijs + forceSSL"
           "paperless.minnecker.com: proxyPass http://paperless + forceSSL"
           "meet.minnecker.com: proxyPass http://jitsi + forceSSL"
+          "lab.minnecker.com: proxyPass http://jupyter + forceSSL"
           "kie.minnecker.com: proxyPass http://kiellm + forceSSL"
           "rspamd.minnecker.com: proxyPass http://nixmail + forceSSL"
           "mta-sts.minnecker.com: forceSSL + = /.well-known/mta-sts.txt location"
@@ -315,6 +318,7 @@
         nixopenwebui = mkCheck "nixopenwebui" ./nixopenwebui/configuration.nix;
         nixpaperless = mkCheck "nixpaperless" ./nixpaperless/configuration.nix;
         niximmich = mkCheck "niximmich" ./niximmich/configuration.nix;
+        nixjupyter = mkCheck "nixjupyter" ./nixjupyter/configuration.nix;
 
         fail2ban-filters-nixnginx = checkFail2banFilters "nixnginx" ./nixnginx/configuration.nix;
 

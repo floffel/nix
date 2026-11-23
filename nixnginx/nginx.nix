@@ -232,6 +232,7 @@ in
       jitsi.servers = { "nixjitsi:80" = { }; };
       wikijs.servers = { "nixwikijs:3000" = { }; };
       paperless.servers = { "nixpaperless:8000" = { }; };
+      jupyter.servers = { "nixjupyter:8888" = { }; };
       vaultwarden.servers = { "nixvaultwarden:8080" = { }; };
       ki.servers = { "192.168.1.196:8080" = { }; };
       # OpenAI-compatible LLM endpoint on the same host as `ki` but on the
@@ -964,6 +965,41 @@ in
           charset utf-8;
           # Scans are uploaded straight from the multifunction printer.
           client_max_body_size 500M;
+        '';
+      };
+
+      # lab.minnecker.com (JupyterLab)
+      #
+      # Kernels and terminals are websockets on the same port as the UI
+      # (/api/kernels/<id>/websocket, /terminals/websocket/<id>), so the
+      # upgrade headers live on the catch-all location.  proxy_read_timeout has
+      # to be raised well above the 60 s default: nginx closes a websocket that
+      # sees no traffic for a minute, which the UI reports as a dead kernel
+      # while the notebook is simply thinking.  A notebook that loads a large
+      # CSV or a dataset upload from the browser needs more than the 1 M nginx
+      # default for PUT bodies.
+      "lab.minnecker.com" = {
+        forceSSL = true;
+        sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";
+        sslCertificateKey = "/var/lib/secrets/ssl/minnecker.com/key.pem";
+        locations."/" = {
+          proxyPass = "http://jupyter";
+          extraConfig = ''
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+            proxy_read_timeout 3600s;
+            proxy_send_timeout 3600s;
+            error_log /var/log/nginx/lab.error.log;
+          '';
+        };
+        extraConfig = ''
+          charset utf-8;
+          client_max_body_size 1024M;
         '';
       };
 

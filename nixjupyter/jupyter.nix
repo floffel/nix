@@ -50,7 +50,12 @@ let
   serverConfig = pkgs.writeText "jupyter-server-config.py" ''
     import os
 
-    c.ServerApp.ip = "::"
+    # "*" is the one value that makes tornado listen on both families.  "::"
+    # looks like the dual-stack choice and is what the other containers use, but
+    # the kernel here has net.ipv6.bindv6only=1, so "::" produced an
+    # IPv6-only socket and nixnginx's IPv4 lookup of nixjupyter got
+    # connection-refused.  "*" binds 0.0.0.0 and [::] separately.
+    c.ServerApp.ip = "*"
     c.ServerApp.port = 8888
     c.ServerApp.token = os.environ["JUPYTER_TOKEN"]
     c.ServerApp.password = ""

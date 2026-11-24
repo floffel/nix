@@ -8,7 +8,6 @@ $TTL 7200
 
  
 @			 IN NS	    r.floffel.de.
-@			 IN NS	    ns2.minnecker.com.
 @                        IN NS      ns1.first-ns.de.
 @                        IN NS      robotns2.second-ns.de.
 @                        IN NS      robotns3.second-ns.com.
@@ -53,8 +52,6 @@ mx						300 IN A	178.63.124.242
 mx						300 IN AAAA	2a01:4f8:fff2:7d::1
 cloud                    IN CNAME  px
 r			 IN CNAME   px
-ns2			 IN A	    78.47.124.81
-ns2			 IN AAAA    2a01:4f8:c0c:2ea9::2
 
 ; Static site content moved to nixnginx (CT104) — the old server (riese)
 ; is retired, so www now follows every other service to px.

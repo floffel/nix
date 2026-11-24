@@ -131,10 +131,6 @@
       touch /var/lib/secrets/wikijs/admin-password
       chmod 600 /var/lib/secrets/wikijs/admin-password
 
-      mkdir -p /var/lib/secrets/nsd
-      echo "xw==" > /var/lib/secrets/nsd/sync.key
-      chmod 600 /var/lib/secrets/nsd/sync.key
-
       mkdir -p /var/lib/secrets/forgejo
       openssl rand -base64 32 > /var/lib/secrets/forgejo/runner-token
       echo "placeholder-token" > /var/lib/secrets/forgejo/runner-secrets

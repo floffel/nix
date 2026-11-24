@@ -787,7 +787,13 @@ Below are the key files and credentials required per container:
 * **Port Forwarding**: Forward external **UDP port 10000** on your router to the `nixjitsi` container IP (`172.16.16.20`) to allow group video bridge audio/video data.
 
 #### 🌐 nixnsd (NSD Authoritative Nameserver)
-* **TSIG Key**: Write the base64-encoded secondary sync TSIG transfer key to `/var/lib/secrets/nsd/sync.key` (owned by `nsd:nsd`, `chmod 600`).
+* **Secondary DNS**: Hetzner Robot secondary DNS (`ns1.first-ns.de`, `robotns2.second-ns.de`,
+  `robotns3.second-ns.com`) pulls the signed zones by AXFR and is listed in `nixnsd/nsd.nix`
+  with `NOKEY`, so this host needs no transfer secret. The old third-party secondary
+  `ns2.minnecker.com` (78.47.124.81) is retired: it was dropped from the zone `NS` sets and
+  its glue, from `provideXFR`/`notify` (and the `sync` TSIG key with it), and finally from the
+  registrar delegation. Retire a secondary in that order — registrar last, and only after the
+  parent NS TTL (48 h) — otherwise resolvers keep being referred to a dead nameserver.
 * **INWX API Credentials** (for automatic DNSSEC DS record push):
   Write `/var/lib/secrets/nsd/inwx.env` (chmod 600):
   ```env

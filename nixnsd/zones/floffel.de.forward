@@ -6,7 +6,6 @@ $TTL 7200
     604800	; expire
     86400 )	; minimum
 @			 IN NS      r.floffel.de.
-@			 IN NS	    ns2.minnecker.com.
 @                        IN NS      ns1.first-ns.de.
 @                        IN NS      robotns2.second-ns.de.
 @                        IN NS      robotns3.second-ns.com.

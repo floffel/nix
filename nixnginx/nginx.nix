@@ -239,7 +239,15 @@ in
       # LLM API port (matches Open WebUI's OPENAI_API_BASE_URL). Gated by the
       # kie.minnecker.com vhost's bearer-token check (see kie-auth.js).
       kiellm.servers = { "192.168.1.196:8123" = { }; };
-      openwebui.servers = { "nixopenwebui:8080" = { }; };
+      # Pin the IPv6 address: open-webui runs `uvicorn --host ::`, which binds
+      # an IPV6_V6ONLY socket, so the A record in ./hosts.nix (10.20.20.24)
+      # refuses connections. Letting nginx resolve the name puts a dead
+      # endpoint in rotation; GETs then silently retry on the v6 server, but
+      # POST/PATCH/DELETE are not retried by default (proxy_next_upstream has
+      # no `non_idempotent`), so chat/send/upload and the OIDC callback
+      # intermittently returned 502. Same reason nixmail/mail-api.py calls
+      # [fd01::24] directly.
+      openwebui.servers = { "[fd01::24]:8080" = { }; };
       nixmonitoring.servers = { "nixmonitoring:3000" = { }; };
       idm.servers = { "nixidm:8443" = { }; };
       # Rspamd controller (WebUI/history) on the mail host.

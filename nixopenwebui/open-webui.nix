@@ -36,6 +36,11 @@ in
   services.open-webui = {
     enable = true;
     port = 8080;
+    # NOTE: uvicorn turns this into an AF_INET6 socket with IPV6_V6ONLY set,
+    # so despite hosts.nix advertising 10.20.20.24 as well, the service is
+    # reachable over IPv6 only (10.20.20.24:8080 is connection-refused).
+    # Consumers must use fd01::24 — see the openwebui upstream in
+    # ../nixnginx/nginx.nix and nixmail/mail-api.py.
     host = "::";
     
     # Configure OAuth/OIDC against Kanidm SSO and link local LLM API

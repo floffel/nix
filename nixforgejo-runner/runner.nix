@@ -129,21 +129,33 @@ in
     serviceConfig = { Type = "oneshot"; };
     script = ''
       set -u
+      now="$(date +%s)"
 
       # An exited job container older than 12h belongs to a run that is long
       # gone -- the runner never parks a finished container that long -- and
-      # until it is removed its volumes still count as "in use".
-      stale="$(docker ps -a -q --filter status=exited --filter name=FORGEJO-ACTIONS-TASK- --filter until=12h)"
-      if [ -n "$stale" ]; then
-        echo "removing stale Actions containers:"
-        echo "$stale"
-        echo "$stale" | xargs docker rm
-      fi
+      # while it exists its volumes still count as "in use" and cannot be
+      # collected. Neither half of the obvious one-liner works on docker 29:
+      # `docker ps` rejects an `until` filter, and its --format renders a flat
+      # row so it cannot range over .Mounts ("range can't iterate over"). Ask
+      # inspect per container instead, and keep the template on one line by
+      # separating names with spaces.
+      for cid in $(docker ps -aq --filter status=exited --filter name=FORGEJO-ACTIONS-TASK-); do
+        finished="$(docker inspect -f '{{.State.FinishedAt}}' "$cid" 2>/dev/null || true)"
+        case "$finished" in
+          ""|0001-01-01*) continue ;;
+        esac
+        ended="$(date -d "$finished" +%s 2>/dev/null || echo "$now")"
+        if [ $((now - ended)) -gt 43200 ]; then
+          echo "removing Actions container $cid (finished $((now - ended))s ago)"
+          docker rm "$cid" || true
+        fi
+      done
 
       attached="$(mktemp)"
       trap 'rm -f "$attached"' EXIT
-      docker ps -a --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}
-      {{end}}{{end}}' | grep -v '^$' | sort -u > "$attached" || true
+      for cid in $(docker ps -aq); do
+        docker inspect -f '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}' "$cid" 2>/dev/null
+      done | tr ' ' '\n' | grep -v '^[[:space:]]*$' | sort -u > "$attached"
 
       docker volume ls -q | sort -u | while read -r vol; do
         case "$vol" in ci-*) continue ;; esac

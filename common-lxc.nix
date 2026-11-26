@@ -186,7 +186,10 @@
   # off, so postgres keeps retrying every RestartSec until it succeeds, and a
   # transient ENOSPC/OOM/dependency blip costs seconds instead of an outage.
   systemd.services.postgresql = lib.mkIf config.services.postgresql.enable {
-    unitConfig.StartLimitIntervalSec = 0;
+    # mkForce: the postgres module ships StartLimitIntervalSec=605, which is
+    # precisely the five-minute window that turned the full pool into a stuck
+    # unit; the override has to outrank it.
+    unitConfig.StartLimitIntervalSec = lib.mkForce 0;
     serviceConfig.RestartSec = lib.mkDefault "15s";
   };
 

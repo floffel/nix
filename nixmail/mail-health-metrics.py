@@ -26,6 +26,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import time
 import logging
 
 VMAIL = "/var/vmail"
@@ -147,11 +148,17 @@ def main() -> int:
     print("# TYPE mail_folders_listed gauge")
     print("# HELP mail_folders_subscribed Mailboxes visible to IMAP clients.")
     print("# TYPE mail_folders_subscribed gauge")
-    print("# HELP mail_hidden_folders Listed but unsubscribed mailboxes. Two \\Noselect")
-    print("# parents (Migration-2026-11, mail_shared) are legitimately hidden.")
+    # No backslash on purpose: "\N" inside HELP text is an invalid escape in
+    # the Prometheus text format, and node_exporter then rejects the WHOLE
+    # file -- every mail_* series disappeared while mail was down
+    # (2026-11-26), exactly when they were needed.
+    print("# HELP mail_hidden_folders Listed but unsubscribed mailboxes; the two")
+    print("# Noselect parents (Migration-2026-11, mail_shared) are legitimately hidden.")
     print("# TYPE mail_hidden_folders gauge")
     print("# HELP mail_health_ok 1 when every mailbox reconciles disk against index.")
     print("# TYPE mail_health_ok gauge")
+    print("# HELP mail_health_timestamp_seconds Unix time of this successful run.")
+    print("# TYPE mail_health_timestamp_seconds gauge")
     for (user, on_disk, indexed, unindexed, nested, folders, listed, subscribed, hidden) in rows:
         q = f'user="{user}"'
         print(f'mail_messages_on_disk{{{q}}} {on_disk}')
@@ -162,6 +169,10 @@ def main() -> int:
         print(f'mail_folders_subscribed{{{q}}} {subscribed}')
         print(f'mail_hidden_folders{{{q}}} {hidden}')
     print(f"mail_health_ok {0 if unhealthy else 1}")
+    # Written last, on a completed run only: if the script dies halfway the
+    # file is never renamed into place, so this value going stale is the
+    # signal that mail health stopped being measured at all.
+    print(f"mail_health_timestamp_seconds {int(time.time())}")
     return 0
 
 

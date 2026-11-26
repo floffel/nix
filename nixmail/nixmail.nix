@@ -1585,6 +1585,13 @@ EOF
     # unit is inactive between runs) and mails a digest. Persistent=true on
     # the timer still catches up a missed daily run after a reboot.
     wantedBy = lib.mkForce [ ];
+    # ExecStartPost shells out to `doveadm` (maildir-flatten-nested.py), and a
+    # unit's PATH is built only from this service's declared dependencies --
+    # parsedmarc does not pull Dovecot in, so the step failed with
+    # FileNotFoundError: 'doveadm' on every run from 2026-11-23 onwards: the
+    # unit reported failed daily and the nested .Archive scaffolding stayed in
+    # the Maildir. Same path list the mail-health exporter uses.
+    path = [ pkgs.dovecot pkgs.coreutils ];
     serviceConfig = lib.mkForce {
       # one-shot scan; ExecStartPost must only run once parsedmarc exited
       Type = "oneshot";

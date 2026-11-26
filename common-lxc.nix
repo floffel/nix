@@ -1,5 +1,5 @@
 # Common settings for Proxmox LXC containers
-{ config, pkgs, modulesPath, ... }:
+{ config, pkgs, lib, modulesPath, ... }:
 
 {
   imports = [

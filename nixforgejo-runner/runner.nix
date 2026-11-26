@@ -107,4 +107,54 @@ in
       Type = "oneshot";
     };
   };
+
+  # Orphaned Actions scratch volumes. The runner creates one anonymous docker
+  # volume per job plus an "-env" companion and deletes both when the job
+  # ends; when the runner or the daemon dies mid-job they leak. On 2026-11-26
+  # that was 28 volumes / ~115 GB sitting on the same ZFS pool as postgres and
+  # mail, and the pool filled up.
+  #
+  # The daily virtualisation.docker.autoPrune above cannot fix this: `docker
+  # system prune` does not touch volumes unless --volumes is passed, and
+  # --volumes would delete ci-sccache and ci-lambda-binaries (the whitelisted
+  # caches in baseConfig), because those are legitimately "unused" between
+  # jobs. So collect by name shape instead: job volumes are hex ids, optional
+  # "-env" sibling, and the caches are not.
+  systemd.services.forgejo-runner-volume-gc = {
+    description = "Remove orphaned Actions containers and docker volumes";
+    after = [ "docker.service" ];
+    requires = [ "docker.service" ];
+    startAt = "daily";
+    path = [ pkgs.docker pkgs.coreutils pkgs.gnugrep ];
+    serviceConfig = { Type = "oneshot"; };
+    script = ''
+      set -u
+
+      # An exited job container older than 12h belongs to a run that is long
+      # gone -- the runner never parks a finished container that long -- and
+      # until it is removed its volumes still count as "in use".
+      stale="$(docker ps -a -q --filter status=exited --filter name=FORGEJO-ACTIONS-TASK- --filter until=12h)"
+      if [ -n "$stale" ]; then
+        echo "removing stale Actions containers:"
+        echo "$stale"
+        echo "$stale" | xargs docker rm
+      fi
+
+      attached="$(mktemp)"
+      trap 'rm -f "$attached"' EXIT
+      docker ps -a --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}
+      {{end}}{{end}}' | grep -v '^$' | sort -u > "$attached" || true
+
+      docker volume ls -q | sort -u | while read -r vol; do
+        case "$vol" in ci-*) continue ;; esac
+        printf '%s\n' "$vol" | grep -Eq '^[0-9a-f]{16,}(-env)?$' || continue
+        grep -Fxq "$vol" "$attached" && continue
+        size="$(du -sh "/var/lib/docker/volumes/$vol" 2>/dev/null | cut -f1)"
+        echo "removing orphaned volume $vol ($size)"
+        docker volume rm "$vol" || true
+      done
+
+      docker system df
+    '';
+  };
 }

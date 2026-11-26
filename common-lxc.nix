@@ -177,5 +177,18 @@
     inetutils   # provides telnet and other classic inet tools
   ];
 
+  # A database must come back on its own once the reason it died is gone.
+  # On 2026-11-26 the Proxmox ZFS pool that all container rootfs live on ran
+  # out of space: postgres PANIC'd while writing pg_control, and after two
+  # immediate restart attempts systemd hit its default start limit and left
+  # the unit in "failed" for five hours -- even though the pool had free
+  # space again long before that. StartLimitIntervalSec=0 turns the rate limit
+  # off, so postgres keeps retrying every RestartSec until it succeeds, and a
+  # transient ENOSPC/OOM/dependency blip costs seconds instead of an outage.
+  systemd.services.postgresql = lib.mkIf config.services.postgresql.enable {
+    unitConfig.StartLimitIntervalSec = 0;
+    serviceConfig.RestartSec = lib.mkDefault "15s";
+  };
+
   system.stateVersion = "26.05";
 }

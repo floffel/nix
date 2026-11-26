@@ -1,0 +1,124 @@
+# Alerting rules for the px fleet.
+#
+# Written after the 2026-11-26 outage: the ZFS pool that holds every container
+# rootfs filled up (CI docker volumes on nixforgejo-runner), postgres PANIC'd
+# mid-recovery, mail/cloud/git were down for five hours, and nobody was paged
+# because no rule file existed at all. Every rule below corresponds to a
+# signal that was already in Prometheus while the outage was running.
+groups:
+  - name: capacity
+    rules:
+      - alert: FilesystemAlmostFull
+        # LXC containers on px share one ZFS pool, so df inside any container
+        # reports the POOL's free space: this fires on every container at once
+        # when a single one grows, which is the failure mode we actually had.
+        expr: node_filesystem_avail_bytes{job="node",mountpoint="/"} < 20e9
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: under 20 GB free ({{ $value | humanize1024 }})"
+          description: >-
+            Container rootfs on the shared Proxmox pool is nearly full. At zero
+            postgres PANICs while writing pg_control and mail, webmail,
+            Nextcloud and Forgejo fail together (2026-11-26). Reclaim space
+            before it is empty, not after.
+
+  - name: services
+    rules:
+      - alert: SystemdUnitFailed
+        expr: node_systemd_unit_state{job="node",state="failed"} == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: {{ $labels.name }} is failed"
+          description: >-
+            A unit has been in state=failed for five minutes. postgresql.service
+            sitting in "failed" after a start-limit hit is what turned a full
+            disk into a five hour outage.
+
+      - alert: PrometheusTargetDown
+        expr: up{job!=""} == 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: {{ $labels.job }} target is down"
+          description: >-
+            Prometheus cannot reach this target, so everything it was watching
+            on that host is blind until it returns.
+
+      - alert: PostgresUnavailable
+        expr: pg_up{job="postgresql"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL on nixpostgres is not answering"
+          description: >-
+            Nextcloud, Roundcube, Forgejo, paperless and parsedmarc all read
+            this one database.
+
+  - name: monitoring-itself
+    rules:
+      - alert: TextfileCollectorRejectedMetrics
+        # node_exporter sets this to 1 when a .prom file cannot be parsed and
+        # then drops the WHOLE file silently. That is how the mail metrics
+        # disappeared in November 2026: a "\N" escape in one HELP line removed
+        # every mail_* series, so mail looked healthy because it was absent.
+        expr: node_textfile_scrape_error{job="node"} == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: node_exporter rejected a textfile file"
+          description: >-
+            Custom metrics from this host are not being collected at all.
+            Check the syntax of files in /var/lib/node-exporter-textfile.
+
+      - alert: MailHealthMetricsStale
+        expr: time() - mail_health_timestamp_seconds > 3600
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Mail health check has not completed in over an hour"
+          description: >-
+            mail-health-exporter runs every 15 minutes. A stale timestamp means
+            the exporter is broken, which is not the same as mail being fine.
+
+      - alert: MailHealthMetricsMissing
+        expr: absent(mail_health_timestamp_seconds)
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No mail health metrics at all"
+          description: >-
+            Either nixmail is down or its health exporter stopped emitting the
+            completion timestamp; both mean mail is unmonitored.
+
+  - name: mail
+    rules:
+      - alert: MailboxDiskIndexMismatch
+        expr: mail_health_ok == 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Mail on disk does not reconcile with the Dovecot index"
+          description: >-
+            Messages exist that IMAP clients cannot see. This has looked like
+            lost mail twice before; see mail-health-metrics.py.
+
+      - alert: NestedMaildirFolders
+        expr: mail_nested_maildir_dirs > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Maildir folders in a layout Dovecot cannot read"
+          description: >-
+            Dovecot's maildir++ layout needs one flat directory per mailbox;
+            nested trees are invisible to every client.

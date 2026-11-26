@@ -48,6 +48,12 @@
     # disk when the cap is reached (currently ~726 MB for 15 days).
     retentionTime = "90d";
     extraFlags = [ "--storage.tsdb.retention.size=10GB" ];
+    # Alerting existed only as Grafana dashboards until 2026-11-26: metrics
+    # were stored and read by hand, so a five hour mail/cloud/git outage
+    # produced no notification. Rules live in a file so they can be read and
+    # diffed on their own.
+    ruleFiles = [ ./prometheus-alerts.yml ];
+    alertmanagers = [ { static_configs = [ { targets = [ "127.0.0.1:9093" ]; } ]; } ];
 
     scrapeConfigs = [
       # Scraping node_exporter on all containers for system resource metrics.
@@ -74,6 +80,12 @@
               "nixjitsi:9100"
               "nixnsd:9100"
               "nixunbound:9100"
+              # nixpaperless and nixjupyter both run prometheus-node-exporter
+              # (common-lxc.nix enables it for every container) but were never
+              # listed here, so a full disk or a failed unit on them stayed
+              # invisible.
+              "nixpaperless:9100"
+              "nixjupyter:9100"
             ];
           }
         ];
@@ -106,6 +118,66 @@
         ];
       }
     ];
+  };
+
+  # 1b. Alertmanager -- the only egress for alerts.
+  #
+  # Paging goes out-of-band to ntfy on purpose: the 2026-11-26 outage took
+  # nixmail itself down, so an e-mail receiver could not have delivered the
+  # page about itself, and Matrix sits on the same pool as the component that
+  # failed. The topic is a write-once secret created on first boot (same
+  # pattern as grafana-secrets below) so it never lands in the world-readable
+  # Nix store. Subscribe with the value of
+  # /var/lib/secrets/alertmanager/ntfy-topic on this container.
+  systemd.services.alertmanager-secrets = {
+    description = "Provision the ntfy topic used for alert paging";
+    wantedBy = [ "multi-user.target" ];
+    before = [ "alertmanager.service" ];
+    path = [ pkgs.openssl pkgs.coreutils ];
+    script = ''
+      d=/var/lib/secrets/alertmanager
+      mkdir -p "$d"
+      if [ ! -s "$d/ntfy-topic" ]; then
+        echo "Generating $d/ntfy-topic"
+        openssl rand -hex 16 > "$d/ntfy-topic"
+      fi
+      chown alertmanager:alertmanager "$d/ntfy-topic"
+      chmod 640 "$d/ntfy-topic"
+    '';
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+  };
+
+  services.alertmanager = {
+    enable = true;
+    listenAddress = "127.0.0.1";
+    configuration = {
+      route = {
+        receiver = "ntfy";
+        group_by = [ "alertname" ];
+        group_wait = "30s";
+        group_interval = "5m";
+        # Keep re-paging while something is still broken: the 2026-11-26
+        # incident lasted five hours, and a single notification at 01:25 was
+        # not enough to get anyone up for it.
+        repeat_interval = "3h";
+      };
+      receivers = [
+        {
+          name = "ntfy";
+          ntfy_configs = [
+            {
+              server_uri = "https://ntfy.sh";
+              topic_file = "/var/lib/secrets/alertmanager/ntfy-topic";
+              icon_emoji = "rotating_light";
+              priority = "high";
+            }
+          ];
+        }
+      ];
+    };
   };
 
   # 2. Loki Log Aggregation

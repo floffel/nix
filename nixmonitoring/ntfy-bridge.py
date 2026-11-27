@@ -20,7 +20,10 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 TOPIC = os.environ.get("NTFY_TOPIC", "").strip()
 SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
-PORT = int(os.environ.get("NTFY_BRIDGE_PORT", "9094"))
+# 9099, not 9094: Alertmanager binds 9093 for its web API and 9094 for the
+# gossip cluster, so taking 9094 makes alertmanager fail to start with
+# "bind: address already in use" (that is how this was first caught).
+PORT = int(os.environ.get("NTFY_BRIDGE_PORT", "9099"))
 MAX_ALERTS = 6
 BODY_LIMIT = 300
 

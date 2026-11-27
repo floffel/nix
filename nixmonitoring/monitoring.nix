@@ -209,6 +209,13 @@
     };
   };
 
+  # Paging must not give up quietly either: alertmanager sat in state=failed on
+  # this container after a port collision during a switch, and a dead
+  # alertmanager makes every rule in the fleet silently deaf.
+  systemd.services.prometheus.alertmanager = lib.mkIf config.services.prometheus.alertmanager.enable {
+    unitConfig.StartLimitIntervalSec = lib.mkForce 0;
+  };
+
   services.prometheus.alertmanager = {
     enable = true;
     listenAddress = "127.0.0.1";
@@ -231,7 +238,7 @@
           # substitution.
           webhook_configs = [
             {
-              url = "http://127.0.0.1:9094/";
+              url = "http://127.0.0.1:9099/";
               send_resolved = true;
               max_alerts = 6;
               timeout = "20s";

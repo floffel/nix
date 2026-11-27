@@ -224,28 +224,24 @@
   };
 
   # CrowdSec's hub updater cannot apply what it downloaded. The module runs
-  # crowdsec-update-hub.service as a dynamic user and then chains
+  # crowdsec-update-hub.service as a dynamic user and chains
   # ExecStartPost=systemctl reload crowdsec.service, and reloading a *different*
   # unit over D-Bus is not something an unprivileged dynamic uid may do: the
   # download succeeds and the unit still exits status=4/NOPERMISSION, so the
   # hub index refreshed but the agent kept running the old patterns, and the
   # unit landed in state=failed once a day.
   #
-  # Running this one unit as root is what upstream crowdsec does; the rest of
-  # its sandbox (ProtectSystem=strict, PrivateTmp, ReadWritePaths limited to
-  # /var/lib/crowdsec and /etc/crowdsec) is left in place. PrivateUsers=false
-  # is required as well, matching the crowdsec.service overrides in
-  # nixmail/nixnginx.nix: without a host-namespace user map, systemctl can
-  # reach the manager at all.
+  # The systemd "+" prefix runs that one ExecStartPost as root regardless of
+  # User=/DynamicUser=, which fixes the reload without touching the sandbox of
+  # the download itself. Running the whole unit as root was tried first and is
+  # wrong: the module's seccomp deny-list (~@privileged ~@resources ...) kills
+  # cscli with SIGSYS as root, which surfaced as "code=killed, status=31/SYS".
   #
   # Gated on the module, so it lands on the two hosts that run CrowdSec
   # (nixnginx, nixmail) and never on nixwireguard -- CT 100 stays out of the
   # blocking strategy entirely.
   systemd.services.crowdsec-update-hub = lib.mkIf config.services.crowdsec.enable {
-    serviceConfig.User = lib.mkForce "root";
-    serviceConfig.Group = lib.mkForce "root";
-    serviceConfig.DynamicUser = lib.mkForce false;
-    serviceConfig.PrivateUsers = lib.mkForce false;
+    serviceConfig.ExecStartPost = lib.mkForce [ "+systemctl reload crowdsec.service" ];
   };
 
   system.stateVersion = "26.05";

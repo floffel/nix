@@ -128,23 +128,25 @@
   # failed.
   #
   # The topic lives in /var/lib/secrets/alertmanager/ntfy.env (write-once,
-  # same pattern as grafana-secrets below) and is substituted into the
-  # generated config by the module's envsubst preStart, so it never appears in
-  # the world-readable Nix store. To find your topic, read that file on this
-  # container and subscribe to https://ntfy.sh/<topic>.
+  # same pattern as grafana-secrets below) and is read only by the bridge
+  # below, so it never appears in the world-readable Nix store. To find your
+  # topic, read that file on this container and subscribe to
+  # https://ntfy.sh/<topic>.
   #
-  # ntfy is reached through its Slack-compatible endpoint rather than a native
-  # integration, because Alertmanager has no ntfy support at all: the
-  # `ntfy_configs` field that an earlier revision of this file used does not
-  # exist in Alertmanager 0.31.1 (verified with `amtool check-config`, which
-  # rejected it with "field ntfy_configs not found", and with the binary's own
-  # strings, which contain no "ntfy" receiver at all). What 0.31.1 does offer
-  # is slack_configs plus a *_url_file/api_url secret indirection, and
-  # https://ntfy.sh/<topic>/slack accepts Slack payloads.
+  # ntfy has no Alertmanager integration: the `ntfy_configs` field an earlier
+  # revision of this file used does not exist in Alertmanager 0.31.1 (amtool
+  # check-config rejects it with "field ntfy_configs not found", and the binary
+  # contains no ntfy receiver at all). Posting straight at ntfy does deliver,
+  # but ntfy publishes the body verbatim -- a Slack payload or an Alertmanager
+  # webhook body arrives as several hundred characters of JSON on a phone,
+  # which was measured against ntfy.sh rather than assumed. So a small
+  # formatter sits in front of it: Alertmanager uses its documented
+  # webhook_configs, the bridge turns the payload into one short message with
+  # a title, a priority and an emoji tag.
   systemd.services.alertmanager-secrets = {
     description = "Provision the ntfy topic used for alert paging";
     wantedBy = [ "multi-user.target" ];
-    before = [ "alertmanager.service" ];
+    before = [ "alertmanager.service" "ntfy-bridge.service" ];
     path = [ pkgs.openssl pkgs.coreutils ];
     script = ''
       d=/var/lib/secrets/alertmanager
@@ -165,14 +167,51 @@
     };
   };
 
+  # Alertmanager has to be able to reach the bridge, otherwise the first
+  # alerts after a boot are dropped with "connection refused".
+  systemd.services.alertmanager.after = [ "ntfy-bridge.service" ];
+
+  # Alertmanager -> ntfy formatter (see nixmonitoring/ntfy-bridge.py).
+  systemd.services.ntfy-bridge = {
+    description = "Format Alertmanager webhooks as ntfy notifications";
+    after = [ "network-online.target" "alertmanager-secrets.service" ];
+    wants = [ "network-online.target" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      ExecStart = "${pkgs.python3}/bin/python3 ${./ntfy-bridge.py}";
+      # Read by systemd as root before privileges are dropped.
+      EnvironmentFile = "/var/lib/secrets/alertmanager/ntfy.env";
+      DynamicUser = true;
+      Restart = "always";
+      RestartSec = "10s";
+      StateDirectory = "ntfy-bridge";
+      CapabilityBoundingSet = "";
+      LockPersonality = true;
+      NoNewPrivileges = true;
+      PrivateDevices = true;
+      PrivateTmp = true;
+      ProcSubset = "pid";
+      ProtectClock = true;
+      ProtectControlGroups = true;
+      ProtectHome = true;
+      ProtectHostname = true;
+      ProtectKernelLogs = true;
+      ProtectKernelModules = true;
+      ProtectKernelTunables = true;
+      ProtectSystem = "strict";
+      RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
+      RestrictNamespaces = true;
+      RestrictRealtime = true;
+      RestrictSUIDSGID = true;
+      SystemCallArchitectures = "native";
+      MemoryMax = "64M";
+      TasksMax = 64;
+    };
+  };
+
   services.prometheus.alertmanager = {
     enable = true;
     listenAddress = "127.0.0.1";
-    # Substituted into the generated config by the module's envsubst preStart.
-    # amtool validates the store file, which still contains the literal
-    # "$NTFY_TOPIC" -- an unexpanded variable in a URL is a valid string, so
-    # the check passes without ever seeing the secret.
-    environmentFile = "/var/lib/secrets/alertmanager/ntfy.env";
     configuration = {
       route = {
         receiver = "ntfy";
@@ -187,16 +226,15 @@
       receivers = [
         {
           name = "ntfy";
-          # Slack wire format, ntfy endpoint. `text` carries the payload
-          # because ntfy's Slack handler publishes the top-level text field.
-          slack_configs = [
+          # The bridge is what knows about ntfy; Alertmanager only ever sees a
+          # loopback URL, so this receiver holds no secret and needs no
+          # substitution.
+          webhook_configs = [
             {
-              channel = "alerts";
-              api_url = "https://ntfy.sh/$NTFY_TOPIC/slack";
+              url = "http://127.0.0.1:9094/";
               send_resolved = true;
-              title = ''{{ if eq .Status "firing" }}FIRING{{ else }}RESOLVED{{ end }} {{ .CommonLabels.alertname }}'';
-              text = ''{{ range .Alerts }}{{ .Annotations.summary }} -- {{ .Annotations.description }}
-{{ end }}'';
+              max_alerts = 6;
+              timeout = "20s";
             }
           ];
         }

@@ -1,5 +1,5 @@
 # NixOS Service Configuration for Loki, Prometheus, and Grafana
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 
 {
   # Generate Grafana's local-only credentials (admin UI password and the

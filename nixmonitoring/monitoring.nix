@@ -167,10 +167,6 @@
     };
   };
 
-  # Alertmanager has to be able to reach the bridge, otherwise the first
-  # alerts after a boot are dropped with "connection refused".
-  systemd.services.alertmanager.after = [ "ntfy-bridge.service" ];
-
   # Alertmanager -> ntfy formatter (see nixmonitoring/ntfy-bridge.py).
   systemd.services.ntfy-bridge = {
     description = "Format Alertmanager webhooks as ntfy notifications";
@@ -213,8 +209,10 @@
   # this container after a port collision during a switch, and a dead
   # alertmanager makes every rule in the fleet silently deaf.
   # The unit is called alertmanager.service; only the nixos option lives under
-  # services.prometheus.*.
+  # services.prometheus.*. Alertmanager also has to start after the bridge, or
+  # the first alerts after a boot are dropped with "connection refused".
   systemd.services.alertmanager = lib.mkIf config.services.prometheus.alertmanager.enable {
+    after = [ "ntfy-bridge.service" ];
     unitConfig.StartLimitIntervalSec = lib.mkForce 0;
   };
 

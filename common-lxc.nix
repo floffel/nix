@@ -177,20 +177,50 @@
     inetutils   # provides telnet and other classic inet tools
   ];
 
-  # A database must come back on its own once the reason it died is gone.
+  # A service must come back on its own once the reason it died is gone.
   # On 2026-11-26 the Proxmox ZFS pool that all container rootfs live on ran
   # out of space: postgres PANIC'd while writing pg_control, and after two
   # immediate restart attempts systemd hit its default start limit and left
-  # the unit in "failed" for five hours -- even though the pool had free
-  # space again long before that. StartLimitIntervalSec=0 turns the rate limit
-  # off, so postgres keeps retrying every RestartSec until it succeeds, and a
-  # transient ENOSPC/OOM/dependency blip costs seconds instead of an outage.
+  # the unit in "failed" for five hours -- even though the pool had free space
+  # again long before that. StartLimitIntervalSec=0 switches the rate limit
+  # off, so a unit retries every RestartSec until it succeeds and a transient
+  # ENOSPC/OOM/dependency blip costs seconds instead of an outage that needs a
+  # human awake.
+  #
+  # The trade-off is deliberate: a unit that fails hard now retries forever
+  # instead of settling into state=failed, so "it gave up" is no longer a
+  # signal. CriticalServiceNotRunning in
+  # nixmonitoring/prometheus-alerts.yml pages on the observable half of that
+  # (a critical unit that is not active), and the cause of a loop is nearly
+  # always paged by the rule for whatever broke underneath it.
+  #
+  # mkForce is required per unit: the postgres module ships
+  # StartLimitIntervalSec=605, exactly the five-minute window that turned the
+  # full pool into a stuck unit, and a plain assignment would lose to it.
   systemd.services.postgresql = lib.mkIf config.services.postgresql.enable {
-    # mkForce: the postgres module ships StartLimitIntervalSec=605, which is
-    # precisely the five-minute window that turned the full pool into a stuck
-    # unit; the override has to outrank it.
     unitConfig.StartLimitIntervalSec = lib.mkForce 0;
     serviceConfig.RestartSec = lib.mkDefault "15s";
+  };
+
+  # Same reasoning for the rest of the always-on fleet. Each override is gated
+  # on the module that owns the unit, because naming a service here would
+  # otherwise materialise a phantom unit on containers that do not run it.
+  # These four also restart fast enough by default that an unlimited retry
+  # loop stays cheap; only postgres needs its RestartSec raised.
+  systemd.services.forgejo = lib.mkIf config.services.forgejo.enable {
+    unitConfig.StartLimitIntervalSec = lib.mkForce 0;
+  };
+  systemd.services.dovecot = lib.mkIf config.services.dovecot2.enable {
+    unitConfig.StartLimitIntervalSec = lib.mkForce 0;
+  };
+  systemd.services.postfix = lib.mkIf config.services.postfix.enable {
+    unitConfig.StartLimitIntervalSec = lib.mkForce 0;
+  };
+  systemd.services.nginx = lib.mkIf config.services.nginx.enable {
+    unitConfig.StartLimitIntervalSec = lib.mkForce 0;
+  };
+  systemd.services.kanidmd = lib.mkIf config.services.kanidm.enableServer {
+    unitConfig.StartLimitIntervalSec = lib.mkForce 0;
   };
 
   system.stateVersion = "26.05";

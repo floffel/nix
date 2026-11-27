@@ -16,7 +16,7 @@ import json
 import os
 import sys
 import urllib.request
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 TOPIC = os.environ.get("NTFY_TOPIC", "").strip()
 SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
@@ -75,11 +75,18 @@ def publish(title, body, priority, tags):
 
 
 class Handler(BaseHTTPRequestHandler):
+    # HTTP/1.1 would advertise keep-alive, and Alertmanager's webhook client
+    # then holds the connection open. With a single-threaded server that one
+    # idle connection stops every later page from being served -- curl got
+    # "connection failed" while the service was up and delivering. So: threads,
+    # and close each connection after its response.
     protocol_version = "HTTP/1.1"
+    close_connection = True
 
     def reply(self, code, body=b""):
         self.send_response(code)
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
         self.end_headers()
         if body:
             self.wfile.write(body)
@@ -113,7 +120,7 @@ def main():
     if not TOPIC:
         print("NTFY_TOPIC is not set; refusing to start", file=sys.stderr)
         return 1
-    HTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
     return 0
 
 

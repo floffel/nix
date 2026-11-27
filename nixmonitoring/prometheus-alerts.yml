@@ -13,7 +13,16 @@ groups:
         # between two scrapes: one leaked Actions volume can add tens of
         # gigabytes. The early tier exists so acting on it is still a decision
         # instead of a rescue.
-        expr: node_filesystem_avail_bytes{job="node",mountpoint="/"} < 60e9
+        # Restricted to filesystems larger than 100 GB, i.e. the container
+        # rootfs that share the "fast" pool. Containers on the "zfs" storage
+        # carry a per-container ZFS refquota, so their avail is quota headroom
+        # (2-4 GiB on nixnsd/nixunbound/nixidm/nixjitsi/nixmatrix) and an
+        # absolute threshold fired permanently on all of them -- nine pages
+        # that meant nothing, which is worse than no rule at all. Their own
+        # quota is covered by ContainerQuotaAlmostFull below.
+        expr: >-
+          node_filesystem_avail_bytes{job="node",mountpoint="/"} < 60e9
+          and node_filesystem_size_bytes{job="node",mountpoint="/"} > 100e9
         for: 15m
         labels:
           severity: warning
@@ -27,7 +36,9 @@ groups:
         # LXC containers on px share one ZFS pool, so df inside any container
         # reports the POOL's free space: this fires on every container at once
         # when a single one grows, which is the failure mode we actually had.
-        expr: node_filesystem_avail_bytes{job="node",mountpoint="/"} < 20e9
+        expr: >-
+          node_filesystem_avail_bytes{job="node",mountpoint="/"} < 20e9
+          and node_filesystem_size_bytes{job="node",mountpoint="/"} > 100e9
         for: 10m
         labels:
           severity: critical
@@ -38,6 +49,24 @@ groups:
             postgres PANICs while writing pg_control and mail, webmail,
             Nextcloud and Forgejo fail together (2026-11-26). Reclaim space
             before it is empty, not after.
+
+      - alert: ContainerQuotaAlmostFull
+        # For the containers that DO have their own quota: ten percent of
+        # their own volume, not an absolute number, so a 8 GiB rootfs with
+        # 4 GiB free stays quiet while a 6 GiB rootfs with 500 MiB free pages.
+        expr: >-
+          node_filesystem_avail_bytes{job="node",mountpoint="/"}
+            / node_filesystem_size_bytes{job="node",mountpoint="/"} < 0.10
+          and node_filesystem_size_bytes{job="node",mountpoint="/"} < 100e9
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: own volume {{ $value | humanizePercentage }} free"
+          description: >-
+            This container is close to exhausting its own Proxmox volume. It
+            cannot take other containers down, but it will fill for its own
+            services.
 
       - alert: CiVolumeAlmostFull
         # The CI docker data root is a separate dataset with its own quota, so

@@ -137,12 +137,15 @@
     script = ''
       d=/var/lib/secrets/alertmanager
       mkdir -p "$d"
-      if [ ! -s "$d/ntfy-topic" ]; then
-        echo "Generating $d/ntfy-topic"
-        openssl rand -hex 16 > "$d/ntfy-topic"
+      if [ ! -s "$d/ntfy.env" ]; then
+        echo "Generating $d/ntfy.env"
+        printf 'NTFY_TOPIC=%s\n' "$(openssl rand -hex 16)" > "$d/ntfy.env"
       fi
-      chown alertmanager:alertmanager "$d/ntfy-topic"
-      chmod 640 "$d/ntfy-topic"
+      # root-only: systemd reads EnvironmentFile= as root before it drops
+      # privileges, so the dynamic alertmanager user never needs read access
+      # and the topic never appears in the world-readable Nix store.
+      chown root:root "$d/ntfy.env"
+      chmod 600 "$d/ntfy.env"
     '';
     serviceConfig = {
       Type = "oneshot";
@@ -153,6 +156,12 @@
   services.prometheus.alertmanager = {
     enable = true;
     listenAddress = "127.0.0.1";
+    # The module interpolates this file into the generated config with
+    # envsubst before ExecStart. amtool sees the literal "$NTFY_TOPIC" at
+    # build time, which validates fine, and the real topic only exists at
+    # runtime. (This Alertmanager has no topic_file, so this is the only way
+    # to keep the secret out of the store.)
+    environmentFile = "/var/lib/secrets/alertmanager/ntfy.env";
     configuration = {
       route = {
         receiver = "ntfy";
@@ -170,7 +179,7 @@
           ntfy_configs = [
             {
               server_uri = "https://ntfy.sh";
-              topic_file = "/var/lib/secrets/alertmanager/ntfy-topic";
+              topic = "$NTFY_TOPIC";
               icon_emoji = "rotating_light";
               priority = "high";
             }

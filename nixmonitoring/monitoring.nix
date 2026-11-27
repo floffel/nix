@@ -125,10 +125,22 @@
   # Paging goes out-of-band to ntfy on purpose: the 2026-11-26 outage took
   # nixmail itself down, so an e-mail receiver could not have delivered the
   # page about itself, and Matrix sits on the same pool as the component that
-  # failed. The topic is a write-once secret created on first boot (same
-  # pattern as grafana-secrets below) so it never lands in the world-readable
-  # Nix store. Subscribe with the value of
-  # /var/lib/secrets/alertmanager/ntfy-topic on this container.
+  # failed.
+  #
+  # The topic lives in /var/lib/secrets/alertmanager/ntfy.env (write-once,
+  # same pattern as grafana-secrets below) and is substituted into the
+  # generated config by the module's envsubst preStart, so it never appears in
+  # the world-readable Nix store. To find your topic, read that file on this
+  # container and subscribe to https://ntfy.sh/<topic>.
+  #
+  # ntfy is reached through its Slack-compatible endpoint rather than a native
+  # integration, because Alertmanager has no ntfy support at all: the
+  # `ntfy_configs` field that an earlier revision of this file used does not
+  # exist in Alertmanager 0.31.1 (verified with `amtool check-config`, which
+  # rejected it with "field ntfy_configs not found", and with the binary's own
+  # strings, which contain no "ntfy" receiver at all). What 0.31.1 does offer
+  # is slack_configs plus a *_url_file/api_url secret indirection, and
+  # https://ntfy.sh/<topic>/slack accepts Slack payloads.
   systemd.services.alertmanager-secrets = {
     description = "Provision the ntfy topic used for alert paging";
     wantedBy = [ "multi-user.target" ];
@@ -156,11 +168,10 @@
   services.prometheus.alertmanager = {
     enable = true;
     listenAddress = "127.0.0.1";
-    # The module interpolates this file into the generated config with
-    # envsubst before ExecStart. amtool sees the literal "$NTFY_TOPIC" at
-    # build time, which validates fine, and the real topic only exists at
-    # runtime. (This Alertmanager has no topic_file, so this is the only way
-    # to keep the secret out of the store.)
+    # Substituted into the generated config by the module's envsubst preStart.
+    # amtool validates the store file, which still contains the literal
+    # "$NTFY_TOPIC" -- an unexpanded variable in a URL is a valid string, so
+    # the check passes without ever seeing the secret.
     environmentFile = "/var/lib/secrets/alertmanager/ntfy.env";
     configuration = {
       route = {
@@ -176,12 +187,16 @@
       receivers = [
         {
           name = "ntfy";
-          ntfy_configs = [
+          # Slack wire format, ntfy endpoint. `text` carries the payload
+          # because ntfy's Slack handler publishes the top-level text field.
+          slack_configs = [
             {
-              server_uri = "https://ntfy.sh";
-              topic = "$NTFY_TOPIC";
-              icon_emoji = "rotating_light";
-              priority = "high";
+              channel = "alerts";
+              api_url = "https://ntfy.sh/$NTFY_TOPIC/slack";
+              send_resolved = true;
+              title = ''{{ if eq .Status "firing" }}FIRING{{ else }}RESOLVED{{ end }} {{ .CommonLabels.alertname }}'';
+              text = ''{{ range .Alerts }}{{ .Annotations.summary }} -- {{ .Annotations.description }}
+{{ end }}'';
             }
           ];
         }

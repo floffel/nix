@@ -8,6 +8,21 @@
 groups:
   - name: capacity
     rules:
+      - alert: FilesystemRunningLow
+        # Two tiers, because on 2026-11-27 the pool went from "fine" to zero
+        # between two scrapes: one leaked Actions volume can add tens of
+        # gigabytes. The early tier exists so acting on it is still a decision
+        # instead of a rescue.
+        expr: node_filesystem_avail_bytes{job="node",mountpoint="/"} < 60e9
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }}: under 60 GB free ({{ $value | humanize1024 }})"
+          description: >-
+            Shared Proxmox pool is draining. Look for growth on
+            nixforgejo-runner (docker volumes) before it reaches zero.
+
       - alert: FilesystemAlmostFull
         # LXC containers on px share one ZFS pool, so df inside any container
         # reports the POOL's free space: this fires on every container at once
@@ -23,6 +38,37 @@ groups:
             postgres PANICs while writing pg_control and mail, webmail,
             Nextcloud and Forgejo fail together (2026-11-26). Reclaim space
             before it is empty, not after.
+
+      - alert: CiVolumeAlmostFull
+        # The CI docker data root is a separate dataset with its own quota, so
+        # "CI is full" has to be visible on its own mount instead of only as a
+        # pool-wide emergency. Jobs failing here is the intended blast radius.
+        expr: node_filesystem_avail_bytes{job="node",mountpoint="/var/lib/ci-docker"} < 20e9
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "nixforgejo-runner: CI volume under 20 GB free ({{ $value | humanize1024 }})"
+          description: >-
+            Actions scratch space is nearly exhausted inside its own quota.
+            Check journalctl -u forgejo-runner-volume-gc; if the collector is
+            not keeping up, the quota needs to grow.
+
+      - alert: CiVolumeNotMounted
+        # docker.service refuses to start unless /var/lib/ci-docker is a real
+        # volume (guard in nixforgejo-runner/runner.nix). If the metric is
+        # missing, the volume was detached or renamed, which means CI is either
+        # down or silently back on the shared pool -- both need a human.
+        expr: absent(node_filesystem_avail_bytes{job="node",mountpoint="/var/lib/ci-docker"})
+        for: 45m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No nixforgejo-runner CI volume metric anywhere"
+          description: >-
+            The dedicated CI data volume is not mounted on any host. Either the
+            runner cannot start, or docker fell back to the container rootfs on
+            the shared pool.
 
   - name: services
     rules:
@@ -48,6 +94,27 @@ groups:
           description: >-
             Prometheus cannot reach this target, so everything it was watching
             on that host is blind until it returns.
+
+      - alert: CriticalServiceNotRunning
+        # SystemdUnitFailed only covers state="failed". On 2026-11-26 forgejo
+        # exited with status=0 after an interrupted switch and sat in
+        # state="inactive" for twelve hours: no restart policy fires for a unit
+        # that was stopped on purpose, and no alert fired either, so git was
+        # down for half a night while every rule stayed green. These units are
+        # the ones whose absence is an outage, so "not running" is itself the
+        # pageable condition.
+        expr: >-
+          node_systemd_unit_state{job="node",state="inactive",
+          name=~"forgejo.service|postgresql.service|dovecot.service|postfix.service|nginx.service|kanidmd.service"} == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }}: {{ $labels.name }} is not running"
+          description: >-
+            A service that must always be up is inactive. Check
+            journalctl -u {{ $labels.name }} for who stopped it and whether a
+            deploy was interrupted.
 
       - alert: PostgresUnavailable
         expr: pg_up{job="postgresql"} == 0

@@ -212,7 +212,9 @@
   # Paging must not give up quietly either: alertmanager sat in state=failed on
   # this container after a port collision during a switch, and a dead
   # alertmanager makes every rule in the fleet silently deaf.
-  systemd.services.prometheus.alertmanager = lib.mkIf config.services.prometheus.alertmanager.enable {
+  # The unit is called alertmanager.service; only the nixos option lives under
+  # services.prometheus.*.
+  systemd.services.alertmanager = lib.mkIf config.services.prometheus.alertmanager.enable {
     unitConfig.StartLimitIntervalSec = lib.mkForce 0;
   };
 

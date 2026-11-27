@@ -64,7 +64,44 @@ in
   virtualisation.docker.enable = true;
   virtualisation.docker.daemon.settings = {
     dns = [ "10.20.20.16" "185.12.64.1" ];
+    # CI scratch space belongs on its own Proxmox volume, not inside the
+    # container rootfs. On 2026-11-26 and again on 2026-11-27 leaked Actions
+    # volumes grew /var/lib/docker until the shared ZFS pool hit zero free --
+    # and because every container's rootfs is a dataset of that one pool, CI
+    # filled the disk underneath postgres and mail. Putting docker on a
+    # separate dataset with a 250 GiB refquota (attached as mp0 from storage
+    # "fast", see nixforgejo-runner/README.md) turns "CI fills someone else's
+    # database disk" into "CI's own volume is full".
+    #
+    # Deliberately still on the NVMe pool: the other Proxmox storage ("zfs")
+    # is a mirror of 7200 rpm HDDs, which would slow every cargo build down.
+    data-root = "/var/lib/ci-docker/docker";
   };
+
+  # Without the volume attached, docker must refuse to start instead of
+  # silently writing back into the rootfs -- that fallback is the exact state
+  # that caused both outages, and from the outside it looks perfectly healthy.
+  # Device ids are compared rather than trusting /proc/mountinfo, because
+  # Proxmox hands an unprivileged container a bind mount whose source name is
+  # the host-side dataset path.
+  #
+  # mkBefore on ExecStartPre, not preStart: the docker module may already use
+  # preStart, and an assignment would replace it. ExecStartPre is a list
+  # option, so this adds to whatever the module provides.
+  systemd.services.docker.serviceConfig.ExecStartPre = lib.mkBefore [
+    (pkgs.writeShellScript "docker-ci-volume-guard" ''
+      set -eu
+      ${pkgs.coreutils}/bin/mkdir -p /var/lib/ci-docker/docker
+      root_dev="$(${pkgs.coreutils}/bin/stat -c %D /)"
+      ci_dev="$(${pkgs.coreutils}/bin/stat -c %D /var/lib/ci-docker 2>/dev/null || echo missing)"
+      if [ "$ci_dev" = "missing" ] || [ "$ci_dev" = "$root_dev" ]; then
+        echo "FATAL: /var/lib/ci-docker is not a separate volume (dev=$ci_dev rootfs=$root_dev)." >&2
+        echo "The CI data volume (mp0, fast:subvol-108-mp-0) is not attached. Refusing to" >&2
+        echo "start docker on the container rootfs: that is how the shared pool filled." >&2
+        exit 1
+      fi
+    '')
+  ];
   virtualisation.docker.autoPrune = {
     enable = true;
     dates = "daily";
@@ -108,61 +145,81 @@ in
     };
   };
 
-  # Orphaned Actions scratch volumes. The runner creates one anonymous docker
-  # volume per job plus an "-env" companion and deletes both when the job
-  # ends; when the runner or the daemon dies mid-job they leak. On 2026-11-26
-  # that was 28 volumes / ~115 GB sitting on the same ZFS pool as postgres and
-  # mail, and the pool filled up.
+  # Orphaned Actions containers and their scratch volumes. The runner creates
+  # one anonymous docker volume per job plus an "-env" companion and deletes
+  # both when the job ends; when the runner or the daemon dies mid-job they
+  # leak. That leaked twice onto the shared pool: 2026-11-26 (28 volumes,
+  # ~115 GB) and again 2026-11-27 (4 containers plus 165 GB of volumes).
   #
-  # The daily virtualisation.docker.autoPrune above cannot fix this: `docker
-  # system prune` does not touch volumes unless --volumes is passed, and
-  # --volumes would delete ci-sccache and ci-lambda-binaries (the whitelisted
-  # caches in baseConfig), because those are legitimately "unused" between
-  # jobs. So collect by name shape instead: job volumes are hex ids, optional
-  # "-env" sibling, and the caches are not.
+  # Why this is not just `docker system prune --volumes`: that would also
+  # delete ci-sccache and ci-lambda-binaries (the whitelisted caches in
+  # baseConfig are legitimately "unused" between jobs, and re-downloading them
+  # costs ~$38/mo of S3 egress). So collect by name shape instead -- job
+  # volumes are hex ids with an optional "-env" sibling, the caches are not.
+  #
+  # Two defects made the first version of this useless, both found by watching
+  # it fail in production rather than by reading it:
+  #   * it called mktemp, so it needed free disk in order to free disk. On a
+  #     full pool it died at startup precisely when it was needed. Scratch
+  #     state now lives in /run, which is tmpfs.
+  #   * it selected containers with `--filter status=exited` and then skipped
+  #     any container whose State.FinishedAt was the zero timestamp. After the
+  #     pool filled, dockerd could not persist state: four containers were
+  #     still listed as "Up 13 hours" while inspect reported Status=dead,
+  #     Pid=0 and FinishedAt=0001-01-01. Nothing matched, so 165 GB stayed.
+  #     Selection now asks for the live process id and treats "no process
+  #     inside" as finished, whatever state string dockerd prints.
   systemd.services.forgejo-runner-volume-gc = {
     description = "Remove orphaned Actions containers and docker volumes";
     after = [ "docker.service" ];
     requires = [ "docker.service" ];
-    startAt = "daily";
+    # Hourly rather than daily: a leaking job must not be able to sit on tens
+    # of gigabytes overnight, which is what filled the pool between the 01:24
+    # ENOSPC and the 09:56 report the next morning.
+    startAt = "*-*-* *:00:00";
     path = [ pkgs.docker pkgs.coreutils pkgs.gnugrep ];
     serviceConfig = { Type = "oneshot"; };
     script = ''
       set -u
-      now="$(date +%s)"
 
-      # An exited job container older than 12h belongs to a run that is long
-      # gone -- the runner never parks a finished container that long -- and
-      # while it exists its volumes still count as "in use" and cannot be
-      # collected. Neither half of the obvious one-liner works on docker 29:
-      # `docker ps` rejects an `until` filter, and its --format renders a flat
-      # row so it cannot range over .Mounts ("range can't iterate over"). Ask
-      # inspect per container instead, and keep the template on one line by
-      # separating names with spaces.
-      for cid in $(docker ps -aq --filter status=exited --filter name=FORGEJO-ACTIONS-TASK-); do
-        finished="$(docker inspect -f '{{.State.FinishedAt}}' "$cid" 2>/dev/null || true)"
-        case "$finished" in
-          ""|0001-01-01*) continue ;;
-        esac
-        ended="$(date -d "$finished" +%s 2>/dev/null || echo "$now")"
-        if [ $((now - ended)) -gt 43200 ]; then
-          echo "removing Actions container $cid (finished $((now - ended))s ago)"
-          docker rm "$cid" || true
+      now="$(date +%s)"
+      attached="/run/forgejo-gc-attached.$$"
+      trap 'rm -f "$attached"' EXIT
+      : > "$attached"
+
+      # Garbage == no process inside, regardless of the state string. A job
+      # that is really running keeps its container and therefore keeps its
+      # volumes reserved by the loop below.
+      for cid in $(docker ps -aq --filter name=FORGEJO-ACTIONS-TASK-); do
+        pid="$(docker inspect -f '{{.State.Pid}}' "$cid" 2>/dev/null || echo 0)"
+        if [ "$pid" -gt 0 ] && [ -d "/proc/$pid" ]; then
+          continue
+        fi
+        # FinishedAt is the honest age, but dockerd leaves it at the zero
+        # timestamp when it never managed to record the exit; fall back to the
+        # start time so a stuck-forever job still ages out.
+        since="$(docker inspect -f '{{if ne .State.FinishedAt "0001-01-01T00:00:00Z"}}{{.State.FinishedAt}}{{else}}{{.State.StartedAt}}{{end}}' "$cid" 2>/dev/null || true)"
+        started="$(date -d "$since" +%s 2>/dev/null || echo "$now")"
+        age=$((now - started))
+        if [ "$age" -gt 3600 ]; then
+          echo "removing Actions container $cid (no process inside, ${age}s old)"
+          docker rm -f "$cid" || true
         fi
       done
 
-      attached="$(mktemp)"
-      trap 'rm -f "$attached"' EXIT
       for cid in $(docker ps -aq); do
         docker inspect -f '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}' "$cid" 2>/dev/null
-      done | tr ' ' '\n' | grep -v '^[[:space:]]*$' | sort -u > "$attached"
+      done | tr ' ' '\n' | sort -u > "$attached"
 
       docker volume ls -q | sort -u | while read -r vol; do
         case "$vol" in ci-*) continue ;; esac
         printf '%s\n' "$vol" | grep -Eq '^[0-9a-f]{16,}(-env)?$' || continue
         grep -Fxq "$vol" "$attached" && continue
-        size="$(du -sh "/var/lib/docker/volumes/$vol" 2>/dev/null | cut -f1)"
-        echo "removing orphaned volume $vol ($size)"
+        # Ask dockerd where the volume is instead of hardcoding /var/lib/docker:
+        # the data root moved to its own volume (see data-root above).
+        mount="$(docker volume inspect -f '{{.Mountpoint}}' "$vol" 2>/dev/null || true)"
+        size="$(du -sh "$mount" 2>/dev/null | cut -f1)"
+        echo "removing orphaned volume $vol (${size:-unknown})"
         docker volume rm "$vol" || true
       done
 

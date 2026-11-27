@@ -89,11 +89,26 @@ The volume is created and attached out of band (NixOS cannot manage Proxmox
 volume attachments), so recreating a host from this repo alone is not enough:
 
 ```bash
-# dataset: name must match PVE's zfspool pattern subvol-<vmid>-*
+# Volume names on a zfspool storage must match PVE's pattern subvol-<vmid>-*;
+# arbitrary names such as "ci-docker" are rejected by ZFSPoolPlugin.
 zfs create -o refquota=250G fast/subvol-108-mp-0
+# PVE only fixes up ownership for volumes it allocates itself. A dataset
+# created by hand is owned by host root, which is not mapped into an
+# unprivileged container, so everything inside it is unwritable there.
+# CT 108 maps container uid 0 to host uid 100000 (cat /proc/1/uid_map in the
+# container to confirm for another vmid).
+chown 100000:100000 /fast/subvol-108-mp-0
 pct stop 108
 pct set 108 -mp0 fast:subvol-108-mp-0,size=250G,mp=/var/lib/ci-docker,backup=0
 pct start 108
+```
+
+Then move the existing data root over while docker is stopped and delete the
+old directory afterwards:
+
+```bash
+systemctl stop gitea-runner-default.service docker.service
+rsync -aHAX /var/lib/docker/ /var/lib/ci-docker/docker/
 ```
 
 `runner.nix` sets `virtualisation.docker.daemon.settings.data-root` to

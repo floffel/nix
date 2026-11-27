@@ -231,17 +231,28 @@
   # hub index refreshed but the agent kept running the old patterns, and the
   # unit landed in state=failed once a day.
   #
-  # The systemd "+" prefix runs that one ExecStartPost as root regardless of
-  # User=/DynamicUser=, which fixes the reload without touching the sandbox of
-  # the download itself. Running the whole unit as root was tried first and is
-  # wrong: the module's seccomp deny-list (~@privileged ~@resources ...) kills
-  # cscli with SIGSYS as root, which surfaced as "code=killed, status=31/SYS".
+  # Two layers had to be peeled back to get here, both by reading the failure
+  # after deploying rather than by guessing:
+  #   * the "+" prefix runs that one ExecStartPost as root regardless of
+  #     User=/DynamicUser=, which fixes the D-Bus permission error without
+  #     de-sandboxing the download. Running the whole unit as root is wrong:
+  #     the module's seccomp deny-list (~@privileged ~@resources ...) then
+  #     kills cscli with SIGSYS ("code=killed, status=31/SYS").
+  #   * with privileges, the reload still failed -- "Job type reload is not
+  #     applicable for unit crowdsec.service", because the module gives
+  #     crowdsec.service no ExecReload (CanReload=no). The step the module
+  #     chains is therefore unimplementable on NixOS as written, which is why
+  #     the hub index downloaded but the unit reported failure every day.
+  #
+  # A restart is what actually applies an updated hub. It runs daily at 00:01,
+  # the agent comes back in well under a second, and decisions live in the
+  # LAPI/database rather than in the agent's memory, so nothing is lost.
   #
   # Gated on the module, so it lands on the two hosts that run CrowdSec
   # (nixnginx, nixmail) and never on nixwireguard -- CT 100 stays out of the
   # blocking strategy entirely.
   systemd.services.crowdsec-update-hub = lib.mkIf config.services.crowdsec.enable {
-    serviceConfig.ExecStartPost = lib.mkForce [ "+systemctl reload crowdsec.service" ];
+    serviceConfig.ExecStartPost = lib.mkForce [ "+systemctl restart crowdsec.service" ];
   };
 
   system.stateVersion = "26.05";

@@ -202,7 +202,7 @@ in
         started="$(date -d "$since" +%s 2>/dev/null || echo "$now")"
         age=$((now - started))
         if [ "$age" -gt 3600 ]; then
-          echo "removing Actions container $cid (no process inside, ${age}s old)"
+          echo "removing Actions container $cid (no process inside, $age s old)"
           docker rm -f "$cid" || true
         fi
       done
@@ -217,9 +217,13 @@ in
         grep -Fxq "$vol" "$attached" && continue
         # Ask dockerd where the volume is instead of hardcoding /var/lib/docker:
         # the data root moved to its own volume (see data-root above).
+        # Keep this script free of braced shell expansions: it lives inside a
+        # Nix indented string, so a dollar-brace is evaluated by Nix at build
+        # time ("undefined variable") and never reaches the shell at all.
         mount="$(docker volume inspect -f '{{.Mountpoint}}' "$vol" 2>/dev/null || true)"
+        size="unknown"
         size="$(du -sh "$mount" 2>/dev/null | cut -f1)"
-        echo "removing orphaned volume $vol (${size:-unknown})"
+        echo "removing orphaned volume $vol ($size)"
         docker volume rm "$vol" || true
       done
 

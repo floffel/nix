@@ -474,8 +474,10 @@ in
       # authenticate with `Authorization: Bearer <token>`; the token is checked
       # via a map directive ($kie_token_ok) generated at runtime from
       # /var/lib/kie-proxy/token. The client's Authorization header is then
-      # OVERWRITTEN with the upstream's fixed key ("Bearer x") before proxying,
-      # so the proxy token is never forwarded to the LLM backend.
+      # OVERWRITTEN with the upstream's fixed key (the literal injected below)
+      # before proxying, so the proxy token is never forwarded to the LLM
+      # backend. nixopenwebui/open-webui.nix uses the same literal directly;
+      # rotate both together.
       "kie.minnecker.com" = {
         forceSSL = true;
         sslCertificate = "/var/lib/secrets/ssl/minnecker.com/fullchain.pem";

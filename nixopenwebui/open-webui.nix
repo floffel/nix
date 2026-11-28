@@ -72,9 +72,21 @@ in
       OAUTH_ALLOWED_ROLES = "user,admin";
       OAUTH_ADMIN_ROLES = "admin";
 
-      # Default connection settings for the local LLM server
+      # Default connection settings for the local LLM server.
+      #
+      # The key is not a placeholder. The server (omlx on the LAN box, same
+      # backend kie.minnecker.com proxies) enforces bearer auth, so "x" made
+      # every completion fail: /v1/models returns
+      # {"error":{"message":"Invalid API key","type":"authentication_error"}}
+      # with "x" and the model list with the real key. Open WebUI surfaces that
+      # upstream rejection as a 500 on POST /api/chat/completions, which is what
+      # looked like "ai.minnecker.com is down" while the UI itself loaded fine.
+      #
+      # Single source of truth: this is the same literal that nixnginx/nginx.nix
+      # injects as `Authorization: Bearer 1234` for the kie.minnecker.com proxy.
+      # If the LLM key rotates, both places must change.
       OPENAI_API_BASE_URL = "http://192.168.1.196:8123/v1";
-      OPENAI_API_KEY = "x";
+      OPENAI_API_KEY = "1234";
       ENABLE_OLLAMA_API = "False"; # Disable local Ollama since we use remote OpenAI API
 
       # OCR images embedded in PDFs. Without this, Open WebUI's default

@@ -178,23 +178,45 @@ in
       # without loosening the guard for anything else. Media uploads share
       # the matrix bucket; they are authenticated and bounded by
       # client_max_body_size.
+      #
+      # Single-page-app builds need their own bucket too. Open WebUI ships a
+      # content-hashed SvelteKit bundle under /_app/immutable/ and a cold load
+      # fetches roughly 150 of those chunks at once. Sharing the single web
+      # bucket meant the load ran the 50 r/s / 150 burst budget dry: nginx
+      # rejected ~27 chunks with 429 (excess logged at 150.8, i.e. pinned at
+      # the burst limit), the router then failed to import its own modules and
+      # the UI reported the chat as broken. Worse, CrowdSec's
+      # nginx-req-limit-exceeded scenario fires at capacity 5, so one page
+      # load banned the visitor -- on 2026-11-28 it banned the owner's own
+      # home address twice in one morning. The chunks are static, cheap and
+      # not an authentication surface, so they get a separate bucket instead of
+      # a bypass: still bounded, but a normal first load fits inside it.
       map $uri $web_limit_key {
         default                               $binary_remote_addr;
         "~^/_matrix/(client/v1/media|media)/" "";
+        "~^/_app/immutable/"                  "";
       }
       map $uri $matrix_limit_key {
         default                               "";
         "~^/_matrix/(client/v1/media|media)/" $binary_remote_addr;
       }
+      map $uri $spa_assets_limit_key {
+        default                               "";
+        "~^/_app/immutable/"                  $binary_remote_addr;
+      }
 
       limit_req_zone $web_limit_key zone=web:20m rate=50r/s;
       limit_req_zone $matrix_limit_key zone=matrix_media:20m rate=300r/s;
+      limit_req_zone $spa_assets_limit_key zone=spa_assets:20m rate=300r/s;
       limit_conn_zone $web_limit_key zone=addr:20m;
       limit_conn_zone $matrix_limit_key zone=matrix_media_conn:20m;
+      limit_conn_zone $spa_assets_limit_key zone=spa_assets_conn:20m;
       limit_req zone=web burst=150 nodelay;
       limit_req zone=matrix_media burst=300 nodelay;
+      limit_req zone=spa_assets burst=300 nodelay;
       limit_conn addr 80;
       limit_conn matrix_media_conn 200;
+      limit_conn spa_assets_conn 200;
       limit_req_status 429;
 
       auth_ldap_cache_enabled on;
